@@ -157,6 +157,7 @@
   findById(id);
   ```
 - [AVOID] Excessive inline comments for self-explanatory code. (자명한 코드에 과도한 주석 금지)
+- [MUST] When modifying a document, check its **parent and child documents** for cascading updates and apply them together. (문서 수정 시 상·하위 문서에 연쇄 수정할 것이 있는지 점검해 함께 갱신 — 문서 위계는 각 프로젝트 AGENTS.md에 정의)
 
 ## 9. Version Control (버전 관리)
 
@@ -195,9 +196,9 @@
 **Good — 금지 라인을 제거한 커밋 메시지**
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(bizinfo): 비즈니스 프로필 등록 기타정보 구조화 입력 지원
+feat: 검색 결과 정렬 옵션 추가
 
-Google attribute metadata 테이블 기반으로 전화/영업시간/접근성 필드를 분리 수신하도록 DTO를 확장.
+최신순/인기순 정렬 파라미터를 받아 목록 조회 쿼리에 반영.
 EOF
 )"
 ```
@@ -205,9 +206,9 @@ EOF
 **Bad — AI 트레일러 포함**
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(bizinfo): 비즈니스 프로필 등록 기타정보 구조화 입력 지원
+feat: 검색 결과 정렬 옵션 추가
 
-Google attribute metadata 테이블 기반으로 전화/영업시간/접근성 필드를 분리 수신하도록 DTO를 확장.
+최신순/인기순 정렬 파라미터를 받아 목록 조회 쿼리에 반영.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>   # ← 금지
 EOF
@@ -216,14 +217,14 @@ EOF
 
 **Good — PR 본문에서 footer 제거**
 ```bash
-gh pr create --title "feat(bizinfo): 기타정보 구조화 입력 지원" --body "$(cat <<'EOF'
+gh pr create --title "feat: 검색 결과 정렬 옵션 추가" --body "$(cat <<'EOF'
 ## Summary
-- Google attribute metadata 기반 구조화 입력 DTO 확장
-- 레거시 JSON 필드와 병행 지원 (우선순위: attributes > Boolean > legacy)
+- 검색 결과 최신순/인기순 정렬 옵션 추가
+- 파라미터 없으면 기존 기본 정렬 유지
 
 ## Test plan
-- [ ] StoreController 통합 테스트 통과
-- [ ] Swagger UI에서 신규 필드 확인
+- [ ] 정렬 옵션별 결과 순서 확인
+- [ ] 파라미터 없는 기본 조회 동작 확인
 EOF
 )"
 ```

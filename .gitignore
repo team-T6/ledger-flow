@@ -236,3 +236,7 @@ token.json
 
 # macOS
 .DS_Store
+
+# Run logs (거래 정보 포함 가능)
+logs/*
+!logs/.gitkeep

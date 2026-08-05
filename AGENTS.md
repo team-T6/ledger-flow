@@ -20,6 +20,7 @@
 
 - 공통 컨벤션은 AGENTS_COM.md §3을 따른다. 프로젝트 고유 컨벤션은 확정 시 여기에 추가.
 - 커밋 scope 어휘: 미정 — 폴더 구조 확정 시 모듈명 기준으로 정의한다. 그 전까지는 **scope 생략을 기본**으로 한다 (AI가 임의 scope를 만들지 않는다).
+- [MUST] **파일·폴더명은 영어로 한다** (문서 포함). 단계명 대응: 수집 `collect` · 가공 `refine` · 검증 `verify1`/`verify2` · 통합 `merge` · 지휘 `orchestrator`. 문서 본문·제목은 한국어 그대로.
 
 ## 5. Error Handling — Project Specific
 
@@ -39,7 +40,10 @@
 
 ## 9. Reference Documents
 
-- (아직 없음 — 문서가 3개 이상 생기면 트리거 가이드 맵으로 전환)
+문서 위계: `docs/PRD.md` → `docs/interface-spec.md` · `docs/categories.md` → `docs/agents/*.md`
+
+- [MUST] 문서를 고치면 **위계상 상·하위 문서에 연쇄 수정할 것이 있는지 점검해 함께 갱신**한다 (AGENTS_COM.md §8 공통 규칙의 이 프로젝트 위계)
+- 작업별 참조: 파이프라인 범위·역할 → PRD / 단계 입출력·스키마·산출물 양식 → interface-spec / 분류 기준 → categories / 단계 내부 설계 → agents/<단계영어명>.md
 
 ## 10. Branch & PR Rules — [MUST]
 

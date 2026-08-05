@@ -225,14 +225,20 @@ uploads/
 *.xlsx
 *.csv
 *.db
+*.pdf
 !sample_data/**
 
 # Google OAuth credentials
 credentials.json
+client_secret*.json
 token.json
+token.pickle
 
-# Claude Code local settings
+# Claude Code personal working files (개인 AI 작업물 — 공유 대상 아님)
 .claude/settings.local.json
+.claude/plans/
+.claude/notes/
+.claude/worktrees/
 
 # macOS
 .DS_Store

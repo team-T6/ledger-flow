@@ -10,7 +10,11 @@
 
 ## 2. Project Structure
 
-- (미정 — 디렉터리 구조 확정 시 의존 방향·새 파일 배치 기준과 함께 기입)
+- **단계별 "칸 폴더"가 repo 최상위에 있다**: `collect/` `refine/` `verify1/` `verify2/` `merge/` `orchestrator/` — 담당자별 1칸
+  - 각 칸 구성: `README.md`(그 칸의 약속) · `input-sample.md`(받는 재료 견본) · `stub.md`(산출물 모양 견본) · `result.*`(진짜 산출물, 실행 시 생성) · 필요 시 생성 코드
+  - [MUST] 칸 폴더를 옮기지 않고, 기존 파일을 지우지 않는다. 새 산출물은 견본 옆에 만든다
+- `.claude/agents/` — 단계별 에이전트 지시서 (`collect` `refine` `verify1` `verify2` `merge` `orchestrator`). 설계 문서(`docs/agents/`)와 짝 — 하나가 다른 하나를 대신하지 않는다
+- `docs/` — PRD·인터페이스 정의서·카테고리·설계 문서 / `sample_data/` — 테스트용 가짜 데이터(커밋 가능) / `logs/` — 실행 로그(커밋 차단)
 
 ## 3. Architecture Pattern
 

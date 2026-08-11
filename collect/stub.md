@@ -3,6 +3,8 @@
 > ledger-flow에는 아직 collect 출력 모양을 확정한 문서가 없다 (`interface-spec.md`의 "거래 표 스키마"는 초안 상태). 이 견본은 그 초안 컬럼(날짜·지출·수익·결제처·비고·결제수단·결제자)에 수집 단계 내부에서 필요한 `transaction_id`·`source_type`·`collect_status`를 더한 모양이다. 값은 `sample_data/hana_card/`의 더미 하나카드 데이터를 그대로 가져다 썼다 — 실데이터 아님.
 >
 > 카테고리 컬럼은 넣지 않는다 — [categories.md](../docs/categories.md)는 가공(refine) 단계 몫이라 collect 산출물엔 없다.
+>
+> 이 예시는 하나카드(개인카드) 더미 데이터 기준이지만, 컬럼 자체는 카드사·법인/개인 조합과 무관하게 고정이다 — 새 카드사가 추가돼도 [`collect.md`](../.claude/agents/collect.md)의 정규화 단계에서 흡수하고 이 모양은 바뀌지 않는다.
 
 ## transaction_id 규칙
 

@@ -14,8 +14,8 @@
 
 | transaction_id | date | expense | income | merchant | payment_method | payer | memo | source_type | collect_status |
 |---|---|---:|---:|---|---|---|---|---|---|
-| `tx_260202_01` | 2026-02-02 | 67,302 | 0 | 쿠팡 | 하나카드 | 본인 | 포인트 적립 1,346원 | card_excel | verified |
-| `tx_260224_01` | 2026-02-24 | 12,819 | 0 | 배달의민족 | 하나카드 | 본인 | | card_excel | verified |
+| `tx_260202_01` | 2026-02-02 | 67,302 | 0 | 쿠팡 | 하나카드 | 본인 | 포인트 적립 1,346원 | card_excel | 확인됨 |
+| `tx_260224_01` | 2026-02-24 | 12,819 | 0 | 배달의민족 | 하나카드 | 본인 | | card_excel | 확인됨 |
 
 ## 할부 거래 — 회차가 지나도 같은 transaction_id
 
@@ -23,8 +23,8 @@
 
 | transaction_id | date | expense | merchant | memo | source_type | collect_status |
 |---|---|---:|---|---|---|---|
-| `tx_260210_01` | 2026-02-25 | 130,800 | 하이마트 강남점 | 할부 1/6 (원금 120,000 + 수수료 10,800), 총액 720,000 | card_excel | verified |
-| `tx_260210_01` | 2026-07-25 | 121,800 | 하이마트 강남점 | 할부 6/6 (원금 120,000 + 수수료 1,800), 완납 | card_excel | verified |
+| `tx_260210_01` | 2026-02-25 | 130,800 | 하이마트 강남점 | 할부 1/6 (원금 120,000 + 수수료 10,800), 총액 720,000 | card_excel | 확인됨 |
+| `tx_260210_01` | 2026-07-25 | 121,800 | 하이마트 강남점 | 할부 6/6 (원금 120,000 + 수수료 1,800), 완납 | card_excel | 확인됨 |
 
 ## `source_type` / `collect_status` 값
 
@@ -36,9 +36,9 @@
 
 | collect_status | 설명 |
 |---|---|
-| `pending` | 수집됐으나 카드사 내역 검증 전 |
-| `verified` | 카드사 내역 등으로 정상 확인 |
-| `review` | 정보 불명확 — 추가 확인 필요 |
+| `대기` | 수집됐으나 카드사 내역 검증 전 |
+| `확인됨` | 카드사 내역 등으로 정상 확인 |
+| `확인 필요` | 정보 불명확 — 추가 확인 필요 |
 
 ## 영수증 선행 수집 → 카드내역 매칭 (참고 시나리오)
 
@@ -46,10 +46,10 @@
 
 | transaction_id | date | expense | merchant | payment_method | source_type | collect_status |
 |---|---|---:|---|---|---|---|
-| `tx_260226_01` | 2026-02-26 | 7,608 | 스타벅스 강남점 | 하나카드 | receipt | pending |
+| `tx_260226_01` | 2026-02-26 | 7,608 | 스타벅스 강남점 | 하나카드 | receipt | 대기 |
 
 이후 카드사 CSV에서 같은 날짜·금액·결제처·결제수단이 확인되면 `transaction_id`는 유지하고 상태만 갱신한다:
 
 | transaction_id | date | expense | merchant | payment_method | source_type | collect_status |
 |---|---|---:|---|---|---|---|
-| `tx_260226_01` | 2026-02-26 | 7,608 | 스타벅스 강남점 | 하나카드 | card_excel | verified |
+| `tx_260226_01` | 2026-02-26 | 7,608 | 스타벅스 강남점 | 하나카드 | card_excel | 확인됨 |

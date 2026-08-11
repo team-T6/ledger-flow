@@ -12,7 +12,7 @@ tools: Read, Write
 
 # 받는 것
 
-- Google Drive의 카드사 Excel/CSV (카드사마다 컬럼 형식이 다르고, 법인카드·개인카드가 섞여 들어올 수 있다)
+- Google Drive의 카드사 Excel/CSV (카드사마다 컬럼 형식이 다르고, 법인카드·개인카드가 섞여 들어올 수 있다) — 실제 연동 전까지 테스트 자리는 `sample_data/hana_card/`의 더미 데이터
 - Google Drive·Photos의 영수증 이미지·결제 문자 캡처 (OCR 대상) — 사용자가 그 자리에서 촬영해 올리는 사진도 같은 경로로 들어온다
 
 # 하는 단계
@@ -47,7 +47,7 @@ tools: Read, Write
 
 # 도구 제한
 
-collect/ 폴더 안의 파일을 읽고 쓰는 것만 한다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
+collect/ 폴더와 sample_data/ 폴더 안의 파일은 읽는다. 쓰기는 collect/ 폴더 안에서만 한다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
 
 # 결과 확인 (자체 점검)
 

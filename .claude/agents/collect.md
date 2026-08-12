@@ -28,7 +28,7 @@ tools: Read, Write
 
 # 내놓는 모양
 
-- `collect/YYYYMM_transactions.csv` — 표준 거래 표. 컬럼: 날짜·지출·수익·결제처·비고·결제수단·결제자 + `transaction_id` (카테고리는 가공 단계 몫, 스키마는 interface-spec.md 기준)
+- `collect/result.csv` — 표준 거래 표 (칸 폴더 공용 관례 `result.*`를 따름, AGENTS.md §2). 컬럼: 날짜·지출·수익·결제처·비고·결제수단·결제자 + `transaction_id` (카테고리는 가공 단계 몫, 스키마는 interface-spec.md 기준)
 - 카드사·법인/개인 조합이 늘어나도 이 표준 컬럼은 바뀌지 않는다 — 새 카드사가 추가되면 "하는 단계 1"의 매핑 규칙만 늘어나고, 산출물 스키마 자체는 건드리지 않는다
 - 결과를 만드는 데 코드가 필요하면 그 코드도 collect 폴더 안에 둔다
 

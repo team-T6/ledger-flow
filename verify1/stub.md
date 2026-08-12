@@ -3,6 +3,8 @@
 > verify1이 내놓는 것은 **판정이 붙은 거래 표**(엑셀 .xlsx)다. [input-sample.md](input-sample.md)의 견본을 그대로 판정한 결과이며, 값은 `sample_data/hana_card/`의 더미 데이터 기반 — 실데이터 아님.
 >
 > 받은 행을 지우거나 순서를 바꾸지 않는다. 뒤에 판정 열 두 개만 덧붙인다.
+>
+> 거래 표 스키마 컬럼은 한글([interface-spec.md](../docs/interface-spec.md) 기준), 이 단계가 더하는 판정 필드는 영문으로 둔다 — 수집의 `collect_status`와 같은 규칙이다.
 
 ## 더하는 컬럼
 
@@ -15,7 +17,7 @@
 
 입력 컬럼은 그대로 두고(지면상 일부만 표시) 오른쪽 두 열이 이 칸의 산출물이다.
 
-| transaction_id | date | merchant | category | verify1_result | verify1_reason |
+| transaction_id | 날짜 | 결제처 | 카테고리 | `verify1_result` | `verify1_reason` |
 |---|---|---|---|---|---|
 | `tx_260202_01` | 2026-02-02 | 쿠팡 | 소모품·비품 | 통과 | |
 | `tx_260203_01` | 2026-02-03 | CGV | 기타 지출 | 통과 | |
@@ -50,7 +52,7 @@
 
 데이터 행이 0건이면 빈 파일을 내놓지 않는다. 결과 파일에 `"확인 대상 없음"`을 남기고 보고의 `status`는 `empty`로 한다.
 
-| transaction_id | date | merchant | category | verify1_result | verify1_reason |
+| transaction_id | 날짜 | 결제처 | 카테고리 | `verify1_result` | `verify1_reason` |
 |---|---|---|---|---|---|
 | | | | | 확인 대상 없음 | 검증할 항목이 없음 |
 
@@ -67,5 +69,5 @@
 
 ## 아직 정하지 못한 것
 
-- **엑셀 라이브러리** — `openpyxl` / `pandas` 중 팀 공통으로 맞춰야 한다 ([설계서 6장](../docs/agents/verify1.md))
+- **엑셀 라이브러리** — `openpyxl` / `pandas` 중 팀 공통으로 맞춰야 한다 ([명세서 6장](../docs/agents/verify1.md))
 - ~~`refine_status`가 "확인 필요"인 건의 처리~~ — 반려로 두고 사유를 남긴다. 통합([merge.md](../.claude/agents/merge.md))이 **검증 반려 건을 재시도 없이 "확인 필요" 목록으로 옮기므로**, 이 칸에서 둘을 따로 구분해 둘 필요는 없다

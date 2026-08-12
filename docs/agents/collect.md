@@ -14,7 +14,7 @@
   - Google Drive의 카드사 Excel/CSV (카드사마다 컬럼 형식이 다르고, 법인카드·개인카드가 섞여 들어올 수 있다) — 실제 연동 전까지 테스트 자리는 `sample_data/hana_card/`의 더미 데이터
   - Google Drive·Photos의 영수증 이미지·결제 문자 캡처 (OCR 대상) — 사용자가 그 자리에서 촬영해 올리는 사진도 같은 경로로 들어온다
   - (→ 상세는 [인터페이스 정의서](../interface-spec.md) "수집" 행)
-- 내놓는 것: 표준 거래 표(CSV) — `collect/result.csv`. 컬럼: `transaction_id`·날짜·지출·수익·결제처·비고·결제수단·결제자·`source_type`·`collect_status` (카테고리는 가공 단계 몫, 공통 스키마 7컬럼은 [인터페이스 정의서](../interface-spec.md) "거래 표 스키마" 순서 그대로, 앞뒤에 수집 전용 필드 3개를 덧붙인 모양)
+- 내놓는 것: 표준 거래 표(CSV) — `collect/result.csv` (칸 폴더 공용 관례 `result.*`, AGENTS.md §2). 컬럼: `transaction_id`·날짜·지출·수익·결제처·비고·결제수단·결제자·`source_type`·`collect_status` (카테고리는 가공 단계 몫, 공통 스키마 7컬럼은 [인터페이스 정의서](../interface-spec.md) "거래 표 스키마" 순서 그대로, 앞뒤에 수집 전용 필드 3개를 덧붙인 모양)
 
 ## 3. 내부 처리 절차
 
@@ -72,5 +72,4 @@
 - **OCR/Vision 도구 미확정** — 영수증·결제 문자 캡처 인식에 쓸 서비스·모델을 팀에서 정해야 한다
 - **영수증 이미지 견본 없음** — `collect/input-sample.md`에 카드사 Excel/CSV 예시만 있고, 이미지 원천은 텍스트로 대체할 수 없어 아직 견본이 없다. OCR 처리 확인이 필요해지면 실제 이미지 견본을 별도 준비해야 한다
 - **법인카드 실데이터 없음** — 지금 더미 데이터는 개인카드(하나카드)뿐이라 법인/개인 판별 로직이 실제로 검증되지 않았다
-- **산출물 파일명 표기 불일치** — 지시서([.claude/agents/collect.md](../../.claude/agents/collect.md) "내놓는 모양")는 `collect/YYYYMM_transactions.csv`를 언급하지만, 실제 산출물은 칸 폴더 공통 관례(`result.*`)를 따라 `collect/result.csv`로 되어 있다. 둘 중 하나로 통일해야 한다
 - `collect/README.md`가 아직 없다 — 다른 칸 폴더(`verify1/README.md`)를 참고해 추가 필요

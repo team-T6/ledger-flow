@@ -12,11 +12,11 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 ## 받는 것
 
-회계 계정과목에 맞게 카테고리가 부여된 카드 사용내역 **엑셀 파일(.xlsx)**. 상세 스키마의 정본은 [docs/interface-spec.md](../../docs/interface-spec.md)의 "거래 표 스키마"다 — 여기서 재정의하지 않는다.
+회계 계정과목에 맞게 카테고리가 부여된 카드 사용내역 **CSV 파일**. 상세 스키마의 정본은 [docs/interface-spec.md](../../docs/interface-spec.md)의 "거래 표 스키마"다 — 여기서 재정의하지 않는다.
 
 ## 내놓는 것
 
-항목마다 **통과 / 반려**와 **이유 한 줄**이 붙은 엑셀 파일.
+항목마다 **통과 / 반려**와 **이유 한 줄**이 붙은 CSV 파일.
 
 - 입력의 각 행에 판정 열과 이유 열을 더한 모양으로 만든다. 입력 행을 지우거나 순서를 바꾸지 않는다
 - 반려 사유는 한 줄로, 무엇이 왜 어긋났는지 알 수 있게 쓴다 (예: `카테고리 "식대"는 체계에 없음 — "식비"로 추정`)
@@ -26,7 +26,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 `verify1/` 폴더 (이 저장소 최상위의 내 칸 폴더).
 
-- 모양 견본은 `verify1/stub.md`, 진짜 산출물은 `verify1/result.xlsx`로 견본 옆에 만든다
+- 모양 견본은 `verify1/stub.md`, 진짜 산출물은 `verify1/result.csv`로 견본 옆에 만든다
 - **칸 폴더를 옮기지 않고, 기존 파일을 지우지 않는다**
 
 ## 판단할 것
@@ -52,7 +52,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 {
   "stage": "verify1",
   "status": "ok",
-  "output": "verify1/result.xlsx",
+  "output": "verify1/result.csv",
   "counts": { "total": 0, "ok": 0, "flagged": 0 },
   "flags": [
     { "row": 0, "type": "반려", "reason": "카테고리 명칭이 체계에 없음" }

@@ -13,7 +13,8 @@
 - **단계별 "칸 폴더"가 repo 최상위에 있다**: `collect/` `refine/` `verify1/` `verify2/` `merge/` `orchestrator/` — 담당자별 1칸
   - 각 칸 구성: `README.md`(그 칸의 약속) · `input-sample.md`(받는 재료 견본) · `stub.md`(산출물 모양 견본) · `result.*`(진짜 산출물, 실행 시 생성) · 필요 시 생성 코드
   - [MUST] 칸 폴더를 옮기지 않고, 기존 파일을 지우지 않는다. 새 산출물은 견본 옆에 만든다
-- `.claude/agents/` — 단계별 에이전트 지시서 (`collect` `refine` `verify1` `verify2` `merge` `orchestrator`). 설계 문서(`docs/agents/`)와 짝 — 하나가 다른 하나를 대신하지 않는다
+- `docs/agents/<단계>.md` = **명세서**(설계 정본, 담당자가 채우는 문서) · `.claude/agents/<단계>.md` = **지시서**(그 명세서를 바탕으로 에이전트에게 실행을 시키는 문서). 방향은 명세서 → 지시서 한쪽이다 — 지시서 내용이 명세서보다 앞서 나가거나, 명세서 없이 지시서만 작성된 상태로 두지 않는다(§9 spec-first)
+  - [MUST] 지시서를 새로 쓰거나 고칠 때는 그 단계의 명세서(`docs/agents/<단계>.md`)가 먼저 채워져 있는지 확인한다. 명세서가 빈 템플릿이면 지시서 작성 전에 먼저 명세서를 채운다(담당자 소관 — AI가 임의로 채우지 않는다)
 - `docs/` — PRD·인터페이스 정의서·카테고리·설계 문서 / `sample_data/` — 테스트용 가짜 데이터(커밋 가능) / `logs/` — 실행 로그(커밋 차단)
 
 ## 3. Architecture Pattern
@@ -47,7 +48,7 @@
 문서 위계: `docs/PRD.md` → `docs/interface-spec.md` · `docs/categories.md` → `docs/agents/*.md`
 
 - [MUST] 문서를 고치면 **위계상 상·하위 문서에 연쇄 수정할 것이 있는지 점검해 함께 갱신**한다 (AGENTS_COM.md §8 공통 규칙의 이 프로젝트 위계)
-- [MUST] **에이전트 동작 변경은 spec-first** — 구현 코드를 바로 고치지 않고, 관련 설계 문서를 먼저 수정한 뒤 그 문서를 바탕으로 구현에 반영한다. 단계 내부 동작 → `agents/<단계>.md`, 단계 간 약속 → `interface-spec.md`(관련 담당자 합의), 분류 기준 → `categories.md`
+- [MUST] **에이전트 동작 변경은 spec-first** — 구현을 바로 고치지 않고, 관련 설계 문서(명세서)를 먼저 수정한 뒤 그 문서를 바탕으로 구현에 반영한다. 지금 이 프로젝트에서 "구현"은 **`.claude/agents/<단계>.md` 지시서**를 가리킨다(별도 실행 코드가 생기면 그것도 포함). 단계 내부 동작 → `docs/agents/<단계>.md`(명세서) 수정 후 `.claude/agents/<단계>.md`(지시서) 반영, 단계 간 약속 → `interface-spec.md`(관련 담당자 합의), 분류 기준 → `categories.md`
 - 작업별 참조: 파이프라인 범위·역할 → PRD / 단계 입출력·스키마·산출물 양식 → interface-spec / 분류 기준 → categories / 단계 내부 설계 → agents/<단계영어명>.md
 
 ## 10. Branch & PR Rules — [MUST]

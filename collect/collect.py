@@ -18,8 +18,8 @@ import random
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(BASE_DIR, "..", "sample_data", "hana_card")
 
-OUT_FIELDS = ["transaction_id", "날짜", "지출", "수익", "결제처", "구매항목",
-              "비고", "결제수단", "결제자", "source_type", "collect_status"]
+OUT_FIELDS = ["transaction_id", "날짜", "지출", "수익", "결제처",
+              "비고", "결제수단", "결제자", "source_type", "collect_status", "구매항목"]
 
 # stub.md 예시가 참조하는 거래는 확인됨으로 고정한다 — 견본 문서와 값이 어긋나지 않게.
 PINNED_VERIFIED = {"tx_260202_01", "tx_260224_01", "tx_260210_01"}

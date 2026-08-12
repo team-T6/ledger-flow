@@ -14,7 +14,7 @@
   - Google Drive의 카드사 Excel/CSV (카드사마다 컬럼 형식이 다르고, 법인카드·개인카드가 섞여 들어올 수 있다) — 실제 연동 전까지 테스트 자리는 `sample_data/hana_card/`의 더미 데이터
   - Google Drive·Photos의 영수증 이미지·결제 문자 캡처 (OCR 대상) — 사용자가 그 자리에서 촬영해 올리는 사진도 같은 경로로 들어온다
   - (→ 상세는 [인터페이스 정의서](../interface-spec.md) "수집" 행)
-- 내놓는 것: 표준 거래 표(CSV) — `collect/result.csv` (칸 폴더 공용 관례 `result.*`, AGENTS.md §2). 컬럼: `transaction_id`·날짜·지출·수익·결제처·**구매항목**·비고·결제수단·결제자·`source_type`·`collect_status` (카테고리는 가공 단계 몫, 공통 스키마 8컬럼은 [인터페이스 정의서](../interface-spec.md) "거래 표 스키마" 순서 그대로, 앞뒤에 수집 전용 필드 3개를 덧붙인 모양). `구매항목`은 가공이 카테고리를 정할 때 결제처만으론 애매한 건(마트·편의점 등)을 보완하는 용도 — 가공 담당 요청으로 추가
+- 내놓는 것: 표준 거래 표(CSV) — `collect/result.csv` (칸 폴더 공용 관례 `result.*`, AGENTS.md §2). 컬럼: `transaction_id`·날짜·지출·수익·결제처·비고·결제수단·결제자·`source_type`·`collect_status`·**`구매항목`** (카테고리는 가공 단계 몫, 공통 스키마 7컬럼은 [인터페이스 정의서](../interface-spec.md) "거래 표 스키마" 순서 그대로, 앞에 `transaction_id`, 맨 뒤에 수집 전용 필드 3개 — `source_type`·`collect_status`·`구매항목` — 를 덧붙인 모양). `구매항목`은 가공이 카테고리를 정할 때 결제처만으론 애매한 건(마트·편의점 등)을 보완하는 용도 — 가공 담당 요청으로 추가, `collect_status` 바로 뒤(맨 끝)에 둔다
 
 ## 3. 내부 처리 절차
 

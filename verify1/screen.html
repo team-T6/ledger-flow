@@ -71,6 +71,21 @@
   .none   { color: #0033cc; font-weight: bold; }
 
   .memo { font-size: 15px; color: #333333; }
+
+  /* 지휘에게 보내는 결과 보고 — 산출물 표와 구분되는 자리 */
+  .report {
+    border: 1px solid #999999;
+    background: #f9f9f9;
+    padding: 16px 18px;
+    margin: 8px 0 20px;
+  }
+  .report pre {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 </style>
 </head>
 <body>
@@ -136,6 +151,26 @@
       이 칸이 정하지 않습니다 — 어긋나 보이면 반려 대신 verify1_reason에 의견만 남깁니다.
     </p>
 
+    <h2>지휘에게 보내는 단계 결과 보고</h2>
+    <p class="memo">
+      위 판정 결과 표(내 산출물)와는 별개로, 처리 건수와 문제 항목을 요약한 보고를 지휘(orchestrator)에게
+      함께 전달합니다. 지휘는 이 보고만 보고 다음 단계 진행 여부를 판단하며 산출물 내용은 열어보지 않습니다.
+    </p>
+    <div class="report">
+<pre>{
+  "stage": "verify1",
+  "status": "partial",
+  "output": "verify1/result.csv",
+  "counts": { "total": 5, "ok": 2, "flagged": 3 },
+  "flags": [
+    { "row": 3, "type": "반려", "reason": "카테고리 \"식대\"는 체계에 없음 — \"식비\"로 추정" },
+    { "row": 4, "type": "반려", "reason": "카테고리 \"카페\"는 체계에 없음 — \"카페·간식\"으로 추정" },
+    { "row": 5, "type": "반려", "reason": "카테고리가 비어 있어 판정 불가" }
+  ],
+  "message": ""
+}</pre>
+    </div>
+
     <h2>확인 대상이 없을 때</h2>
     <p class="memo">데이터 행이 0건이면 빈 결과를 내놓지 않고 아래와 같이 표시합니다.</p>
 
@@ -155,6 +190,18 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <p class="memo">이때 지휘에게 보내는 결과 보고는 아래와 같이 <span class="none">status: "empty"</span>로 표시합니다.</p>
+    <div class="report">
+<pre>{
+  "stage": "verify1",
+  "status": "empty",
+  "output": "verify1/result.csv",
+  "counts": { "total": 0, "ok": 0, "flagged": 0 },
+  "flags": [],
+  "message": "확인 대상 없음"
+}</pre>
     </div>
 
     <button id="downloadBtn">다운받기</button>

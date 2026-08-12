@@ -1,6 +1,6 @@
 # 검증 1 산출물 모양 견본 (stub)
 
-> verify1이 내놓는 것은 **판정이 붙은 거래 표**(엑셀 .xlsx)다. [input-sample.md](input-sample.md)의 견본을 그대로 판정한 결과이며, 값은 `sample_data/hana_card/`의 더미 데이터 기반 — 실데이터 아님.
+> verify1이 내놓는 것은 **판정이 붙은 거래 표**(CSV)다. [input-sample.md](input-sample.md)의 견본을 그대로 판정한 결과이며, 값은 `sample_data/hana_card/`의 더미 데이터 기반 — 실데이터 아님.
 >
 > 받은 행을 지우거나 순서를 바꾸지 않는다. 뒤에 판정 열 두 개만 덧붙인다.
 >
@@ -35,7 +35,7 @@
 {
   "stage": "verify1",
   "status": "partial",
-  "output": "verify1/result.xlsx",
+  "output": "verify1/result.csv",
   "counts": { "total": 5, "ok": 2, "flagged": 3 },
   "flags": [
     { "row": 3, "type": "반려", "reason": "카테고리 \"식대\"는 체계에 없음 — \"식비\"로 추정" },
@@ -60,7 +60,7 @@
 {
   "stage": "verify1",
   "status": "empty",
-  "output": "verify1/result.xlsx",
+  "output": "verify1/result.csv",
   "counts": { "total": 0, "ok": 0, "flagged": 0 },
   "flags": [],
   "message": "확인 대상 없음"
@@ -69,5 +69,8 @@
 
 ## 아직 정하지 못한 것
 
-- **엑셀 라이브러리** — `openpyxl` / `pandas` 중 팀 공통으로 맞춰야 한다 ([명세서 6장](../docs/agents/verify1.md))
+- 지금은 없음 (엑셀 라이브러리 이슈는 입출력이 CSV로 정해지며 해소됨 — [명세서 8장](../docs/agents/verify1.md) 참고)
+
+풀린 것:
+
 - ~~`refine_status`가 "확인 필요"인 건의 처리~~ — 반려로 두고 사유를 남긴다. 통합([merge.md](../.claude/agents/merge.md))이 **검증 반려 건을 재시도 없이 "확인 필요" 목록으로 옮기므로**, 이 칸에서 둘을 따로 구분해 둘 필요는 없다

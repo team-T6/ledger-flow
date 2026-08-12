@@ -6,7 +6,7 @@ tools: Read, Write, Edit
 
 # 지휘(orchestrator) 에이전트 지시문
 
-> 정본: 단계 간 계약은 [인터페이스 정의서](../../docs/interface-spec.md), 내부 설계는 [설계서](../../docs/agents/orchestrator.md). 둘은 짝 — 서로 대신하지 않는다.
+> 정본: 단계 간 계약은 [인터페이스 정의서](../../docs/interface-spec.md), 내부 설계는 [설계서](../../docs/agents/orchestrator.md). 둘은 짝 — 서로 대신하지 않는다. **주의: 이 지시서가 명세서보다 먼저 작성됐던 상태라, 명세서는 이 지시서 내용을 역이식해 채운 것이다(담당자 김규은 검토 필요). 이후 동작을 바꿀 땐 정상적으로 명세서를 먼저 고치고 이 지시서에 반영한다.**
 
 ## 역할
 

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>검증2 담당 화면</title>
+<style>
+  body {
+    font-family: -apple-system, "Apple SD Gothic Neo", sans-serif;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #222;
+  }
+  h1 {
+    font-size: 20px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 8px;
+  }
+  h2 {
+    font-size: 15px;
+    color: #555;
+    margin-top: 32px;
+  }
+  .banner {
+    background: #fff8e1;
+    border: 1px solid #f0c36d;
+    color: #7a5c00;
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+  }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px;
+  }
+  button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  th {
+    background: #f5f5f5;
+  }
+  .pass { color: #1a7f37; font-weight: bold; }
+  .reject { color: #c0392b; font-weight: bold; }
+  .note {
+    font-size: 12px;
+    color: #888;
+    margin-top: 8px;
+  }
+  #result-section {
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">연습용 화면 - 아직 실제로 처리하지 않고, 미리 넣어둔 결과를 보여줍니다</div>
+
+<h1>검증2 담당 화면</h1>
+
+<h2>확인할 거래 내역</h2>
+<textarea id="input-area" rows="6" placeholder="여기에 거래 내역을 여러 줄 붙여넣으세요"></textarea>
+
+<button id="check-btn" onclick="document.getElementById('result-section').style.display='block'">확인하기</button>
+
+<div id="result-section">
+<h2>결과</h2>
+<p class="note">(verify2 검증 결과 - input-sample.md 기준)</p>
+<table>
+  <tr><th>항목</th><th>결과</th><th>이유</th></tr>
+  <tr><td>2026-02-09 교촌치킨</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
+  <tr><td>2026-02-13 이마트 성수점</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
+  <tr><td>2026-02-17 넷플릭스</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
+  <tr><td>2026-03-01 올리브영</td><td class="reject">반려</td><td>대상 월 아님 (날짜: 2026-03-01)</td></tr>
+  <tr><td>2026-02-15 교촌치킨</td><td class="reject">반려</td><td>지출/수익 동시 기입 (지출 22,805 / 수익 22,805)</td></tr>
+</table>
+<p class="note">※ 해외결제 환산 기준: input-sample.md에 해외결제 여부·원거래통화·원거래금액 컬럼이 없어 전체 행에 대해 판정 불가 (자료에 없는 내용을 임의로 채우지 않음).</p>
+<p class="note">출처: verify2/result.md</p>
+</div>
+
+</body>
+</html>

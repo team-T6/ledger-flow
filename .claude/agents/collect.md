@@ -4,7 +4,7 @@ description: 월말결산 파이프라인의 수집(collect) 단계를 맡는다
 tools: Read, Write
 ---
 
-> 근거: [interface-spec.md](../../docs/interface-spec.md) 수집 행 + `playground/playground/collect`의 초안(README.md·collect-spec.md·collect-output-example.md). 설계 문서는 [docs/agents/collect.md](../../docs/agents/collect.md) — 이 파일은 그 설계를 바탕으로 한 실행 지시서다.
+> 근거: [interface-spec.md](../../docs/interface-spec.md) 수집 행. 설계 문서(명세서)는 [docs/agents/collect.md](../../docs/agents/collect.md) — 이 파일은 그 설계를 바탕으로 한 실행 지시서다. **주의: 이 지시서가 명세서보다 먼저 작성됐던 상태라, 명세서는 이 지시서 내용을 역이식해 채운 것이다(담당자 이승환 검토 필요). 이후 동작을 바꿀 땐 정상적으로 명세서를 먼저 고치고 이 지시서에 반영한다.**
 
 # 역할
 

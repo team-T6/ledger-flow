@@ -11,7 +11,10 @@ API 키는 이 서버가 아니라 call-agent.py 쪽에서 .env를 읽어 쓴다
 import importlib.util
 import json
 import os
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CALL_AGENT_PATH = os.path.join(BASE_DIR, "call-agent.py")

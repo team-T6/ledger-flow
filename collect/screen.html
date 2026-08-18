@@ -316,6 +316,16 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;");
 }
 
+// 이미지 파일을 서버로 보낼 base64 문자열로 바꾼다 (data: 접두어는 뗀다).
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 // ---------- 표준 거래 id ----------
 
 // 같은 날짜(YYMMDD)에 이미 있는 tx_id 중 가장 큰 순번 다음 번호를 돌려준다.
@@ -406,27 +416,64 @@ document.getElementById("receipt-btn").addEventListener("click", function () {
   document.getElementById("receipt-input").click();
 });
 
-document.getElementById("receipt-input").addEventListener("change", function (e) {
+document.getElementById("receipt-input").addEventListener("change", async function (e) {
   const file = e.target.files[0];
   if (!file) return;
   ensureLoaded();
 
-  const date = todayStr();
-  const row = {
-    transaction_id: nextTxId(date),
-    날짜: date,
-    지출: "",
-    수익: "",
-    결제처: "",
-    비고: `영수증 업로드: ${file.name} (OCR 미연동 — 날짜는 업로드일로 임시 기록, 나머지는 확인 전이라 지어내지 않음)`,
-    결제수단: "",
-    결제자: "",
-    source_type: "receipt",
-    collect_status: "대기",
-    구매항목: "",
-  };
+  const receiptBtn = document.getElementById("receipt-btn");
+  receiptBtn.disabled = true;
+  showFileMessage(`"${file.name}" 읽는 중...`, false);
+
+  let row;
+  try {
+    const imageB64 = await fileToBase64(file);
+    const response = await fetch("/read-receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: imageB64, media_type: file.type }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new Error(data.error || response.statusText);
+    }
+
+    const ocr = data.result;
+    const date = ocr.날짜 || todayStr();
+    row = {
+      transaction_id: nextTxId(date),
+      날짜: date,
+      지출: ocr.금액 || "",
+      수익: 0,
+      결제처: ocr.결제처 || "",
+      비고: `영수증 자동 인식: ${file.name}`,
+      결제수단: ocr.결제수단 || "",
+      결제자: "",
+      source_type: "receipt",
+      collect_status: ocr.확인됨 ? "확인됨" : "확인 필요",
+      구매항목: ocr.구매항목 || "",
+    };
+    showFileMessage(`영수증 "${file.name}" — AI로 읽어서 ${row.collect_status === "확인됨" ? "등록했습니다" : "확인 필요로 등록했습니다"}.`, row.collect_status !== "확인됨");
+  } catch (err) {
+    const date = todayStr();
+    row = {
+      transaction_id: nextTxId(date),
+      날짜: date,
+      지출: "",
+      수익: "",
+      결제처: "",
+      비고: `영수증 업로드: ${file.name} (AI 인식 실패: ${err.message} — 확인 전이라 지어내지 않음)`,
+      결제수단: "",
+      결제자: "",
+      source_type: "receipt",
+      collect_status: "확인 필요",
+      구매항목: "",
+    };
+    showFileMessage(`영수증 "${file.name}" — AI 인식에 실패해 확인 필요로만 등록했습니다 (${err.message}).`, true);
+  } finally {
+    receiptBtn.disabled = false;
+  }
   dataRows.push(row);
-  showFileMessage(`영수증 "${file.name}" 추가 — 대기 상태로 등록됨 (실제 OCR 인식은 아직 연습용 화면에 없음)`, false);
   afterDataChange();
   e.target.value = "";
 });

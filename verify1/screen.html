@@ -135,6 +135,15 @@
       <pre id="output"></pre>
     </div>
 
+    <h2>지휘에게 보내는 단계 결과 보고</h2>
+    <p class="memo">
+      위 판정 결과(내 산출물)와는 별개로, 처리 건수와 문제 항목을 요약한 보고를 지휘(orchestrator)에게
+      함께 전달합니다. 지휘는 이 보고만 보고 다음 단계 진행 여부를 판단하며 산출물 내용은 열어보지 않습니다.
+    </p>
+    <div class="report">
+      <pre id="report"></pre>
+    </div>
+
   </div>
 
 </div>
@@ -146,6 +155,30 @@
   var runBtn = document.getElementById('runBtn');
   var result = document.getElementById('result');
   var output = document.getElementById('output');
+  var report = document.getElementById('report');
+
+  // verify1/server.py가 열어주는 로컬 주소 — 열쇠는 여기(화면)가 아니라
+  // call-agent.py 쪽에서만 .env를 읽어 쓴다
+  var SERVER_URL = 'http://localhost:8788/call-agent';
+
+  // 담당자 응답 글 속에서 지휘 보고 JSON({"stage": ... } 블록)만 뽑아낸다
+  function extractReport(text) {
+    var fenced = text.match(/```json\s*([\s\S]*?)```/i);
+    var candidate = fenced ? fenced[1] : null;
+    if (!candidate) {
+      var start = text.indexOf('{');
+      var end = text.lastIndexOf('}');
+      if (start !== -1 && end !== -1 && end > start) {
+        candidate = text.slice(start, end + 1);
+      }
+    }
+    if (!candidate) return null;
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
+      return null;
+    }
+  }
 
   // 끌어다 놓기 — 연습용이라 파일 내용을 읽지 않고 이름만 표시한다
   drop.addEventListener('dragover', function (e) {
@@ -167,23 +200,28 @@
   runBtn.addEventListener('click', function () {
     result.classList.remove('hidden');
     output.textContent = '부르는 중...';
+    report.textContent = '부르는 중...';
 
-    fetch('call-agent', {
+    fetch(SERVER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: inputText.value })
+      body: JSON.stringify({ input: inputText.value })
     })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error('요청 실패: ' + res.status);
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          output.textContent = '오류: ' + data.error;
+          report.textContent = '오류: ' + data.error;
+          return;
         }
-        return res.text();
-      })
-      .then(function (text) {
-        output.textContent = text;
+        output.textContent = data.result;
+        var parsed = extractReport(data.result);
+        report.textContent = parsed ? JSON.stringify(parsed, null, 2) : '결과에서 보고를 찾지 못했습니다.';
       })
       .catch(function (err) {
-        output.textContent = '오류: ' + err.message;
+        var message = '호출 실패: ' + err.message + ' (verify1/server.py가 실행 중인지 확인하세요)';
+        output.textContent = message;
+        report.textContent = message;
       });
   });
 </script>

@@ -10,7 +10,7 @@
     font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
     font-size: 17px;
     line-height: 1.6;
-    max-width: 800px;
+    max-width: 900px;
     margin: 40px auto;
     padding: 0 20px;
   }
@@ -41,6 +41,30 @@
     border: 1px solid #999;
     margin-bottom: 16px;
   }
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .toolbar-vertical {
+    flex-direction: column;
+    align-items: stretch;
+    width: 240px;
+    flex: 0 0 240px;
+  }
+  .toolbar-vertical button {
+    width: 100%;
+    text-align: center;
+  }
+  .top-row {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
   button {
     font-size: 16px;
     padding: 10px 24px;
@@ -48,10 +72,28 @@
     color: #ffffff;
     border: none;
     cursor: pointer;
-    margin-bottom: 24px;
   }
   button:hover {
     background: #333333;
+  }
+  button.secondary {
+    background: #ffffff;
+    color: #000000;
+    border: 1px solid #999999;
+  }
+  button.secondary:hover {
+    background: #eeeeee;
+  }
+  #file-message {
+    font-size: 14px;
+    margin-bottom: 16px;
+    min-height: 20px;
+  }
+  #file-message.error {
+    color: #b00020;
+  }
+  #file-message.info {
+    color: #333333;
   }
   #result {
     border: 1px solid #ccc;
@@ -73,8 +115,72 @@
   #result th {
     background: #f2f2f2;
   }
+  #result th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  #result th.sortable:hover {
+    background: #e6e6e6;
+  }
+  #result th.filter-cell {
+    background: #ffffff;
+    padding: 4px;
+  }
+  #result .filter-cell input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+    padding: 3px 4px;
+    border: 1px solid #999;
+    font-family: inherit;
+  }
   .placeholder {
     color: #888888;
+  }
+  .manual-form {
+    background: #f7f7f7;
+    border: 1px solid #ccc;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+  .manual-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .manual-row label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: normal;
+    margin-bottom: 0;
+    flex: 1 1 160px;
+  }
+  .manual-row input {
+    font-size: 14px;
+    font-family: inherit;
+    padding: 6px 8px;
+    border: 1px solid #999;
+    box-sizing: border-box;
+  }
+  #manual-submit-btn {
+    margin-bottom: 0;
+  }
+  .report-section {
+    flex: 1 1 320px;
+    min-width: 280px;
+  }
+  .report-output {
+    background: #f7f7f7;
+    border: 1px solid #ccc;
+    padding: 12px 16px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    height: 3.4em;
+    overflow-y: auto;
   }
 </style>
 </head>
@@ -84,10 +190,50 @@
 
 <h1>collect 담당</h1>
 
-<label for="check-input">확인할 요약과 할 일 목록</label>
-<textarea id="check-input"></textarea>
+<div class="top-row">
+  <div class="toolbar toolbar-vertical">
+    <button id="receipt-btn" class="secondary">영수증 등록</button>
+    <button id="manual-btn" class="secondary">수동 입력</button>
+    <button id="xlsx-btn" class="secondary">xlsx/csv 등록</button>
+    <button id="check-btn">확인하기</button>
+  </div>
 
-<button id="check-btn">확인하기</button>
+  <div class="report-section">
+    <label style="margin-bottom:8px;">오케스트레이터용 단계 결과 보고</label>
+    <div class="toolbar">
+      <button type="button" id="report-btn" class="secondary">보고 만들기</button>
+      <button type="button" id="report-copy-btn" class="secondary">복사</button>
+    </div>
+    <pre id="report-output" class="report-output"><span class="placeholder">보고 만들기 버튼을 누르면 지금까지의 데이터를 기준으로 interface-spec.md의 "단계 결과 보고" 형식이 여기에 표시됩니다.</span></pre>
+  </div>
+</div>
+<input type="file" id="receipt-input" accept="image/*" style="display:none">
+<input type="file" id="xlsx-input" accept=".csv,.xlsx,.xls" style="display:none">
+
+<div id="manual-form" class="manual-form" style="display:none">
+  <div class="manual-row">
+    <label>날짜
+      <input type="date" id="manual-date">
+    </label>
+    <label>지출(원)
+      <input type="number" id="manual-expense" min="0" step="1">
+    </label>
+    <label>결제처
+      <input type="text" id="manual-merchant">
+    </label>
+  </div>
+  <div class="manual-row">
+    <label>구매항목 (선택, 콤마로 구분)
+      <input type="text" id="manual-items">
+    </label>
+    <label>비고 (선택)
+      <input type="text" id="manual-memo">
+    </label>
+  </div>
+  <button type="button" id="manual-submit-btn">추가</button>
+</div>
+
+<div id="file-message"></div>
 
 <div id="result"><span class="placeholder">확인하기 버튼을 누르면 결과가 여기에 표시됩니다.</span></div>
 
@@ -276,6 +422,15 @@ tx_260726_02,2026-07-26,65182,0,SK주유소,,하나카드,개인카드,card_exce
 tx_260727_01,2026-07-27,23066,0,교촌치킨,포인트 적립 461원,하나카드,개인카드,card_excel,확인 필요,
 `;
 
+// 하나카드 원본(카드사 CSV) 컬럼 — collect.py와 같은 순서
+const HANA_RAW_HEADER = ["이용일자", "이용가맹점", "이용금액", "할부기간", "회차", "원금", "수수료", "이용혜택", "혜택금액", "결제후잔액", "포인트"];
+
+let COLUMNS = null;   // 표준 산출물 컬럼 (처음 로드할 때 RESULT_CSV 헤더에서 뽑는다)
+let dataRows = null;  // 표준 산출물 행들 (객체 배열)
+const filters = {};   // 컬럼명 -> 필터 텍스트
+
+// ---------- CSV 파싱 ----------
+
 // 아주 단순한 CSV 파서 (따옴표로 감싼 콤마 포함 필드 처리)
 function parseCSV(text) {
   const rows = [];
@@ -316,24 +471,417 @@ function parseCSV(text) {
   return rows.filter(r => r.length > 1 || r[0] !== "");
 }
 
-function renderTable(csvText) {
-  const rows = parseCSV(csvText.trim());
-  if (rows.length === 0) return "<p>표시할 내용이 없습니다.</p>";
+function csvToObjects(text) {
+  const rows = parseCSV(text.trim());
+  if (rows.length === 0) return { header: [], records: [] };
+  const header = rows[0];
+  const records = rows.slice(1).map(r => {
+    const obj = {};
+    header.forEach((h, i) => { obj[h] = r[i] !== undefined ? r[i] : ""; });
+    return obj;
+  });
+  return { header, records };
+}
 
-  let html = "<table>\n<thead><tr>";
-  rows[0].forEach(h => html += `<th>${h}</th>`);
-  html += "</tr></thead>\n<tbody>\n";
-  for (let i = 1; i < rows.length; i++) {
-    html += "<tr>";
-    rows[i].forEach(cell => html += `<td>${cell}</td>`);
-    html += "</tr>\n";
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ---------- 표준 거래 id ----------
+
+// 같은 날짜(YYMMDD)에 이미 있는 tx_id 중 가장 큰 순번 다음 번호를 돌려준다.
+function nextTxId(dateStr) {
+  const yymmdd = dateStr.slice(2).replace(/-/g, "");
+  let maxSeq = 0;
+  dataRows.forEach(r => {
+    const m = /^tx_(\d{6})_(\d{2})$/.exec(r.transaction_id);
+    if (m && m[1] === yymmdd) {
+      maxSeq = Math.max(maxSeq, parseInt(m[2], 10));
+    }
+  });
+  const seq = String(maxSeq + 1).padStart(2, "0");
+  return `tx_${yymmdd}_${seq}`;
+}
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// ---------- 데이터 준비 ----------
+
+function ensureLoaded() {
+  if (dataRows === null) {
+    const parsed = csvToObjects(RESULT_CSV);
+    COLUMNS = parsed.header;
+    dataRows = parsed.records;
+    buildTableHead();
   }
-  html += "</tbody>\n</table>";
-  return html;
+}
+
+// 하나카드 원본 CSV(카드사 Excel/CSV) 한 행을 표준 컬럼으로 정규화한다.
+// collect.py의 normalize()와 같은 규칙 — 단, 매달 파일이 나뉘어 있다고 가정하지 않고
+// 이용일자를 그대로 날짜로 쓴다(업로드 한 파일 = 한 시점 스냅샷이라는 단순화).
+function normalizeHanaRow(raw) {
+  const usageDate = raw["이용일자"];
+  const merchant = raw["이용가맹점"];
+  const amount = parseInt(raw["이용금액"], 10) || 0;
+  const term = raw["할부기간"];
+  const roundNo = raw["회차"];
+  const principal = parseInt(raw["원금"], 10) || 0;
+  const fee = parseInt(raw["수수료"], 10) || 0;
+  const benefitLabel = raw["이용혜택"];
+  const benefitAmt = parseInt(raw["혜택금액"], 10) || 0;
+
+  const expense = principal + fee;
+  let memo;
+  if (term === "일시불") {
+    memo = (benefitLabel && benefitLabel !== "없음") ? `${benefitLabel} ${benefitAmt.toLocaleString()}원` : "";
+  } else {
+    const [num, denom] = String(roundNo).split("/");
+    const paidOff = num === denom ? " (완납)" : "";
+    memo = `할부 ${roundNo} (원금 ${principal.toLocaleString()} + 수수료 ${fee.toLocaleString()}), 총액 ${amount.toLocaleString()}${paidOff}`;
+  }
+
+  return {
+    transaction_id: nextTxId(usageDate),
+    날짜: usageDate,
+    지출: expense,
+    수익: 0,
+    결제처: merchant,
+    비고: memo,
+    결제수단: "하나카드",
+    결제자: "개인카드",
+    source_type: "card_excel",
+    collect_status: "확인됨",
+    구매항목: "",
+  };
+}
+
+function headersMatch(a, b) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function showFileMessage(text, isError) {
+  const el = document.getElementById("file-message");
+  el.textContent = text;
+  el.className = isError ? "error" : "info";
+}
+
+// ---------- 영수증 추가 ----------
+
+document.getElementById("receipt-btn").addEventListener("click", function () {
+  document.getElementById("receipt-input").click();
+});
+
+document.getElementById("receipt-input").addEventListener("change", function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  ensureLoaded();
+
+  const date = todayStr();
+  const row = {
+    transaction_id: nextTxId(date),
+    날짜: date,
+    지출: "",
+    수익: "",
+    결제처: "",
+    비고: `영수증 업로드: ${file.name} (OCR 미연동 — 날짜는 업로드일로 임시 기록, 나머지는 확인 전이라 지어내지 않음)`,
+    결제수단: "",
+    결제자: "",
+    source_type: "receipt",
+    collect_status: "대기",
+    구매항목: "",
+  };
+  dataRows.push(row);
+  showFileMessage(`영수증 "${file.name}" 추가 — 대기 상태로 등록됨 (실제 OCR 인식은 아직 연습용 화면에 없음)`, false);
+  afterDataChange();
+  e.target.value = "";
+});
+
+// ---------- 수동 입력 ----------
+
+document.getElementById("manual-btn").addEventListener("click", function () {
+  const form = document.getElementById("manual-form");
+  form.style.display = form.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("manual-submit-btn").addEventListener("click", function () {
+  ensureLoaded();
+  const date = document.getElementById("manual-date").value;
+  const expenseRaw = document.getElementById("manual-expense").value;
+  const merchant = document.getElementById("manual-merchant").value.trim();
+  const items = document.getElementById("manual-items").value.trim();
+  const memo = document.getElementById("manual-memo").value.trim();
+
+  if (!date || expenseRaw === "" || !merchant) {
+    showFileMessage("수동 입력은 날짜·지출·결제처를 반드시 채워야 합니다.", true);
+    return;
+  }
+
+  const row = {
+    transaction_id: nextTxId(date),
+    날짜: date,
+    지출: parseInt(expenseRaw, 10) || 0,
+    수익: 0,
+    결제처: merchant,
+    비고: memo,
+    결제수단: "현금",
+    결제자: "개인카드",
+    source_type: "manual",
+    collect_status: "확인됨",
+    구매항목: items,
+  };
+  dataRows.push(row);
+  showFileMessage(`수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원`, false);
+
+  document.getElementById("manual-date").value = "";
+  document.getElementById("manual-expense").value = "";
+  document.getElementById("manual-merchant").value = "";
+  document.getElementById("manual-items").value = "";
+  document.getElementById("manual-memo").value = "";
+
+  afterDataChange();
+});
+
+// ---------- xlsx 등록 ----------
+
+document.getElementById("xlsx-btn").addEventListener("click", function () {
+  document.getElementById("xlsx-input").click();
+});
+
+document.getElementById("xlsx-input").addEventListener("change", function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  ensureLoaded();
+
+  const reader = new FileReader();
+  reader.onload = function () {
+    const text = String(reader.result);
+
+    // 진짜 바이너리 xlsx(zip 포맷, "PK"로 시작)는 이 연습용 화면에 엑셀 파서가 없어서 못 읽는다.
+    // 못 읽는다고 버리지 않고, 매핑 규칙 없는 서식과 같은 방식으로 "확인 필요"로 등록만 해둔다.
+    if (text.startsWith("PK")) {
+      const date = todayStr();
+      dataRows.push({
+        transaction_id: nextTxId(date),
+        날짜: date,
+        지출: "",
+        수익: "",
+        결제처: "",
+        비고: `카드사 파일 등록: ${file.name} (엑셀 자동 인식은 이 연습용 화면에 없음 — 내용은 수동 입력으로 반영 필요)`,
+        결제수단: "",
+        결제자: "",
+        source_type: "card_excel",
+        collect_status: "확인 필요",
+        구매항목: "",
+      });
+      showFileMessage(`"${file.name}" — 엑셀(바이너리) 파일이라 자동으로 못 읽어서 확인 필요로 등록만 해뒀습니다. 내용은 수동 입력으로 반영해주세요.`, true);
+      afterDataChange();
+      e.target.value = "";
+      return;
+    }
+
+    const { header, records } = csvToObjects(text);
+    if (records.length === 0) {
+      showFileMessage(`"${file.name}"에서 읽을 행이 없습니다.`, true);
+    } else if (headersMatch(header, HANA_RAW_HEADER)) {
+      records.forEach(r => dataRows.push(normalizeHanaRow(r)));
+      showFileMessage(`"${file.name}" (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
+    } else if (headersMatch(header, COLUMNS)) {
+      records.forEach(r => dataRows.push(r));
+      showFileMessage(`"${file.name}" (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
+    } else {
+      showFileMessage(`"${file.name}" — 인식할 수 없는 컬럼 형식입니다. 매핑 규칙이 없는 서식은 임의로 처리하지 않습니다 (지원 형식: 하나카드 원본 또는 표준 산출물 형식).`, true);
+    }
+    afterDataChange();
+  };
+  reader.readAsText(file, "utf-8");
+  e.target.value = "";
+});
+
+// ---------- 정렬 ----------
+
+const sortState = { column: null, dir: 0 }; // dir: 1 오름차순, -1 내림차순, 0 없음
+
+function isNumericColumn(values) {
+  return values.length > 0 && values.every(v => v === "" || /^-?\d+(\.\d+)?$/.test(String(v).trim()));
+}
+
+function compareValues(a, b, col, numeric) {
+  const av = a[col] ?? "";
+  const bv = b[col] ?? "";
+  if (numeric) {
+    const an = av === "" ? -Infinity : parseFloat(av);
+    const bn = bv === "" ? -Infinity : parseFloat(bv);
+    return an - bn;
+  }
+  return String(av).localeCompare(String(bv), "ko");
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll("#header-row th").forEach(th => {
+    const col = th.dataset.col;
+    const arrow = th.querySelector(".sort-arrow");
+    if (!arrow) return;
+    arrow.textContent = col === sortState.column ? (sortState.dir === 1 ? " ▲" : " ▼") : "";
+  });
+}
+
+// ---------- 표 렌더링 (필터·정렬 포함) ----------
+
+function buildTableHead() {
+  const resultEl = document.getElementById("result");
+  resultEl.innerHTML =
+    '<table id="data-table">' +
+    '<thead>' +
+    '<tr id="header-row"></tr>' +
+    '<tr id="filter-row"></tr>' +
+    '</thead>' +
+    '<tbody id="table-body"></tbody>' +
+    '</table>';
+
+  const headerRow = document.getElementById("header-row");
+  const filterRow = document.getElementById("filter-row");
+
+  COLUMNS.forEach(col => {
+    const th = document.createElement("th");
+    th.className = "sortable";
+    th.dataset.col = col;
+    const label = document.createElement("span");
+    label.textContent = col;
+    const arrow = document.createElement("span");
+    arrow.className = "sort-arrow";
+    th.appendChild(label);
+    th.appendChild(arrow);
+    th.title = "클릭하면 이 컬럼 기준으로 오름차순/내림차순 정렬됩니다";
+    th.addEventListener("click", function () {
+      if (sortState.column === col) {
+        sortState.dir = sortState.dir === 1 ? -1 : (sortState.dir === -1 ? 0 : 1);
+        if (sortState.dir === 0) sortState.column = null;
+      } else {
+        sortState.column = col;
+        sortState.dir = 1;
+      }
+      updateSortIndicators();
+      renderBody();
+    });
+    headerRow.appendChild(th);
+
+    const filterTh = document.createElement("th");
+    filterTh.className = "filter-cell";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "검색 필터";
+    input.addEventListener("input", function () {
+      filters[col] = input.value;
+      renderBody();
+    });
+    filterTh.appendChild(input);
+    filterRow.appendChild(filterTh);
+  });
+}
+
+function renderBody() {
+  const tbody = document.getElementById("table-body");
+  let filtered = dataRows.filter(row =>
+    COLUMNS.every(col => {
+      const f = (filters[col] || "").trim().toLowerCase();
+      if (!f) return true;
+      return String(row[col] ?? "").toLowerCase().includes(f);
+    })
+  );
+
+  if (sortState.column) {
+    const numeric = isNumericColumn(dataRows.map(r => r[sortState.column]));
+    filtered = filtered.slice().sort((a, b) => compareValues(a, b, sortState.column, numeric) * sortState.dir);
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${COLUMNS.length}">표시할 내용이 없습니다.</td></tr>`;
+    return;
+  }
+
+  let html = "";
+  filtered.forEach(row => {
+    html += "<tr>";
+    COLUMNS.forEach(col => { html += `<td>${escapeHtml(row[col] ?? "")}</td>`; });
+    html += "</tr>\n";
+  });
+  tbody.innerHTML = html;
+}
+
+function afterDataChange() {
+  renderBody();
 }
 
 document.getElementById("check-btn").addEventListener("click", function () {
-  document.getElementById("result").innerHTML = renderTable(RESULT_CSV);
+  ensureLoaded();
+  afterDataChange();
+});
+
+// ---------- 오케스트레이터용 단계 결과 보고 ----------
+// interface-spec.md "단계 결과 보고" envelope 형식 그대로 (stage/status/output/counts/flags/message).
+// 지금까지 이 화면에서 등록된 데이터(영수증·수동 입력·xlsx 포함) 기준으로 매번 새로 계산한다.
+
+function buildOrchestratorReport() {
+  const rows = dataRows || [];
+  const total = rows.length;
+  const ok = rows.filter(r => r.collect_status === "확인됨").length;
+  const flagged = total - ok;
+
+  let status;
+  if (total === 0) status = "empty";
+  else if (flagged === 0) status = "ok";
+  else status = "partial";
+
+  const flags = [];
+  rows.forEach((r, i) => {
+    if (r.collect_status !== "확인됨") {
+      const base = `${r.결제처 || "출처 미상"} 거래 — ${r.collect_status} 상태`;
+      // source_type이 receipt/카드사 파일 등록처럼 비고 자체가 사유 설명인 경우만 비고를 그대로 쓰고,
+      // 그 외(포인트 적립 등 사유와 무관한 메모)는 참고로만 덧붙인다.
+      const explainsItself = r.source_type === "receipt" || (r.비고 || "").startsWith("카드사 파일 등록");
+      flags.push({
+        row: i + 1,
+        type: "확인 필요",
+        reason: explainsItself ? r.비고 : (r.비고 ? `${base} (비고: ${r.비고})` : base)
+      });
+    }
+  });
+
+  return {
+    stage: "collect",
+    status: status,
+    output: total > 0 ? "collect/result.csv" : "",
+    counts: { total: total, ok: ok, flagged: flagged },
+    flags: flags,
+    message: total === 0 ? "수집 대상 없음" : ""
+  };
+}
+
+document.getElementById("report-btn").addEventListener("click", function () {
+  ensureLoaded();
+  const report = buildOrchestratorReport();
+  document.getElementById("report-output").textContent = JSON.stringify(report, null, 2);
+});
+
+document.getElementById("report-copy-btn").addEventListener("click", async function () {
+  const text = document.getElementById("report-output").textContent;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showFileMessage("보고 내용을 클립보드에 복사했습니다.", false);
+  } catch (err) {
+    showFileMessage("자동 복사에 실패했습니다 — 보고 내용을 직접 선택해서 복사해주세요.", true);
+  }
 });
 </script>
 

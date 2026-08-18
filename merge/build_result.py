@@ -83,9 +83,8 @@ def _draw_line(c, text, y, size=11):
     return y - 7 * mm
 
 
-def build_report(ok_rows, flagged_rows, pdf_path):
-    pdfmetrics.registerFont(TTFont(FONT_NAME, FONT_PATH))
-
+def summarize(ok_rows):
+    """PDF 작성과 화면 미리보기가 함께 쓰는 집계 — 카테고리·결제수단·결제자별 합계, Top 지출."""
     total_expense = sum(r["지출"] or 0 for r in ok_rows)
     total_income = sum(r["수익"] or 0 for r in ok_rows)
 
@@ -103,6 +102,22 @@ def build_report(ok_rows, flagged_rows, pdf_path):
 
     top_spenders = sorted(ok_rows, key=lambda r: r["지출"] or 0, reverse=True)[:10]
 
+    return {
+        "total_expense": total_expense,
+        "total_income": total_income,
+        "by_category": sorted(by_category.items(), key=lambda kv: kv[1], reverse=True),
+        "by_method": list(by_method.items()),
+        "by_payer": list(by_payer.items()),
+        "top_spenders": top_spenders,
+    }
+
+
+def build_report(ok_rows, flagged_rows, summary, pdf_path):
+    pdfmetrics.registerFont(TTFont(FONT_NAME, FONT_PATH))
+
+    total_expense = summary["total_expense"]
+    total_income = summary["total_income"]
+
     c = canvas.Canvas(pdf_path, pagesize=A4)
     y = 280 * mm
 
@@ -111,23 +126,23 @@ def build_report(ok_rows, flagged_rows, pdf_path):
     y -= 4 * mm
 
     y = _draw_heading(c, "2. 카테고리별 지출", y)
-    for category, amount in sorted(by_category.items(), key=lambda kv: kv[1], reverse=True):
+    for category, amount in summary["by_category"]:
         share = amount / total_expense * 100 if total_expense else 0
         y = _draw_line(c, f"{category}: {amount:,}원 ({share:.1f}%)", y)
     y -= 4 * mm
 
     y = _draw_heading(c, "3. 결제수단별 합계", y)
-    for method, amount in by_method.items():
+    for method, amount in summary["by_method"]:
         y = _draw_line(c, f"{method}: {amount:,}원", y)
     y -= 4 * mm
 
     y = _draw_heading(c, "4. 결제자별 합계", y)
-    for payer, amount in by_payer.items():
+    for payer, amount in summary["by_payer"]:
         y = _draw_line(c, f"{payer}: {amount:,}원", y)
     y -= 4 * mm
 
     y = _draw_heading(c, "5. 주요 지출 Top 10", y)
-    for r in top_spenders:
+    for r in summary["top_spenders"]:
         y = _draw_line(c, f"{r['날짜']} {r['결제처']}: {r['지출']:,}원", y)
     y -= 4 * mm
 
@@ -145,18 +160,24 @@ def build_report(ok_rows, flagged_rows, pdf_path):
     c.save()
 
 
+def run():
+    """xlsx·pdf를 실제로 만들고, 화면 미리보기에 쓸 결과를 함께 돌려준다."""
+    ok_rows, flagged_rows = split_transactions(TRANSACTIONS)
+    summary = summarize(ok_rows)
+    build_ledger(ok_rows, XLSX_PATH)
+    build_report(ok_rows, flagged_rows, summary, PDF_PATH)
+    return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary}
+
+
 def main():
     if not TRANSACTIONS:
         print("확인 대상 없음")
         return
 
-    ok_rows, flagged_rows = split_transactions(TRANSACTIONS)
-    build_ledger(ok_rows, XLSX_PATH)
-    build_report(ok_rows, flagged_rows, PDF_PATH)
-
+    result = run()
     print(f"엑셀 회계장부: {XLSX_PATH}")
     print(f"PDF 결산 리포트: {PDF_PATH}")
-    print(f"장부 반영 {len(ok_rows)}건 · 확인 필요 {len(flagged_rows)}건")
+    print(f"장부 반영 {len(result['ok_rows'])}건 · 확인 필요 {len(result['flagged_rows'])}건")
 
 
 if __name__ == "__main__":

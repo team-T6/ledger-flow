@@ -70,6 +70,28 @@
   }
 
   .error { color: #c00000; font-weight: bold; }
+
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td {
+    border: 1px solid #999999;
+    padding: 9px 11px;
+    text-align: left;
+    vertical-align: top;
+    font-size: 15px;
+  }
+  th { background: #f2f2f2; }
+  .num { text-align: right; }
+  .scroll { overflow-x: auto; }
+
+  .summary { margin: 8px 0 20px; font-weight: bold; }
+  .reject { color: #c00000; }
+
+  iframe {
+    width: 100%;
+    height: 640px;
+    border: 2px solid #666666;
+    margin-top: 12px;
+  }
 </style>
 </head>
 <body>
@@ -93,6 +115,38 @@
   <div id="result" class="hidden">
     <h2>처리 결과</h2>
     <div id="resultText"></div>
+  </div>
+
+  <!-- 결과물(엑셀 장부·PDF 리포트) 미리보기 자리 -->
+  <h2>결과물 미리보기 (엑셀 장부 · PDF 리포트)</h2>
+  <p class="notice">stub.md 모양대로 실제 result.xlsx·result.pdf를 만들어 여기서 바로 보여줍니다</p>
+  <button id="buildBtn">결과물 만들기</button>
+  <p id="buildStatus" class="hidden">만드는 중…</p>
+
+  <div id="buildResult" class="hidden">
+    <h2>엑셀 장부 미리보기</h2>
+    <p class="summary" id="ledgerSummary"></p>
+    <div class="scroll">
+      <table id="ledgerTable">
+        <thead>
+          <tr><th>날짜</th><th>지출</th><th>수익</th><th>결제처</th><th>카테고리</th><th>비고</th><th>결제수단</th><th>결제자</th></tr>
+        </thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+    </div>
+
+    <h2>확인 필요 항목</h2>
+    <div class="scroll">
+      <table id="flaggedTable">
+        <thead>
+          <tr><th>날짜</th><th>결제처</th><th>사유</th></tr>
+        </thead>
+        <tbody id="flaggedBody"></tbody>
+      </table>
+    </div>
+
+    <h2>PDF 리포트 미리보기</h2>
+    <iframe id="pdfFrame"></iframe>
   </div>
 
 </div>
@@ -139,6 +193,88 @@
       .finally(function () {
         statusEl.classList.add('hidden');
         runBtn.disabled = false;
+      });
+  });
+
+  // 결과물(엑셀 장부·PDF 리포트) 만들기
+  var buildBtn = document.getElementById('buildBtn');
+  var buildStatus = document.getElementById('buildStatus');
+  var buildResult = document.getElementById('buildResult');
+  var ledgerSummary = document.getElementById('ledgerSummary');
+  var ledgerBody = document.getElementById('ledgerBody');
+  var flaggedBody = document.getElementById('flaggedBody');
+  var pdfFrame = document.getElementById('pdfFrame');
+
+  var BUILD_URL = 'http://localhost:8787/build-result';
+  var PDF_URL = 'http://localhost:8787/result.pdf';
+
+  function fillLedgerTable(rows) {
+    ledgerBody.innerHTML = '';
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + (r['날짜'] || '') + '</td>' +
+        '<td class="num">' + (r['지출'] != null ? r['지출'].toLocaleString() : '') + '</td>' +
+        '<td class="num">' + (r['수익'] != null ? r['수익'].toLocaleString() : '') + '</td>' +
+        '<td>' + (r['결제처'] || '') + '</td>' +
+        '<td>' + (r['카테고리'] || '') + '</td>' +
+        '<td>' + (r['비고'] || '') + '</td>' +
+        '<td>' + (r['결제수단'] || '') + '</td>' +
+        '<td>' + (r['결제자'] || '') + '</td>';
+      ledgerBody.appendChild(tr);
+    });
+  }
+
+  function fillFlaggedTable(rows) {
+    flaggedBody.innerHTML = '';
+    if (rows.length === 0) {
+      flaggedBody.innerHTML = '<tr><td colspan="3">확인 필요 항목 없음</td></tr>';
+      return;
+    }
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + (r['날짜'] || '') + '</td>' +
+        '<td>' + (r['결제처'] || '') + '</td>' +
+        '<td class="reject">' + (r['reason'] || '') + '</td>';
+      flaggedBody.appendChild(tr);
+    });
+  }
+
+  buildBtn.addEventListener('click', function () {
+    buildResult.classList.add('hidden');
+    buildStatus.classList.remove('hidden');
+    buildBtn.disabled = true;
+
+    fetch(BUILD_URL, { method: 'POST' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          ledgerSummary.classList.add('error');
+          ledgerSummary.textContent = '오류: ' + data.error;
+          buildResult.classList.remove('hidden');
+          return;
+        }
+        var s = data.summary;
+        ledgerSummary.classList.remove('error');
+        ledgerSummary.textContent =
+          '총지출 ' + s.total_expense.toLocaleString() + '원 · ' +
+          '총수익 ' + s.total_income.toLocaleString() + '원 · ' +
+          '장부 반영 ' + data.ok_rows.length + '건 · 확인 필요 ' + data.flagged_rows.length + '건';
+        fillLedgerTable(data.ok_rows);
+        fillFlaggedTable(data.flagged_rows);
+        // 매번 새로 만든 PDF를 보여주도록 캐시를 피해 다시 불러온다
+        pdfFrame.src = PDF_URL + '?t=' + Date.now();
+        buildResult.classList.remove('hidden');
+      })
+      .catch(function (err) {
+        ledgerSummary.classList.add('error');
+        ledgerSummary.textContent = '만들기 실패: ' + err.message + ' (merge/server.py가 실행 중인지 확인하세요)';
+        buildResult.classList.remove('hidden');
+      })
+      .finally(function () {
+        buildStatus.classList.add('hidden');
+        buildBtn.disabled = false;
       });
   });
 </script>

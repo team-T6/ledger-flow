@@ -95,6 +95,20 @@
 
   .downloads { display: flex; gap: 12px; }
   .downloads button { margin-top: 0; }
+
+  .report {
+    border: 1px solid #999999;
+    background: #f9f9f9;
+    padding: 16px 18px;
+    margin: 8px 0 20px;
+  }
+  .report pre {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 </style>
 </head>
 <body>
@@ -155,6 +169,12 @@
 
     <h2>PDF 리포트 미리보기</h2>
     <iframe id="pdfFrame"></iframe>
+
+    <h2>지휘에게 보내는 단계 결과 보고</h2>
+    <p>산출물(장부·리포트)과는 별개로, 처리 건수와 문제 항목을 요약한 보고를 지휘(orchestrator)에게 함께 전달합니다.</p>
+    <div class="report">
+      <pre id="envelopeText"></pre>
+    </div>
   </div>
 
 </div>
@@ -212,6 +232,7 @@
   var ledgerBody = document.getElementById('ledgerBody');
   var flaggedBody = document.getElementById('flaggedBody');
   var pdfFrame = document.getElementById('pdfFrame');
+  var envelopeText = document.getElementById('envelopeText');
 
   var BUILD_URL = 'http://localhost:8787/build-result';
   var PDF_URL = 'http://localhost:8787/result.pdf';
@@ -280,6 +301,7 @@
           '장부 반영 ' + data.ok_rows.length + '건 · 확인 필요 ' + data.flagged_rows.length + '건';
         fillLedgerTable(data.ok_rows);
         fillFlaggedTable(data.flagged_rows);
+        envelopeText.textContent = JSON.stringify(data.envelope, null, 2);
         // 매번 새로 만든 PDF를 보여주도록 캐시를 피해 다시 불러온다
         pdfFrame.src = PDF_URL + '?t=' + Date.now();
         buildResult.classList.remove('hidden');

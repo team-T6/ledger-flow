@@ -95,7 +95,7 @@ verify1·verify2 중 하나라도 반려면 장부에 싣지 않고 "확인 필�
 {
   "stage": "merge",
   "status": "empty",
-  "output": ["merge/result.xlsx", "merge/result.pdf"],
+  "output": [],
   "counts": { "total": 0, "ok": 0, "flagged": 0 },
   "flags": [],
   "message": "미완 — 앞 단계(가공 또는 검증) 결과 없음"

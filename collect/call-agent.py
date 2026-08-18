@@ -67,4 +67,6 @@ def call_agent(user_text):
 
 if __name__ == "__main__":
     input_text = sys.stdin.read()
-    print(call_agent(input_text))
+    result = call_agent(input_text)
+    print(result)
+    print(f"[이번 호출: 보낸 글자 {len(input_text)}자 · 받은 글자 {len(result)}자]")

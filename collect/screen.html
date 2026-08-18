@@ -653,7 +653,7 @@ document.getElementById("check-btn").addEventListener("click", async function ()
   const btn = document.getElementById("check-btn");
 
   if (inputText.trim() === "") {
-    resultEl.innerHTML = '<span class="placeholder">먼저 입력 칸에 글을 넣어주세요.</span>';
+    resultEl.innerHTML = '<span class="placeholder">넣을 글이 없습니다</span>';
     return;
   }
 
@@ -670,7 +670,8 @@ document.getElementById("check-btn").addEventListener("click", async function ()
     if (!response.ok || data.error) {
       resultEl.innerHTML = `<span class="placeholder">오류: ${escapeHtml(data.error || response.statusText)}</span>`;
     } else {
-      resultEl.innerHTML = `<pre style="white-space:pre-wrap; word-break:break-word;">${escapeHtml(data.result)}</pre>`;
+      resultEl.innerHTML = `<pre style="white-space:pre-wrap; word-break:break-word;">${escapeHtml(data.result)}</pre>` +
+        `<div style="margin-top:8px; font-size:13px; color:#666;">이번 호출: 보낸 글자 ${inputText.length}자 · 받은 글자 ${data.result.length}자</div>`;
     }
   } catch (err) {
     resultEl.innerHTML = `<span class="placeholder">오류: ${escapeHtml(err.message)}</span>`;

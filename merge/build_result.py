@@ -14,11 +14,21 @@ refine/result.*·verify1/result.*가 실제로 생기면 TRANSACTIONS를 그쪽�
 import os
 
 from openpyxl import Workbook
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfgen import canvas
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 XLSX_PATH = os.path.join(BASE_DIR, "result.xlsx")
@@ -27,6 +37,26 @@ FONT_PATH = os.path.join(BASE_DIR, "fonts", "NanumGothic-Regular.ttf")
 FONT_NAME = "NanumGothic"
 
 LEDGER_COLUMNS = ["날짜", "지출", "수익", "결제처", "카테고리", "비고", "결제수단", "결제자"]
+
+ACCENT = colors.HexColor("#1F4E78")  # 제목·섹션 띠·표 헤더 — 구조적 요소
+ACCENT_LIGHT = colors.HexColor("#DCE6F1")
+CHART_COLOR = colors.HexColor("#1baf7a")  # 막대그래프 전용 — ACCENT(남색)와 겹치지 않는 색
+FLAG_COLOR = colors.HexColor("#C00000")
+FLAG_LIGHT = colors.HexColor("#FBE4E4")
+GRID_COLOR = colors.HexColor("#BFBFBF")
+
+# 표·그래프·섹션 배너가 전부 같은 좌우 여백을 쓰게 만드는 기준값 —
+# 이 폭에서 벗어나는 요소가 없어야 열(오른쪽 끝)이 서로 어긋나지 않는다.
+PAGE_MARGIN = 18 * mm
+CONTENT_WIDTH = A4[0] - 2 * PAGE_MARGIN
+
+
+def _col_widths(*fractions):
+    """비율을 표 컬럼 폭(포인트)으로 바꾼다. 마지막 컬럼이 남은 폭을 다 가져가
+    반올림 오차 없이 합이 정확히 CONTENT_WIDTH가 되게 한다."""
+    widths = [CONTENT_WIDTH * f for f in fractions[:-1]]
+    widths.append(CONTENT_WIDTH - sum(widths))
+    return widths
 
 # merge/input-sample.md와 동일한 예시 입력 — 가공 거래 표 + 검증1·검증2 결과를 합친 것
 TRANSACTIONS = [
@@ -71,16 +101,94 @@ def build_ledger(ok_rows, xlsx_path):
     wb.save(xlsx_path)
 
 
-def _draw_heading(c, text, y):
-    c.setFont(FONT_NAME, 14)
-    c.drawString(20 * mm, y, text)
-    return y - 9 * mm
+def _styles():
+    return {
+        "title": ParagraphStyle("title", fontName=FONT_NAME, fontSize=22, leading=26, textColor=ACCENT),
+        "meta": ParagraphStyle("meta", fontName=FONT_NAME, fontSize=10, leading=14, textColor=colors.grey),
+        "body": ParagraphStyle("body", fontName=FONT_NAME, fontSize=11, leading=16),
+        "flag": ParagraphStyle("flag", fontName=FONT_NAME, fontSize=10, leading=14, textColor=FLAG_COLOR),
+    }
 
 
-def _draw_line(c, text, y, size=11):
-    c.setFont(FONT_NAME, size)
-    c.drawString(24 * mm, y, text)
-    return y - 7 * mm
+def _section_heading(text):
+    """섹션 제목 띠 — 아래 표(_table)와 똑같이 colWidths=[CONTENT_WIDTH]인 표로 만든다.
+    Paragraph의 backColor는 leftIndent/borderPadding에 따라 표와 다른 폭으로 그려질 수 있어,
+    표와 좌우 끝을 정확히 맞추려고 같은 Table 메커니즘을 그대로 재사용한다."""
+    table = Table([[text]], colWidths=[CONTENT_WIDTH])
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+        ("FONTSIZE", (0, 0), (-1, -1), 13),
+        ("BACKGROUND", (0, 0), (-1, -1), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    return table
+
+
+def _table(header, rows, col_widths, num_cols=()):
+    """헤더 색·격자선이 있는 표 하나를 만든다. num_cols는 오른쪽 정렬할 열 인덱스."""
+    data = [header] + rows
+    style = [
+        ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, GRID_COLOR),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ACCENT_LIGHT]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+    ]
+    for col in num_cols:
+        style.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+    return Table(data, colWidths=col_widths, style=TableStyle(style))
+
+
+def _category_chart(by_category):
+    """카테고리별 지출 막대그래프 — 도형(Drawing)으로 그린다.
+
+    Drawing 폭을 표·섹션 배너와 같은 CONTENT_WIDTH로 맞춰 오른쪽 끝이 서로
+    어긋나지 않게 하고, 막대 사이 간격(barSpacing)을 고정값으로 줘서 항상
+    일정하게 유지한다.
+    """
+    LEFT_AXIS_MARGIN = 16 * mm   # 금액 축 눈금 숫자가 들어갈 자리
+    BOTTOM_AXIS_MARGIN = 14 * mm  # 카테고리 이름이 들어갈 자리
+    RIGHT_PAD = 4 * mm
+    TOP_PAD = 6 * mm
+    height = 60 * mm
+
+    drawing = Drawing(CONTENT_WIDTH, height)
+    chart = VerticalBarChart()
+    chart.x = LEFT_AXIS_MARGIN
+    chart.y = BOTTOM_AXIS_MARGIN
+    chart.width = CONTENT_WIDTH - LEFT_AXIS_MARGIN - RIGHT_PAD
+    chart.height = height - BOTTOM_AXIS_MARGIN - TOP_PAD
+
+    chart.data = [[amount for _, amount in by_category]]
+    chart.categoryAxis.categoryNames = [name for name, _ in by_category]
+    chart.categoryAxis.labels.fontName = FONT_NAME
+    chart.categoryAxis.labels.fontSize = 8
+
+    chart.valueAxis.labels.fontName = FONT_NAME
+    chart.valueAxis.labels.fontSize = 8
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.labelTextFormat = lambda v: f"{int(v):,}"
+    chart.valueAxis.visibleGrid = 1
+    chart.valueAxis.gridStrokeColor = GRID_COLOR
+    chart.valueAxis.gridStrokeWidth = 0.4
+
+    # 막대 사이 간격을 고정값으로 둬서 카테고리 수와 무관하게 항상 일정하다
+    chart.groupSpacing = 8
+    chart.barWidth = 10 * mm
+    chart.bars[0].fillColor = CHART_COLOR
+    chart.bars[0].strokeColor = colors.white
+    chart.bars[0].strokeWidth = 0.4
+
+    drawing.add(chart)
+    return drawing
 
 
 def summarize(ok_rows):
@@ -114,50 +222,95 @@ def summarize(ok_rows):
 
 def build_report(ok_rows, flagged_rows, summary, pdf_path):
     pdfmetrics.registerFont(TTFont(FONT_NAME, FONT_PATH))
+    s = _styles()
 
     total_expense = summary["total_expense"]
     total_income = summary["total_income"]
+    net = total_income - total_expense
 
-    c = canvas.Canvas(pdf_path, pagesize=A4)
-    y = 280 * mm
+    doc = SimpleDocTemplate(
+        pdf_path, pagesize=A4,
+        topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN, leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN,
+    )
+    story = []
 
-    y = _draw_heading(c, "1. 결산 개요", y)
-    y = _draw_line(c, f"총지출 {total_expense:,}원 · 총수익 {total_income:,}원 · 순액 {total_income - total_expense:,}원", y)
-    y -= 4 * mm
+    story.append(Paragraph("결산 리포트", s["title"]))
+    story.append(Paragraph("통합(merge) 담당 — 엑셀 회계장부와 한 묶음으로 전달되는 리포트", s["meta"]))
+    story.append(Spacer(1, 8 * mm))
 
-    y = _draw_heading(c, "2. 카테고리별 지출", y)
-    for category, amount in summary["by_category"]:
-        share = amount / total_expense * 100 if total_expense else 0
-        y = _draw_line(c, f"{category}: {amount:,}원 ({share:.1f}%)", y)
-    y -= 4 * mm
+    story.append(_section_heading("1. 결산 개요"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_table(
+        ["총지출", "총수익", "순액"],
+        [[f"{total_expense:,}원", f"{total_income:,}원", f"{net:,}원"]],
+        col_widths=_col_widths(1 / 3, 1 / 3, 1 / 3),
+    ))
+    story.append(Spacer(1, 7 * mm))
 
-    y = _draw_heading(c, "3. 결제수단별 합계", y)
-    for method, amount in summary["by_method"]:
-        y = _draw_line(c, f"{method}: {amount:,}원", y)
-    y -= 4 * mm
-
-    y = _draw_heading(c, "4. 결제자별 합계", y)
-    for payer, amount in summary["by_payer"]:
-        y = _draw_line(c, f"{payer}: {amount:,}원", y)
-    y -= 4 * mm
-
-    y = _draw_heading(c, "5. 주요 지출 Top 10", y)
-    for r in summary["top_spenders"]:
-        y = _draw_line(c, f"{r['날짜']} {r['결제처']}: {r['지출']:,}원", y)
-    y -= 4 * mm
-
-    y = _draw_heading(c, "6. 해외결제 명세", y)
-    y = _draw_line(c, "해당 없음 (해외결제 건 없음)", y)
-    y -= 4 * mm
-
-    y = _draw_heading(c, "7. 확인 필요 항목", y)
-    if flagged_rows:
-        for r in flagged_rows:
-            y = _draw_line(c, f"{r['날짜']} {r['결제처']}: {r['reason']}", y)
+    story.append(_section_heading("2. 카테고리별 지출"))
+    story.append(Spacer(1, 2 * mm))
+    if summary["by_category"]:
+        rows = [
+            [category, f"{amount:,}원", f"{(amount / total_expense * 100 if total_expense else 0):.1f}%"]
+            for category, amount in summary["by_category"]
+        ]
+        story.append(_table(["카테고리", "금액", "비중"], rows, col_widths=_col_widths(0.40, 0.30, 0.30), num_cols=(1, 2)))
+        story.append(Spacer(1, 4 * mm))
+        story.append(_category_chart(summary["by_category"]))
     else:
-        y = _draw_line(c, "확인 필요 항목 없음", y)
+        story.append(Paragraph("집계할 지출 없음", s["body"]))
+    story.append(Spacer(1, 7 * mm))
 
-    c.save()
+    story.append(_section_heading("3. 결제수단별 합계"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_table(
+        ["결제수단", "금액"],
+        [[method, f"{amount:,}원"] for method, amount in summary["by_method"]],
+        col_widths=_col_widths(0.5, 0.5), num_cols=(1,),
+    ))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("4. 결제자별 합계"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_table(
+        ["결제자", "금액"],
+        [[payer, f"{amount:,}원"] for payer, amount in summary["by_payer"]],
+        col_widths=_col_widths(0.5, 0.5), num_cols=(1,),
+    ))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("5. 주요 지출 Top 10"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_table(
+        ["날짜", "결제처", "금액"],
+        [[r["날짜"], r["결제처"], f"{r['지출']:,}원"] for r in summary["top_spenders"]],
+        col_widths=_col_widths(0.23, 0.54, 0.23), num_cols=(2,),
+    ))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("6. 해외결제 명세"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph("해당 없음 (해외결제 건 없음)", s["body"]))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("7. 확인 필요 항목"))
+    story.append(Spacer(1, 2 * mm))
+    if flagged_rows:
+        table = _table(
+            ["날짜", "결제처", "사유"],
+            [[r["날짜"], r["결제처"], r["reason"]] for r in flagged_rows],
+            col_widths=_col_widths(0.18, 0.26, 0.56),
+        )
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), FLAG_COLOR),
+            ("TEXTCOLOR", (2, 1), (2, -1), FLAG_COLOR),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, FLAG_LIGHT]),
+        ]))
+        story.append(table)
+    else:
+        story.append(Paragraph("확인 필요 항목 없음", s["body"]))
+
+    doc.build(story)
 
 
 def run():

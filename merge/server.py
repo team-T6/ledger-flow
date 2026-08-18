@@ -5,6 +5,7 @@
 - screen.html의 "결과물 만들기" 버튼 → POST /build-result → build_result.py의 run()
   (엑셀·PDF를 실제로 만들고, 미리보기에 쓸 표·집계를 JSON으로 돌려준다)
 - GET /result.pdf → 방금 만든 PDF 파일 자체를 내려줘 화면에서 바로 미리보기한다
+- GET /download/result.pdf, GET /download/result.xlsx → 같은 파일을 다운로드용으로 내려준다
 API 키는 이 서버가 아니라 call-agent.py 쪽에서 .env를 읽어 쓴다.
 
 사용법: python3 merge/server.py  (그다음 merge/screen.html을 브라우저로 연다)
@@ -14,12 +15,23 @@ import importlib.util
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CALL_AGENT_PATH = os.path.join(BASE_DIR, "call-agent.py")
 BUILD_RESULT_PATH = os.path.join(BASE_DIR, "build_result.py")
 PDF_PATH = os.path.join(BASE_DIR, "result.pdf")
+XLSX_PATH = os.path.join(BASE_DIR, "result.xlsx")
 PORT = 8787
+
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# 경로 → (파일 경로, Content-Type, 다운로드 파일명 or None=미리보기)
+FILE_ROUTES = {
+    "/result.pdf": (PDF_PATH, "application/pdf", None),
+    "/download/result.pdf": (PDF_PATH, "application/pdf", "merge_result.pdf"),
+    "/download/result.xlsx": (XLSX_PATH, XLSX_CONTENT_TYPE, "merge_result.xlsx"),
+}
 
 
 def _load_module(name, path):
@@ -51,16 +63,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path != "/result.pdf":
+        route = FILE_ROUTES.get(urlsplit(self.path).path)
+        if route is None:
             self._send_json(404, {"error": "not found"})
             return
-        if not os.path.exists(PDF_PATH):
-            self._send_json(404, {"error": "result.pdf가 아직 없습니다 — 먼저 결과물을 만드세요"})
+        file_path, content_type, download_name = route
+        if not os.path.exists(file_path):
+            self._send_json(404, {"error": f"{os.path.basename(file_path)}가 아직 없습니다 — 먼저 결과물을 만드세요"})
             return
-        with open(PDF_PATH, "rb") as f:
+        with open(file_path, "rb") as f:
             body = f.read()
         self.send_response(200)
-        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Type", content_type)
+        if download_name:
+            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()

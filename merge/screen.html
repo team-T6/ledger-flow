@@ -92,6 +92,9 @@
     border: 2px solid #666666;
     margin-top: 12px;
   }
+
+  .downloads { display: flex; gap: 12px; }
+  .downloads button { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -124,6 +127,11 @@
   <p id="buildStatus" class="hidden">만드는 중…</p>
 
   <div id="buildResult" class="hidden">
+    <div class="downloads">
+      <button id="downloadXlsxBtn" type="button">엑셀 다운로드</button>
+      <button id="downloadPdfBtn" type="button">PDF 다운로드</button>
+    </div>
+
     <h2>엑셀 장부 미리보기</h2>
     <p class="summary" id="ledgerSummary"></p>
     <div class="scroll">
@@ -207,6 +215,15 @@
 
   var BUILD_URL = 'http://localhost:8787/build-result';
   var PDF_URL = 'http://localhost:8787/result.pdf';
+  var DOWNLOAD_XLSX_URL = 'http://localhost:8787/download/result.xlsx';
+  var DOWNLOAD_PDF_URL = 'http://localhost:8787/download/result.pdf';
+
+  document.getElementById('downloadXlsxBtn').addEventListener('click', function () {
+    window.location.href = DOWNLOAD_XLSX_URL;
+  });
+  document.getElementById('downloadPdfBtn').addEventListener('click', function () {
+    window.location.href = DOWNLOAD_PDF_URL;
+  });
 
   function fillLedgerTable(rows) {
     ledgerBody.innerHTML = '';

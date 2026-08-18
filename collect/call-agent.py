@@ -28,10 +28,61 @@ RECEIPT_SCHEMA = {
         "금액": {"type": "integer", "description": "총 결제 금액(원). 읽을 수 없으면 0"},
         "결제처": {"type": "string", "description": "가맹점명. 읽을 수 없으면 빈 문자열"},
         "결제수단": {"type": "string", "description": "카드/현금 등. 읽을 수 없으면 빈 문자열"},
-        "구매항목": {"type": "string", "description": "구매 물품 목록, 콤마로 구분. 읽을 수 없으면 빈 문자열"},
-        "확인됨": {"type": "boolean", "description": "위 값들을 실제로 영수증에서 읽었으면 true. 하나라도 지어냈거나 읽지 못했으면 false"},
+        "구매항목": {
+            "type": "string",
+            "description": "구매 물품 목록, 콤마로 구분. 영수증에 물품이 안 보이면 결제처 이름으로 "
+                           "일반적인 구매 카테고리를 짧게 짐작해서 채운다 (예: 쿠팡이츠 → 음식 배달). "
+                           "결제처로도 전혀 짐작할 수 없을 때만 빈 문자열",
+        },
+        "확인됨": {
+            "type": "boolean",
+            "description": "날짜·금액·결제처를 실제로 영수증에서 읽었으면 true. 그 세 값 중 하나라도 "
+                           "지어냈거나 못 읽었으면 false. 구매항목이 결제처 기반 추정이라는 이유만으로는 false로 낮추지 않는다",
+        },
     },
     "required": ["날짜", "금액", "결제처", "결제수단", "구매항목", "확인됨"],
+    "additionalProperties": False,
+}
+
+# 표준 산출물 컬럼(날짜·지출·수익·결제처·비고·결제수단·결제자·구매항목)에 맞춘
+# 표 변환용 구조화 출력 스키마 — 낯선 서식으로 붙여넣은 표를 줄 단위로 변환할 때 쓴다.
+TABLE_ROW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "날짜": {"type": "string", "description": "YYYY-MM-DD. 알 수 없으면 빈 문자열"},
+        "지출": {"type": "integer", "description": "지출 금액(원). 알 수 없으면 0"},
+        "수익": {"type": "integer", "description": "수익 금액(원). 없으면 0"},
+        "결제처": {"type": "string", "description": "가맹점/거래처명. 알 수 없으면 빈 문자열"},
+        "비고": {"type": "string", "description": "메모. 없으면 빈 문자열"},
+        "결제수단": {"type": "string", "description": "카드/현금 등. 알 수 없으면 빈 문자열"},
+        "결제자": {
+            "type": "string",
+            "description": "개인카드/법인카드 등. 등록된 카드 목록이 없어 원천적으로 판단할 수 없으면 빈 문자열 "
+                           "(이 값이 비어도 확인됨을 false로 낮추지 않는다)",
+        },
+        "구매항목": {
+            "type": "string",
+            "description": "구매 물품 목록, 콤마로 구분. 원본에 물품 정보가 없으면 결제처 이름으로 "
+                           "일반적인 구매 카테고리를 짧게 짐작해서 채운다 (예: 쿠팡이츠 → 음식 배달). "
+                           "결제처로도 전혀 짐작할 수 없을 때만 빈 문자열 (이 추정 자체는 확인됨을 false로 낮추지 않는다)",
+        },
+        "확인됨": {
+            "type": "boolean",
+            "description": "날짜·지출·결제처, 이 세 핵심 값을 실제로 원본에서 읽었으면 true. 그중 하나라도 "
+                           "지어냈거나 못 읽었으면 false. 매핑 규칙이 없는 낯선 서식이라는 이유만으로, 또는 "
+                           "결제자·구매항목처럼 보조 정보가 비었다는 이유만으로 false로 낮추지 않는다",
+        },
+    },
+    "required": ["날짜", "지출", "수익", "결제처", "비고", "결제수단", "결제자", "구매항목", "확인됨"],
+    "additionalProperties": False,
+}
+
+TABLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rows": {"type": "array", "items": TABLE_ROW_SCHEMA},
+    },
+    "required": ["rows"],
     "additionalProperties": False,
 }
 
@@ -108,7 +159,9 @@ def call_agent_with_image(image_bytes, media_type):
                 {
                     "type": "text",
                     "text": "이 영수증 이미지에서 거래일·금액·결제처·결제수단·구매 물품 목록을 읽어줘. "
-                            "읽을 수 없는 값은 지어내지 말고 비워둬.",
+                            "날짜·금액·결제처는 읽을 수 없는 값을 지어내지 말고 비워둬. "
+                            "구매 물품 목록이 영수증에 안 보이면 결제처 이름으로 일반적인 구매 카테고리를 "
+                            "짧게 짐작해서 적어줘(예: 쿠팡이츠 → 음식 배달) — 결제처로도 전혀 짐작할 수 없을 때만 비워둬.",
                 },
             ],
         }],
@@ -117,6 +170,36 @@ def call_agent_with_image(image_bytes, media_type):
 
     text = next(block.text for block in response.content if block.type == "text")
     return json.loads(text)
+
+
+def call_agent_convert_table(raw_text):
+    if not raw_text or not raw_text.strip():
+        raise ValueError("넘길 표 내용이 없습니다")
+
+    client = _client()
+    system_prompt = load_agent_instruction(AGENT_INSTRUCTION_PATH)
+    instruction = (
+        "아래는 카드사·엑셀 등에서 그대로 복사해 붙여넣은, 매핑 규칙이 없는 낯선 서식의 표다. "
+        "각 줄을 표준 거래 표(날짜·지출·수익·결제처·비고·결제수단·결제자·구매항목) 한 행으로 변환해줘.\n"
+        "날짜·지출·결제처는 원본에서 실제로 읽은 값만 채우고, 지어내지 말고 그 값을 읽지 못했을 때만 "
+        "그 행의 확인됨을 false로 표시해 — 매핑 규칙이 없는 낯선 서식이라는 이유만으로, 또는 결제자·구매항목 "
+        "같은 보조 정보가 비었다는 이유만으로 false로 낮추지 마.\n"
+        "구매항목은 원본에 물품 정보가 없으면 결제처 이름으로 일반적인 구매 카테고리를 짧게 짐작해서 채워줘"
+        "(예: 쿠팡이츠 → 음식 배달) — 결제처로도 전혀 짐작할 수 없을 때만 비워둬. "
+        "결제자처럼 등록된 카드 목록이 없어 원천적으로 판단할 수 없는 값은 빈칸으로 두면 돼.\n\n"
+        f"{raw_text}"
+    )
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=16000,
+        system=system_prompt,
+        messages=[{"role": "user", "content": instruction}],
+        output_config={"format": {"type": "json_schema", "schema": TABLE_SCHEMA}},
+    )
+
+    text = next(block.text for block in response.content if block.type == "text")
+    return json.loads(text)["rows"]
 
 
 if __name__ == "__main__":

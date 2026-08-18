@@ -134,6 +134,24 @@
     border: 1px solid #999;
     font-family: inherit;
   }
+  #result tr.needs-check td {
+    background: #fff3cd;
+  }
+  #result td.editable-cell {
+    cursor: pointer;
+  }
+  #result td.editable-cell:hover {
+    background: #eef6ff;
+  }
+  #result td.editable-cell input,
+  #result td.editable-cell select {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 2px 4px;
+    border: 1px solid #3366cc;
+  }
   .placeholder {
     color: #888888;
   }
@@ -195,6 +213,7 @@
     <button id="receipt-btn" class="secondary">영수증 등록</button>
     <button id="manual-btn" class="secondary">수동 입력</button>
     <button id="xlsx-btn" class="secondary">xlsx/csv 등록</button>
+    <button id="paste-btn" class="secondary">엑셀 붙여넣기</button>
     <button id="check-btn">확인하기</button>
   </div>
 
@@ -233,6 +252,12 @@
   <button type="button" id="manual-submit-btn">추가</button>
 </div>
 
+<div id="paste-form" class="manual-form" style="display:none">
+  <label for="paste-textarea">엑셀에서 표를 선택해 복사(Ctrl+C)한 뒤 아래에 붙여넣으세요 (Ctrl+V). 하나카드 원본 형식이나 표준 산출물 형식의 헤더가 첫 줄에 있어야 합니다.</label>
+  <textarea id="paste-textarea"></textarea>
+  <button type="button" id="paste-submit-btn">추가</button>
+</div>
+
 <div>
   <label for="input-text">담당자에게 넘길 글</label>
   <textarea id="input-text" placeholder="여기에 텍스트를 넣고 확인하기를 누르면 담당자(call-agent)에게 그대로 전달됩니다."></textarea>
@@ -257,7 +282,8 @@ const filters = {};   // 컬럼명 -> 필터 텍스트
 // ---------- CSV 파싱 ----------
 
 // 아주 단순한 CSV 파서 (따옴표로 감싼 콤마 포함 필드 처리)
-function parseCSV(text) {
+function parseCSV(text, delimiter) {
+  delimiter = delimiter || ",";
   const rows = [];
   let row = [];
   let field = "";
@@ -276,7 +302,7 @@ function parseCSV(text) {
     } else {
       if (c === '"') {
         inQuotes = true;
-      } else if (c === ',') {
+      } else if (c === delimiter) {
         row.push(field);
         field = "";
       } else if (c === '\n') {
@@ -296,8 +322,8 @@ function parseCSV(text) {
   return rows.filter(r => r.length > 1 || r[0] !== "");
 }
 
-function csvToObjects(text) {
-  const rows = parseCSV(text.trim());
+function csvToObjects(text, delimiter) {
+  const rows = parseCSV(text.trim(), delimiter);
   if (rows.length === 0) return { header: [], records: [] };
   const header = rows[0];
   const records = rows.slice(1).map(r => {
@@ -408,6 +434,43 @@ function showFileMessage(text, isError) {
   const el = document.getElementById("file-message");
   el.textContent = text;
   el.className = isError ? "error" : "info";
+}
+
+// 낯선 서식(매핑 규칙 없는 표)을 담당자(AI)에게 넘겨 표준 형식 행 배열로 바꿔온다.
+async function convertUnknownFormatWithAI(text) {
+  const response = await fetch("/convert-table", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(data.error || response.statusText);
+  }
+  return data.result;
+}
+
+// AI가 변환해 온 행들을 dataRows에 추가하고, 확인됨 건수를 돌려준다.
+function pushAiConvertedRows(rows, sourceType) {
+  let confirmedCount = 0;
+  rows.forEach(r => {
+    const date = r.날짜 || todayStr();
+    dataRows.push({
+      transaction_id: nextTxId(date),
+      날짜: date,
+      지출: r.지출 || 0,
+      수익: r.수익 || 0,
+      결제처: r.결제처 || "",
+      비고: r.비고 || "",
+      결제수단: r.결제수단 || "",
+      결제자: r.결제자 || "",
+      source_type: sourceType,
+      collect_status: r.확인됨 ? "확인됨" : "확인 필요",
+      구매항목: r.구매항목 || "",
+    });
+    if (r.확인됨) confirmedCount++;
+  });
+  return confirmedCount;
 }
 
 // ---------- 영수증 추가 ----------
@@ -535,11 +598,11 @@ document.getElementById("xlsx-input").addEventListener("change", function (e) {
   ensureLoaded();
 
   const reader = new FileReader();
-  reader.onload = function () {
+  reader.onload = async function () {
     const text = String(reader.result);
 
-    // 진짜 바이너리 xlsx(zip 포맷, "PK"로 시작)는 이 연습용 화면에 엑셀 파서가 없어서 못 읽는다.
-    // 못 읽는다고 버리지 않고, 매핑 규칙 없는 서식과 같은 방식으로 "확인 필요"로 등록만 해둔다.
+    // 진짜 바이너리 xlsx(zip 포맷, "PK"로 시작)는 이 연습용 화면에 엑셀 파서가 없어서
+    // 글자로 읽을 수조차 없다 — 담당자에게 넘길 텍스트 자체가 없으므로 AI 변환도 못 한다.
     if (text.startsWith("PK")) {
       const date = todayStr();
       dataRows.push({
@@ -548,7 +611,7 @@ document.getElementById("xlsx-input").addEventListener("change", function (e) {
         지출: "",
         수익: "",
         결제처: "",
-        비고: `카드사 파일 등록: ${file.name} (엑셀 자동 인식은 이 연습용 화면에 없음 — 내용은 수동 입력으로 반영 필요)`,
+        비고: `카드사 파일 등록: ${file.name} (엑셀 바이너리라 이 연습용 화면에서 열어볼 수 없음 — 내용은 수동 입력으로 반영 필요)`,
         결제수단: "",
         결제자: "",
         source_type: "card_excel",
@@ -562,21 +625,101 @@ document.getElementById("xlsx-input").addEventListener("change", function (e) {
     }
 
     const { header, records } = csvToObjects(text);
-    if (records.length === 0) {
-      showFileMessage(`"${file.name}"에서 읽을 행이 없습니다.`, true);
-    } else if (headersMatch(header, HANA_RAW_HEADER)) {
+    if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
       records.forEach(r => dataRows.push(normalizeHanaRow(r)));
       showFileMessage(`"${file.name}" (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
-    } else if (headersMatch(header, COLUMNS)) {
+      afterDataChange();
+      e.target.value = "";
+      return;
+    }
+    if (records.length > 0 && headersMatch(header, COLUMNS)) {
       records.forEach(r => dataRows.push(r));
       showFileMessage(`"${file.name}" (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
-    } else {
-      showFileMessage(`"${file.name}" — 인식할 수 없는 컬럼 형식입니다. 매핑 규칙이 없는 서식은 임의로 처리하지 않습니다 (지원 형식: 하나카드 원본 또는 표준 산출물 형식).`, true);
+      afterDataChange();
+      e.target.value = "";
+      return;
     }
-    afterDataChange();
+
+    // 알려진 두 형식 어디에도 안 맞으면 담당자(AI)에게 변환을 부탁한다.
+    showFileMessage(`"${file.name}" — 알려진 형식이 아니라 담당자에게 변환을 부탁하는 중...`, false);
+    const xlsxBtn = document.getElementById("xlsx-btn");
+    xlsxBtn.disabled = true;
+    try {
+      const rows = await convertUnknownFormatWithAI(text);
+      if (!rows || rows.length === 0) {
+        showFileMessage(`"${file.name}" — 담당자가 이 내용에서 읽을 행을 찾지 못했습니다.`, true);
+        return;
+      }
+      const confirmedCount = pushAiConvertedRows(rows, "card_excel_ai");
+      showFileMessage(`"${file.name}" (담당자가 변환) — ${rows.length}건 등록 (그중 확인됨 ${confirmedCount}건, 확인 필요 ${rows.length - confirmedCount}건).`, confirmedCount < rows.length);
+      afterDataChange();
+    } catch (err) {
+      showFileMessage(`"${file.name}" — 담당자 변환에 실패했습니다: ${err.message}`, true);
+    } finally {
+      xlsxBtn.disabled = false;
+      e.target.value = "";
+    }
   };
   reader.readAsText(file, "utf-8");
   e.target.value = "";
+});
+
+// ---------- 엑셀 복사 붙여넣기 ----------
+
+document.getElementById("paste-btn").addEventListener("click", function () {
+  const form = document.getElementById("paste-form");
+  form.style.display = form.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("paste-submit-btn").addEventListener("click", async function () {
+  ensureLoaded();
+  const textarea = document.getElementById("paste-textarea");
+  const btn = document.getElementById("paste-submit-btn");
+  const text = textarea.value;
+
+  if (text.trim() === "") {
+    showFileMessage("붙여넣은 내용이 없습니다.", true);
+    return;
+  }
+
+  // 엑셀에서 복사하면 칸은 탭, 줄은 개행으로 구분된 표가 클립보드에 담긴다.
+  const { header, records } = csvToObjects(text, "\t");
+  if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
+    records.forEach(r => dataRows.push(normalizeHanaRow(r)));
+    showFileMessage(`엑셀 붙여넣기 (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
+    textarea.value = "";
+    afterDataChange();
+    return;
+  }
+  if (records.length > 0 && headersMatch(header, COLUMNS)) {
+    records.forEach(r => dataRows.push(r));
+    showFileMessage(`엑셀 붙여넣기 (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
+    textarea.value = "";
+    afterDataChange();
+    return;
+  }
+
+  // 알려진 두 형식(하나카드 원본 / 표준 산출물) 어디에도 안 맞으면,
+  // 담당자(AI)에게 표준 형식으로 변환해달라고 그대로 넘긴다.
+  showFileMessage("알려진 형식이 아니라 담당자에게 변환을 부탁하는 중...", false);
+  btn.disabled = true;
+
+  try {
+    const rows = await convertUnknownFormatWithAI(text);
+    if (!rows || rows.length === 0) {
+      showFileMessage("담당자가 이 내용에서 읽을 행을 찾지 못했습니다.", true);
+      return;
+    }
+
+    const confirmedCount = pushAiConvertedRows(rows, "paste_ai");
+    showFileMessage(`엑셀 붙여넣기 (담당자가 변환) — ${rows.length}건 등록 (그중 확인됨 ${confirmedCount}건, 확인 필요 ${rows.length - confirmedCount}건).`, confirmedCount < rows.length);
+    textarea.value = "";
+    afterDataChange();
+  } catch (err) {
+    showFileMessage(`담당자 변환에 실패했습니다: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---------- 정렬 ----------
@@ -681,17 +824,77 @@ function renderBody() {
     return;
   }
 
-  let html = "";
+  tbody.innerHTML = "";
   filtered.forEach(row => {
-    html += "<tr>";
-    COLUMNS.forEach(col => { html += `<td>${escapeHtml(row[col] ?? "")}</td>`; });
-    html += "</tr>\n";
+    const tr = document.createElement("tr");
+    if (row.collect_status === "확인 필요") tr.className = "needs-check";
+
+    COLUMNS.forEach(col => {
+      const td = document.createElement("td");
+      td.textContent = row[col] ?? "";
+      // transaction_id는 다른 곳에서 참조하는 식별자라 고치지 못하게 둔다.
+      if (col !== "transaction_id") {
+        td.classList.add("editable-cell");
+        td.title = "클릭하면 값을 고칠 수 있습니다";
+        td.addEventListener("click", function () { startEditCell(td, row, col); });
+      }
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
   });
-  tbody.innerHTML = html;
+}
+
+// 셀을 입력칸(상태 컬럼은 드롭다운)으로 바꿔서 값을 고치게 한다.
+// filtered는 dataRows와 같은 객체를 참조하므로, row[col]을 바꾸면 dataRows도 바로 바뀐다.
+function startEditCell(td, row, col) {
+  if (td.querySelector("input, select")) return; // 이미 편집 중
+
+  const currentValue = row[col] ?? "";
+  let input;
+  if (col === "collect_status") {
+    input = document.createElement("select");
+    ["확인됨", "확인 필요"].forEach(opt => {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt;
+      optionEl.textContent = opt;
+      if (opt === currentValue) optionEl.selected = true;
+      input.appendChild(optionEl);
+    });
+  } else {
+    input = document.createElement("input");
+    input.type = "text";
+    input.value = currentValue;
+  }
+
+  td.textContent = "";
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  let done = false;
+  function finish(save) {
+    if (done) return;
+    done = true;
+    if (save) row[col] = input.value;
+    renderBody();
+    if (save) saveResultAndReport();
+  }
+
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === "Escape") {
+      finish(false);
+    }
+  });
 }
 
 function afterDataChange() {
   renderBody();
+  saveResultAndReport();
 }
 
 document.getElementById("check-btn").addEventListener("click", async function () {
@@ -765,6 +968,41 @@ function buildOrchestratorReport() {
     flags: flags,
     message: total === 0 ? "수집 대상 없음" : ""
   };
+}
+
+function rowsToCSVField(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function rowsToCSV(rows) {
+  const lines = [COLUMNS.map(rowsToCSVField).join(",")];
+  rows.forEach(row => lines.push(COLUMNS.map(col => rowsToCSVField(row[col])).join(",")));
+  return lines.join("\n") + "\n";
+}
+
+// 결과물(표)이 나올 때마다 collect/result.csv로 저장하고,
+// 같은 시점의 단계 결과 보고를 지휘가 읽을 수 있게 collect/result-report.json으로 전달한다.
+async function saveResultAndReport() {
+  if (!dataRows || dataRows.length === 0) return;
+
+  const csv = rowsToCSV(dataRows);
+  const report = buildOrchestratorReport();
+
+  try {
+    const response = await fetch("/save-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv, report }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new Error(data.error || response.statusText);
+    }
+    showFileMessage("collect/result.csv에 저장하고, 결과 보고를 지휘에 전달했습니다 (collect/result-report.json).", false);
+  } catch (err) {
+    showFileMessage(`결과 저장/보고 전달에 실패했습니다: ${err.message}`, true);
+  }
 }
 
 document.getElementById("report-btn").addEventListener("click", function () {

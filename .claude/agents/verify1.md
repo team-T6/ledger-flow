@@ -46,7 +46,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 ## 결과 보고
 
-지휘(orchestrator)에게 보내는 요약 JSON을 함께 내놓는다. 형식은 [docs/interface-spec.md](../../docs/interface-spec.md)의 "단계 결과 보고" 규격을 따른다.
+지휘(orchestrator)에게 보내는 요약 JSON을 함께 내놓는다. 형식은 [docs/interface-spec.md](../../docs/interface-spec.md)의 "단계 결과 보고" 규격을 따른다. `status`가 `failed`일 때는 `message`에 실패 사유를 **반드시** 적는다 (확정 규격).
 
 ```json
 {
@@ -56,7 +56,8 @@ tools: Read, Write, Edit, Bash, Glob, Grep
   "counts": { "total": 0, "ok": 0, "flagged": 0 },
   "flags": [
     { "row": 0, "type": "반려", "reason": "카테고리 명칭이 체계에 없음" }
-  ]
+  ],
+  "message": ""
 }
 ```
 

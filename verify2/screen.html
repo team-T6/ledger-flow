@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기간·금액 검증 담당</title>
+<style>
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    margin: 0;
+    padding: 32px 24px 64px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  .notice {
+    border: 2px solid #000000;
+    padding: 12px 16px;
+    margin-bottom: 28px;
+    font-size: 16px;
+  }
+
+  h1 { font-size: 30px; margin: 0 0 28px; }
+  h2 { font-size: 21px; margin: 32px 0 12px; }
+
+  /* 입력 자리 — 파일을 끌어다 놓는 칸 */
+  .drop {
+    border: 2px dashed #666666;
+    padding: 44px 20px;
+    text-align: center;
+    color: #333333;
+    cursor: pointer;
+  }
+  .drop.over { border-color: #000000; background: #f2f2f2; }
+  .drop .file { margin-top: 10px; font-weight: bold; }
+
+  /* 입력 칸 — 검증할 글을 직접 넣는 칸 */
+  #inputText {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 12px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 15px;
+    border: 1px solid #999999;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 18px;
+    padding: 12px 32px;
+    margin-top: 20px;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    cursor: pointer;
+  }
+  button:hover { background: #000000; color: #ffffff; }
+
+  #result { margin-top: 12px; }
+  .hidden { display: none; }
+
+  #status {
+    margin-top: 20px;
+    font-weight: bold;
+    color: #0033cc;
+  }
+
+  #resultText {
+    border: 1px solid #999999;
+    background: #f9f9f9;
+    padding: 16px 18px;
+    font-size: 16px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .error { color: #c00000; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="notice">실제로 담당자를 부릅니다</p>
+
+  <h1>기간·금액 검증 담당</h1>
+
+  <!-- 입력 자리 -->
+  <div class="drop" id="drop">
+    가공된 거래 표 파일을 이곳에 끌어다 놓으세요
+    <div class="file" id="fileName"></div>
+  </div>
+  <textarea id="inputText" rows="10" placeholder="검증할 글을 이곳에 붙여넣으세요"></textarea>
+
+  <!-- 누르는 자리 -->
+  <button id="runBtn">검증하기</button>
+
+  <!-- 부르는 동안 -->
+  <p id="status" class="hidden">부르는 중…</p>
+
+  <!-- 결과 자리 -->
+  <div id="result" class="hidden">
+    <h2>판정 결과</h2>
+    <div id="resultText"></div>
+  </div>
+
+</div>
+
+<script>
+  var drop = document.getElementById('drop');
+  var fileName = document.getElementById('fileName');
+  var inputText = document.getElementById('inputText');
+  var runBtn = document.getElementById('runBtn');
+  var statusEl = document.getElementById('status');
+  var result = document.getElementById('result');
+  var resultText = document.getElementById('resultText');
+
+  // 끌어다 놓기 — 파일 내용을 읽지 않고 이름만 표시한다
+  drop.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    drop.classList.add('over');
+  });
+  drop.addEventListener('dragleave', function () {
+    drop.classList.remove('over');
+  });
+  drop.addEventListener('drop', function (e) {
+    e.preventDefault();
+    drop.classList.remove('over');
+    if (e.dataTransfer.files.length > 0) {
+      fileName.textContent = e.dataTransfer.files[0].name;
+    }
+  });
+
+  // verify2/server.py가 열어주는 로컬 주소 — 열쇠는 여기(화면)가 아니라
+  // call-agent.py 쪽에서만 .env를 읽어 쓴다
+  var SERVER_URL = 'http://localhost:8788/call-agent';
+
+  runBtn.addEventListener('click', function () {
+    var text = inputText.value.trim();
+
+    result.classList.add('hidden');
+    resultText.classList.remove('error');
+    statusEl.classList.remove('hidden');
+    runBtn.disabled = true;
+
+    fetch(SERVER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          resultText.classList.add('error');
+          resultText.textContent = '오류: ' + data.error;
+        } else {
+          resultText.textContent = data.result;
+        }
+        result.classList.remove('hidden');
+      })
+      .catch(function (err) {
+        resultText.classList.add('error');
+        resultText.textContent = '호출 실패: ' + err.message + ' (verify2/server.py가 실행 중인지 확인하세요)';
+        result.classList.remove('hidden');
+      })
+      .finally(function () {
+        statusEl.classList.add('hidden');
+        runBtn.disabled = false;
+      });
+  });
+</script>
+</body>
+</html>

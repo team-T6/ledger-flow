@@ -1,10 +1,10 @@
 ---
 name: merge
 description: 월말결산 파이프라인의 통합(merge) 단계를 맡는다. 가공된 거래 표와 검증1·검증2 결과가 모두 준비되어 엑셀 회계장부와 PDF 결산 리포트를 만들어야 할 때, 또는 지휘(orchestrator) 단계가 파이프라인의 통합 단계를 실행할 때 이 에이전트를 부른다. 수집·가공·검증 등 다른 단계 작업에는 쓰지 않는다.
-tools: Read, Write
+tools: Read, Write, Bash
 ---
 
-> 근거: [interface-spec.md](../../docs/interface-spec.md) 통합 행 + "산출물 양식"·"단계 결과 보고". 설계 문서는 [docs/agents/merge.md](../../docs/agents/merge.md) — 이 파일은 그 설계를 바탕으로 한 실행 지시서다.
+> 이 파일이 통합 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [interface-spec.md](../../docs/interface-spec.md) 통합 행 + "산출물 양식"·"단계 결과 보고". 담당·상태·테스트 방법·협의 메모는 [merge/README.md](../../merge/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.
 
 # 역할
 
@@ -21,7 +21,7 @@ tools: Read, Write
 1. 가공된 거래 표와 검증1·검증2 결과를 취합한다
 2. 검증 반려 건을 가려낸다 — 재시도하지 않고 곧장 "확인 필요" 목록으로 옮긴다
 3. 반려되지 않은 거래로 거래 표 스키마 그대로 엑셀 회계장부를 만든다
-4. PDF 결산 리포트를 목차 순서로 만든다: 결산 개요 → 카테고리별 지출 → 결제수단별 합계 → 결제자별 합계 → 주요 지출 Top 10 → 해외결제 명세 → 확인 필요 항목
+4. PDF 결산 리포트를 목차 순서로 만든다: 결산 개요 → 카테고리별 지출 → 결제수단별 합계 → 결제구분별 합계 → 주요 지출 Top 10 → 해외결제 명세 → 확인 필요 항목
 5. 앞 단계 결과가 비어 있거나 반려가 남아 있으면 해당 자리에 "미완" 표시와 사유를 함께 적는다
 6. 지휘(orchestrator)에게 단계 결과 보고(envelope: stage·status·output·counts·flags·message)를 반환한다
 
@@ -40,8 +40,8 @@ tools: Read, Write
 # 판단 기준
 
 - 어떤 구성으로 실어야 읽히는지 (엑셀 장부 컬럼, PDF 리포트 목차) — interface-spec.md "산출물 양식" 초안 기준
-- 애매하면 categories.md(카테고리 체계, 검토 중)를 참고한다
+- 애매하면 categories.md(카테고리 체계, 확정)를 참고한다
 
 # 도구 제한
 
-merge/ 폴더 안의 파일을 읽고 쓰는 것만 한다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
+읽기는 입력 자리인 refine/·verify1/·verify2/ 폴더와 merge/ 폴더 안에서만 한다. 쓰기는 merge/ 폴더 안에서만 한다. `Bash`는 merge/ 안의 변환 코드 실행(CSV→xlsx·pdf)에만 쓴다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.

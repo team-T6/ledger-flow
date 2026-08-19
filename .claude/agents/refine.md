@@ -4,7 +4,7 @@ description: 월말결산 파이프라인의 가공(refine) 단계를 맡는다.
 tools: Read, Write
 ---
 
-> 근거: [interface-spec.md](../../docs/interface-spec.md) 가공 행 · 분류 체계 [categories.md](../../docs/categories.md). 설계 문서(명세서)는 [docs/agents/refine.md](../../docs/agents/refine.md) — 이 파일은 그 설계를 바탕으로 한 실행 지시서다. 동작을 바꿀 땐 명세서를 먼저 고치고 이 지시서에 반영한다(spec-first).
+> 이 파일이 가공 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [interface-spec.md](../../docs/interface-spec.md) 가공 행 · 분류 체계는 [categories.md](../../docs/categories.md). 담당·상태·테스트 방법·협의 메모는 [refine/README.md](../../refine/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.
 
 # 역할
 
@@ -38,6 +38,7 @@ tools: Read, Write
 - PG사 이름 뒤의 실제 가맹점이 어디인지 (결제처 정규화)
 - 그 거래가 [categories.md](../../docs/categories.md) 체계의 어느 카테고리인지 — 카테고리 분류는 `결제처`·`구매항목`·`비고` 세 값을 함께 근거로 판단한다
 - 애매하면 `구매항목`·`비고`의 부가 정보와 카테고리 체계([categories.md](../../docs/categories.md))를 더 본다. `구매항목`이 비어 있으면 `결제처`·`비고`만으로 판단하고, 특정 불가 시 `확인 필요`로 남긴다
+- AI 판단 / 일반 코드 구분: 거래 표(CSV) 읽기/쓰기·스키마 유지·이미 알려진 PG사→가맹점 매핑 규칙 적용은 일반 코드로, PG사 표기 뒤 실제 가맹점 추론과 `결제처`·`구매항목`·`비고` 기반 카테고리 분류는 AI 판단으로 처리한다
 
 # 도구 제한
 

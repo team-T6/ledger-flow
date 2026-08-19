@@ -1,7 +1,7 @@
 # 통합 (merge) — 이 칸의 약속
 
-> 담당: 박인혜 · 엑셀 회계장부 + PDF 결산 리포트 작성
-> 계약의 정본은 [인터페이스 정의서](../docs/interface-spec.md), 단계 내부 설계는 [설계서](../docs/agents/merge.md), 에이전트에게 시키는 말은 [지시서](../.claude/agents/merge.md).
+> 담당: 박인혜 · 엑셀 회계장부 + PDF 결산 리포트 작성 · 상태: 초안
+> 계약의 정본은 [인터페이스 정의서](../docs/interface-spec.md), 단계 문서(설계+실행 지시의 단일 정본)는 [.claude/agents/merge.md](../.claude/agents/merge.md).
 
 ## 하는 일
 
@@ -32,10 +32,20 @@
 
 ## 지금 상태
 
-`result.xlsx`·`result.pdf`를 실제로 만드는 코드는 아직 없다. `call-agent.py`는 지금은 입력 글을 Claude에게 보내 처리 결과를 텍스트로 받아오기만 하고, 엑셀·PDF 파일을 쓰지는 않는다 ([docs/agents/merge.md](../docs/agents/merge.md) §6·§8 "막힌 점" 참고).
+`build_result.py`가 CSV 입력을 `result.xlsx`·`result.pdf`로 변환한다 (이 변환의 실행 수단으로 에이전트에 `Bash` 도구 부여 확정 — 인터페이스 정의서 "다음 단계" 확정 로그). `call-agent.py`는 입력 글을 Claude에게 보내 처리 결과를 텍스트로 받아온다.
 
 ## 지켜야 할 것
 
 - **API 키를 커밋하지 않는다.** `ANTHROPIC_API_KEY`는 팀 폴더 맨 위 `.env`(gitignore 대상)에서만 읽고, `call-agent.py`를 포함한 이 칸의 어떤 파일에도 값을 적지 않는다
 - **실데이터를 커밋하지 않는다.** 견본은 [sample_data/](../sample_data/) 기반 가짜 데이터로만 만든다 (개인 금융정보)
-- **명세 먼저, 구현 나중.** 동작을 바꾸려면 [설계서](../docs/agents/merge.md)를 먼저 고친다. 단계 간 약속이 걸리면 [인터페이스 정의서](../docs/interface-spec.md)를 담당자 합의로 고친다
+- **문서 먼저, 구현 나중.** 동작을 바꾸려면 [단계 문서](../.claude/agents/merge.md)를 먼저 고친다. 단계 간 약속이 걸리면 [인터페이스 정의서](../docs/interface-spec.md)를 담당자 합의로 고친다
+
+## 테스트 방법
+
+- `sample_data/` 기준 가공된 거래 표 예시 + 검증1·검증2 결과 예시를 넣어 엑셀 장부·PDF 리포트가 정해진 컬럼·목차대로 나오는지 확인한다
+- 반려·미완 케이스를 담은 별도 샘플로 "확인 필요" 항목에 제대로 실리는지 확인한다
+
+## 협의 중 / 남은 과제
+
+- **PDF 리포트 목차·엑셀 장부 컬럼이 "초안" 상태** — 팀 확정 필요. 장부에 계정과목 컬럼을 실을 경우, 카테고리 하나가 계정과목 둘에 걸리는 `사용료`의 판별 규칙도 이때 함께 정한다
+- **엑셀·PDF 생성 라이브러리 확정** — 현재 `build_result.py`가 쓰는 구성을 검증 후 확정

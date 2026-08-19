@@ -1,7 +1,7 @@
 # 지휘 (orchestrator) — 이 칸의 약속
 
-> 담당: 김규은 · 파이프라인 지휘
-> 계약의 정본은 [인터페이스 정의서](../docs/interface-spec.md), 단계 내부 설계는 [설계서](../docs/agents/orchestrator.md), 에이전트에게 시키는 말은 [지시서](../.claude/agents/orchestrator.md).
+> 담당: 김규은 · 파이프라인 지휘 · 상태: 초안 (실행하며 검증 중)
+> 계약의 정본은 [인터페이스 정의서](../docs/interface-spec.md), 단계 문서(설계+실행 지시의 단일 정본)는 [.claude/agents/orchestrator.md](../.claude/agents/orchestrator.md).
 
 ## 하는 일
 
@@ -32,7 +32,7 @@
 
 ## 판단 규칙 (요약)
 
-상세는 [설계서 4장](../docs/agents/orchestrator.md)에 있다.
+상세는 [단계 문서](../.claude/agents/orchestrator.md)에 있다.
 
 - `ok`·`empty` → 다음 단계 진행 (단, 수집이 `empty`면 이후 호출 없이 "결산 대상 없음" 요약으로 종료)
 - `partial` → 진행하되 flagged 건을 요약의 "확인 필요 목록"에 싣는다 (반려율 50% 초과면 요약 맨 앞에 "대량 반려" 경고)
@@ -48,3 +48,9 @@
 
 - **실데이터를 커밋하지 않는다.** 견본은 [sample_data/](../sample_data/) 기반 가짜 데이터로만 만든다 (개인 금융정보)
 - 실행 로그는 커밋하지 않는다 (`logs/` 커밋 차단)
+
+## 테스트 방법
+
+- `sample_data/` 기준 가공된 데이터 전체를 파이프라인에 흘려 각 단계 결과 보고가 정상 취합되고 `counts.total`이 유실 없이 대조되는지 확인한다
+- 특정 단계를 `failed`로 강제한 시나리오로, 최종 결과 요약이 그래도 작성되는지 확인한다
+- 검증 반려 건이 있는 시나리오로, 통합의 "확인 필요" 목록에 제대로 실리는지 확인한다

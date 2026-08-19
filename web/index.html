@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="ledger">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger Flow — 월말결산 비서</title>
+<meta name="description" content="카드사 엑셀과 영수증을 올리면 월말결산 비서가 분류하고 검증해 월 결산 리포트를 만들어 드립니다. (샘플 데이터 데모)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&family=Noto+Sans+KR:wght@400;500;700&family=Do+Hyeon&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* ---------- 테마 토큰 — 색·모서리·서체는 여기서만 정의한다 ---------- */
+  :root, :root[data-theme="ledger"] {
+    --bg: #FAF7F2; --ink: #1C1917; --muted: #7A7263;
+    --line: #E6DFD2; --soft: #EFE9DD; --card: #F5F1E8;
+    --accent: #1E5B45; --accent-contrast: #FAF7F2; --accent-soft: #C9D8CC;
+    --red: #A63A2E; --radius: 4px;
+    --font-display: "Noto Serif KR", serif; --display-weight: 900;
+  }
+  :root[data-theme="fintech"] {
+    --bg: #FFFFFF; --ink: #191F28; --muted: #8B95A1;
+    --line: #EDF0F3; --soft: #F2F4F6; --card: #F9FAFB;
+    --accent: #3182F6; --accent-contrast: #FFFFFF; --accent-soft: #B9D5FB;
+    --red: #F04452; --radius: 12px;
+    --font-display: "Noto Sans KR", sans-serif; --display-weight: 700;
+  }
+  :root[data-theme="green"] {
+    /* 딥 그린 다크 — 라이트 테마 둘과 확실히 갈리도록 바탕을 진초록으로 뒤집고 전용 서체를 쓴다 */
+    --bg: #172A20; --ink: #EFE9DA; --muted: #9DB0A0;
+    --line: #2C4334; --soft: #22382B; --card: #1D3327;
+    --accent: #6FBE8C; --accent-contrast: #14261C; --accent-soft: #3B5A48;
+    --red: #E08A7A; --radius: 6px;
+    --font-display: "Do Hyeon", "Noto Sans KR", sans-serif; --display-weight: 400;
+  }
+
+  * { box-sizing: border-box; }
+  /* 스냅은 proximity — 페이지 경계 근처에서는 화면 단위로 잡히되,
+     mandatory와 달리 스냅 지점이 없는 문서 끝(푸터)까지도 내려갈 수 있다 */
+  html { scroll-behavior: smooth; scroll-snap-type: y proximity; scroll-padding-top: 64px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+    line-height: 1.65; -webkit-font-smoothing: antialiased;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  h1, h2 { font-family: var(--font-display); font-weight: var(--display-weight); text-wrap: balance; }
+  .eyebrow {
+    font-size: 14.5px; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--accent); margin-bottom: 16px;
+  }
+  .btn {
+    display: inline-block; border: none; cursor: pointer;
+    font: inherit; font-size: 15px; font-weight: 700;
+    padding: 13px 30px; border-radius: var(--radius);
+    background: var(--accent); color: var(--accent-contrast);
+    transition: opacity 0.15s ease;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-ghost { background: var(--soft); color: var(--ink); }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 12px; }
+
+  /* ---------- 스크롤 스냅 페이지 ---------- */
+  .page {
+    min-height: 100svh; scroll-snap-align: start;
+    display: flex; align-items: center;
+    padding: 96px 24px 72px;
+    border-top: 1px solid var(--line);
+  }
+  .page:first-of-type { border-top: none; }
+  .page .wrap { width: 100%; max-width: 720px; margin: 0 auto; }
+  .page h2 { font-size: clamp(26px, 5vw, 38px); line-height: 1.35; letter-spacing: -0.015em; margin: 0 0 16px; }
+  .page .lead { font-size: 16.5px; color: var(--muted); max-width: 52ch; margin: 0 0 8px; }
+
+  /* ---------- 테마 전환 ---------- */
+  .theme-picker {
+    position: fixed; top: 66px; right: 16px; z-index: 8;
+    display: flex; gap: 8px; padding: 7px 9px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(20, 18, 12, 0.10);
+  }
+  .theme-dot {
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
+    border: 2px solid transparent; position: relative;
+  }
+  .theme-dot::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; }
+  .theme-dot[data-set="ledger"]  { background: #FAF7F2; border-color: #E6DFD2; }
+  .theme-dot[data-set="ledger"]::after  { background: #1E5B45; }
+  .theme-dot[data-set="fintech"] { background: #FFFFFF; border-color: #EDF0F3; }
+  .theme-dot[data-set="fintech"]::after { background: #3182F6; }
+  .theme-dot[data-set="green"]   { background: #1B4332; border-color: #1B4332; }
+  .theme-dot[data-set="green"]::after   { background: #F6F1E3; }
+  .theme-dot.on { border-color: var(--ink); }
+
+  /* ---------- 고정 헤더 ---------- */
+  .site-header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 20px 12px 24px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    transition: background 0.25s ease;
+  }
+  .home-link { display: flex; align-items: baseline; gap: 12px; color: inherit; text-decoration: none; cursor: pointer; }
+  .brand { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 21px; line-height: 1.2; }
+  .brand-sub { font-size: 14px; color: var(--muted); }
+  .header-right { display: flex; align-items: center; gap: 18px; }
+  .nav-link {
+    display: inline-block; font-size: 14px; font-weight: 700;
+    padding: 8px 18px; border-radius: var(--radius);
+    background: var(--accent); color: var(--accent-contrast);
+    text-decoration: none; transition: opacity 0.15s ease;
+  }
+  .nav-link:hover { opacity: 0.88; }
+  @media (max-width: 620px) { .brand-sub { display: none; } }
+
+  /* ---------- 히어로 ---------- */
+  .hero h1 { font-size: clamp(32px, 6.5vw, 50px); line-height: 1.3; letter-spacing: -0.015em; margin: 0 0 18px; }
+  .demo-badge {
+    display: inline-block; font-size: 12px; font-weight: 700;
+    padding: 4px 12px; border-radius: 999px; margin-bottom: 20px;
+    background: var(--soft); color: var(--muted);
+  }
+  .scroll-cue { margin-top: 56px; font-size: 13px; color: var(--muted); }
+  .scroll-cue .arrow { display: inline-block; animation: cue 1.6s ease-in-out infinite; }
+  @keyframes cue { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+
+  /* ---------- 페인포인트 ---------- */
+  .pains { display: grid; gap: 14px; margin-top: 32px; }
+  .pain {
+    padding: 18px 22px; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius); font-size: 15px;
+  }
+  .pain strong { display: block; margin-bottom: 2px; }
+  .pain span { color: var(--muted); font-size: 14px; }
+
+  /* ---------- 제공 가치 / 진행 방식 카드 ---------- */
+  .cards { display: grid; gap: 16px; margin-top: 32px; }
+  .card {
+    display: grid; grid-template-columns: 52px 1fr; gap: 16px; align-items: start;
+    padding: 20px 22px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .card .badge {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--accent-contrast);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .card h3 { margin: 2px 0 4px; font-size: 16px; }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* ---------- 결과 미리보기 ---------- */
+  .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; }
+  @media (max-width: 640px) { .previews { grid-template-columns: 1fr; } }
+  .preview {
+    padding: 20px 22px; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .preview-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .preview .ftag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+    background: var(--accent); color: var(--accent-contrast);
+  }
+  .preview h3 { margin: 0; font-size: 15px; }
+  .preview .desc { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .mini-bar { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); margin-bottom: 7px; }
+  .mini-bar i { display: block; height: 7px; border-radius: 4px; background: var(--accent); }
+  .mini-row {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 11px; color: var(--muted);
+    padding: 6px 0; border-bottom: 1px solid var(--line);
+  }
+  .mini-row:last-child { border-bottom: none; }
+
+  /* ---------- 초대코드 ---------- */
+  .invite-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+  .invite-form input {
+    flex: 1; min-width: 200px; font: inherit; font-size: 15px;
+    padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--card); color: var(--ink); letter-spacing: 0.06em;
+  }
+  .invite-error { display: none; margin-top: 12px; font-size: 13.5px; color: var(--red); }
+  .invite-error.show { display: block; }
+
+  /* ---------- 월 선택 ---------- */
+  .months { display: flex; flex-wrap: wrap; gap: 18px 14px; margin-top: 32px; }
+  .month { text-align: center; width: 64px; background: none; border: none; padding: 0; font: inherit; color: inherit; }
+  .month .circle {
+    width: 56px; height: 56px; border-radius: 50%; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700;
+    background: var(--soft); color: var(--muted);
+    border: 2px solid transparent;
+  }
+  .month.done .circle { background: var(--accent); color: var(--accent-contrast); }
+  .month.now { cursor: pointer; }
+  .month.now .circle { background: transparent; border-color: var(--accent); color: var(--accent); }
+  .month.now:hover .circle { background: var(--soft); }
+  .month .amt { font-size: 11px; color: var(--muted); margin-top: 7px; line-height: 1.3; }
+
+  /* ---------- 자료 넣기 ---------- */
+  .dropzone {
+    margin-top: 32px; padding: 40px 24px; text-align: center;
+    border: 2px dashed var(--line); border-radius: var(--radius);
+    color: var(--muted); font-size: 14.5px;
+  }
+  .dropzone strong { color: var(--ink); }
+  .src-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  .file-list { margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .file-list li {
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 11px 16px; font-size: 13.5px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .file-list .ok { color: var(--accent); font-weight: 700; }
+  .run-cta { margin-top: 28px; text-align: center; }
+
+  /* ---------- 결산 진행 ---------- */
+  .hidden { display: none; }
+  .steps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+  .step {
+    font-size: 13.5px; font-weight: 500; padding: 9px 18px; border-radius: 999px;
+    background: var(--soft); color: var(--muted);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .step.active { background: var(--soft); color: var(--accent); font-weight: 700; }
+  .step.done { background: var(--accent); color: var(--accent-contrast); }
+  .step .tick { display: none; font-weight: 700; }
+  .step.done .tick { display: inline; }
+  .runlog {
+    margin-top: 24px; padding: 18px 20px; min-height: 120px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .runlog div { padding: 2px 0; }
+  .runlog .stage { color: var(--ink); font-weight: 600; }
+
+  /* ---------- 결과 — PDF 리포트 목차 구성을 따른다 ---------- */
+  .report-block { margin-top: 40px; }
+  .report-block > h3 {
+    margin: 0 0 16px; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.1em; color: var(--muted);
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } }
+  .stat { padding: 16px 18px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+  .stat .k { font-size: 12.5px; color: var(--muted); }
+  .stat .v { font-size: 21px; font-weight: 600; margin-top: 2px; }
+  .stat .v.minus { color: var(--red); }
+  .cats { display: grid; gap: 12px; }
+  .cat { display: grid; grid-template-columns: 76px 1fr auto auto; gap: 12px; align-items: center; font-size: 14px; }
+  .cat .bar-track { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; }
+  .cat .bar { height: 100%; border-radius: 5px; background: var(--accent); width: 0; transition: width 0.8s ease; }
+  .cat .num { font-size: 13px; color: var(--red); }
+  .cat .pct { font-size: 12px; color: var(--muted); width: 34px; text-align: right; }
+  .split-bar { display: flex; gap: 2px; height: 26px; border-radius: var(--radius); overflow: hidden; }
+  .split-bar .seg-a { background: var(--accent); }
+  .split-bar .seg-b { background: var(--accent-soft); }
+  .split-legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; font-size: 13.5px; }
+  .split-legend .dot-a, .split-legend .dot-b {
+    display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px;
+  }
+  .split-legend .dot-a { background: var(--accent); }
+  .split-legend .dot-b { background: var(--accent-soft); }
+  .split-legend .amt { color: var(--muted); }
+  .top5 { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .top5 td { padding: 9px 4px; border-bottom: 1px solid var(--line); }
+  .top5 tr:last-child td { border-bottom: none; }
+  .top5 .d { color: var(--muted); white-space: nowrap; }
+  .top5 .c { color: var(--muted); }
+  .top5 .n { text-align: right; color: var(--red); white-space: nowrap; }
+  .memo {
+    padding: 18px 20px; font-size: 14px;
+    background: var(--card); border-left: 3px solid var(--accent); border-radius: var(--radius);
+  }
+  .memo strong { font-weight: 700; }
+  .flags { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
+  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
+
+  /* ---------- 푸터 ---------- */
+  /* 푸터가 짧아 바닥이 마지막 화면 스냅 지점으로 되돌아가지 않도록, 바닥 자체를 스냅 지점으로 둔다 */
+  footer { border-top: 1px solid var(--line); padding: 40px 24px 64px; font-size: 13px; color: var(--muted); scroll-snap-align: end; }
+  footer .wrap { max-width: 720px; margin: 0 auto; }
+  footer a { color: var(--accent); }
+
+  /* ---------- 토스트 ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(8px);
+    background: var(--ink); color: var(--bg); font-size: 13.5px;
+    padding: 11px 20px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease; max-width: 90vw;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- 등장 애니메이션 ---------- */
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .cat .bar { transition: none; }
+    .scroll-cue .arrow { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="site-header">
+  <a class="home-link" href="#" id="home-link"><span class="brand">Ledger Flow</span><span class="brand-sub">월말결산 비서</span></a>
+  <div class="header-right">
+    <nav><a class="nav-link" id="nav-app" href="#app">결산하기</a></nav>
+  </div>
+</div>
+
+<div class="theme-picker" role="group" aria-label="테마 선택">
+  <button class="theme-dot on" data-set="ledger" title="장부 에디토리얼" aria-label="장부 에디토리얼 테마"></button>
+  <button class="theme-dot" data-set="fintech" title="클린 핀테크" aria-label="클린 핀테크 테마"></button>
+  <button class="theme-dot" data-set="green" title="회계 그린" aria-label="회계 그린 테마"></button>
+</div>
+
+<div id="view-landing">
+<!-- 1. 히어로 -->
+<header class="page hero">
+  <div class="wrap">
+    <div class="demo-badge">샘플 데이터 데모</div>
+    <h1>흩어진 카드 내역이,<br>한 권의 장부가 됩니다</h1>
+    <p class="lead">개인·법인 카드 여러 장의 한 달 지출을 월말결산 비서가 모아서 정리하고, 검증까지 마친 결산 리포트로 돌려드립니다.</p>
+    <div class="scroll-cue">스크롤을 내려 보세요 <span class="arrow">↓</span></div>
+  </div>
+</header>
+
+<!-- 2. 페인포인트 -->
+<section class="page">
+  <div class="wrap reveal">
+    <div class="eyebrow">매달 겪는 일</div>
+    <h2>카드 4장, 엑셀 4개,<br>영수증 사진 한 무더기</h2>
+    <p class="lead">월말이 되면 이걸 전부 내려받고, 옮겨 적고, 분류하고, 대조합니다. 매달 같은 순서로, 매달 사람 손으로.</p>
+    <div class="pains">
+      <div class="pain"><strong>파편화</strong><span>카드사마다 파일 형식이 달라서 합치는 것부터 수작업입니다</span></div>
+      <div class="pain"><strong>반복</strong><span>같은 절차를 매달 다시 합니다 — 한 번에 3시간씩</span></div>
+      <div class="pain"><strong>불투명</strong><span>결산이 끝나기 전까지는 이번 달에 얼마 썼는지 아무도 모릅니다</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 제공 가치 -->
+<section class="page">
+  <div class="wrap reveal">
+    <div class="eyebrow">Ledger Flow가 대신합니다</div>
+    <h2>올리는 것까지가<br>사람의 일입니다</h2>
+    <div class="cards">
+      <div class="card"><span class="badge">통합</span><div><h3>형식이 달라도 그대로 올리세요</h3><p>카드사 엑셀·CSV, 영수증 사진, 결제 문자 캡처 — 전부 하나의 거래 표로 합쳐집니다.</p></div></div>
+      <div class="card"><span class="badge">검증</span><div><h3>분류하고, 두 번 검증합니다</h3><p>분류 결과를 서로 다른 검증기 둘이 다시 확인합니다. 틀린 채로 장부에 실리지 않습니다.</p></div></div>
+      <div class="card"><span class="badge">예외</span><div><h3>사람은 확인 필요 건만 봅니다</h3><p>애매한 항목은 임의로 처리하지 않고 "확인 필요"로 모아서 보여드립니다.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 결과 미리보기 -->
+<section class="page" id="preview-sec">
+  <div class="wrap reveal">
+    <div class="eyebrow">결과는 이렇게 나옵니다</div>
+    <h2>엑셀 장부 하나,<br>PDF 리포트 하나</h2>
+    <div class="previews">
+      <div class="preview">
+        <div class="preview-head"><h3>결산 리포트</h3><span class="ftag">PDF</span></div>
+        <p class="desc">카테고리별 지출·결제구분·주요 지출이 순서대로 실립니다</p>
+        <div class="mini-bar"><span>사용료</span><i style="width:100%"></i></div>
+        <div class="mini-bar"><span>식대</span><i style="width:70%"></i></div>
+        <div class="mini-bar"><span>구독료</span><i style="width:27%"></i></div>
+        <div class="mini-bar"><span>교통비</span><i style="width:23%"></i></div>
+      </div>
+      <div class="preview">
+        <div class="preview-head"><h3>결제내역 장부</h3><span class="ftag">엑셀</span></div>
+        <p class="desc">정리·분류가 끝난 전체 거래 내역</p>
+        <div class="mini-row"><span>08-05 · 스튜디오밝음</span><span class="mono">-1,200,000</span></div>
+        <div class="mini-row"><span>08-12 · 김밥천국 역삼점</span><span class="mono">-9,500</span></div>
+        <div class="mini-row"><span>08-15 · Notion (USD)</span><span class="mono">-132,900</span></div>
+        <div class="mini-row"><span>08-21 · 코스트코 광명점</span><span class="mono">-286,400</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 진행 방식 — AI가 하는 일 -->
+<section class="page">
+  <div class="wrap reveal">
+    <div class="eyebrow">Ledger Flow는 이런 일을 합니다</div>
+    <h2>수집 → 가공 → 검증 → 통합,<br>네 단계로 결산합니다</h2>
+    <div class="cards">
+      <div class="card"><span class="badge">수집</span><div><h3>흩어진 원천을 하나의 표로</h3><p>카드사마다 다른 엑셀 형식을 하나의 거래 표로 합치고, 영수증·결제 문자 캡처는 글자를 읽어(OCR) 거래 내역으로 만듭니다.</p></div></div>
+      <div class="card"><span class="badge">가공</span><div><h3>진짜 가맹점을 찾아 분류</h3><p>"(주)케이지이니시스" 같은 결제대행사 표기 뒤에 숨은 실제 가맹점을 찾아내고, 식대·교통비·구독료 등 카테고리 체계에 맞춰 분류합니다.</p></div></div>
+      <div class="card"><span class="badge">검증</span><div><h3>서로 다른 눈 둘이 동시에</h3><p>하나는 분류가 기준에 맞는지, 다른 하나는 대상 월·금액 부호·해외결제 환산이 맞는지 봅니다. 판단은 AI가 하되, 애매하면 넘기지 않고 "확인 필요"로 남깁니다.</p></div></div>
+      <div class="card"><span class="badge">통합</span><div><h3>검증 통과분만 결과물로</h3><p>검증을 통과한 내역으로 엑셀 장부와 PDF 리포트를 만들고, 확인 필요 건은 비고로 함께 싣습니다.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. 시작하기 -->
+<section class="page">
+  <div class="wrap reveal" style="text-align:center;">
+    <h2>이번 달부터<br>맡겨 보세요</h2>
+    <p class="lead" style="margin:0 auto 32px;">약 5분이면 한 달 결산이 끝납니다.</p>
+    <button class="btn" id="start">시작하기</button>
+    <div class="hint">초대코드가 있어야 이용할 수 있습니다</div>
+  </div>
+</section>
+</div>
+
+<div id="view-app" class="hidden">
+<!-- 7. 초대코드 -->
+<section id="invite-sec" class="page">
+  <div class="wrap">
+    <div class="eyebrow">초대코드 확인</div>
+    <h2>초대코드를 입력해 주세요</h2>
+    <p class="lead">지금은 초대받은 분만 이용할 수 있습니다.</p>
+    <div class="invite-form">
+      <input id="invite-input" type="text" placeholder="초대코드" autocomplete="off" aria-label="초대코드">
+      <button class="btn" id="invite-btn">확인</button>
+    </div>
+    <p class="invite-error" id="invite-error">초대코드가 맞지 않습니다. 다시 확인해 주세요.</p>
+    <div class="hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
+  </div>
+</section>
+
+<!-- 8. 월 선택 -->
+<section id="months-sec" class="page hidden">
+  <div class="wrap">
+    <div class="eyebrow">결산할 월 선택</div>
+    <h2>2026년, 어느 달을 결산할까요?</h2>
+    <div class="months" id="months"></div>
+  </div>
+</section>
+
+<!-- 9. 자료 넣기 -->
+<section id="upload-sec" class="page hidden">
+  <div class="wrap">
+    <div class="eyebrow">1 · 자료 넣기</div>
+    <h2>8월에 쓴 카드 자료를 올려 주세요</h2>
+    <div class="dropzone">
+      <strong>파일을 끌어다 놓으세요</strong><br>
+      카드사 엑셀·CSV, 영수증·결제 문자 캡처 이미지
+      <div class="src-buttons">
+        <button class="btn btn-ghost inert">파일 선택</button>
+        <button class="btn btn-ghost inert">Google Drive 연결</button>
+      </div>
+    </div>
+    <ul class="file-list">
+      <li><span>국민카드_202608_이용내역.xlsx</span><span class="ok">준비됨</span></li>
+      <li><span>신한카드_202608.csv</span><span class="ok">준비됨</span></li>
+      <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
+    </ul>
+    <div class="run-cta">
+      <button class="btn" id="run-btn">이 자료로 결산 시작하기</button>
+      <div class="hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
+    </div>
+  </div>
+</section>
+
+<!-- 10. 결산 진행 -->
+<section id="run-sec" class="page hidden">
+  <div class="wrap">
+    <div class="eyebrow">2 · 결산 진행</div>
+    <h2>월말결산 비서가 결산하고 있습니다</h2>
+    <div class="steps">
+      <span class="step" data-stage="수집"><span class="tick">✓</span>수집</span>
+      <span class="step" data-stage="가공"><span class="tick">✓</span>가공</span>
+      <span class="step" data-stage="검증"><span class="tick">✓</span>검증</span>
+      <span class="step" data-stage="통합"><span class="tick">✓</span>통합</span>
+    </div>
+    <div class="runlog mono" id="runlog" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- 11. 결산 결과 — PDF 리포트 목차(개요·카테고리·결제구분·주요 지출·확인 필요) 구성 -->
+<section id="result-sec" class="page hidden">
+  <div class="wrap">
+    <div class="eyebrow">3 · 결산 결과</div>
+    <h2>2026년 8월 결산이 끝났습니다</h2>
+
+    <div class="report-block">
+      <h3>결산 개요</h3>
+      <div class="stats">
+        <div class="stat"><div class="k">총지출</div><div class="v minus mono">-3,481,200</div></div>
+        <div class="stat"><div class="k">총수익</div><div class="v mono">+5,214,000</div></div>
+        <div class="stat"><div class="k">순액</div><div class="v mono">+1,732,800</div></div>
+      </div>
+      <div class="hint">거래 42건 · 카드 3장 통합</div>
+    </div>
+
+    <div class="report-block">
+      <h3>카테고리별 지출</h3>
+      <div class="cats">
+        <div class="cat"><span>사용료</span><div class="bar-track"><div class="bar" data-w="100%"></div></div><span class="num mono">-1,200,000</span><span class="pct mono">34%</span></div>
+        <div class="cat"><span>식대</span><div class="bar-track"><div class="bar" data-w="70%"></div></div><span class="num mono">-842,300</span><span class="pct mono">24%</span></div>
+        <div class="cat"><span>그 외 5개</span><div class="bar-track"><div class="bar" data-w="54%"></div></div><span class="num mono">-649,000</span><span class="pct mono">19%</span></div>
+        <div class="cat"><span>구독료</span><div class="bar-track"><div class="bar" data-w="27%"></div></div><span class="num mono">-318,900</span><span class="pct mono">9%</span></div>
+        <div class="cat"><span>교통비</span><div class="bar-track"><div class="bar" data-w="23%"></div></div><span class="num mono">-276,400</span><span class="pct mono">8%</span></div>
+        <div class="cat"><span>공과금</span><div class="bar-track"><div class="bar" data-w="16%"></div></div><span class="num mono">-194,600</span><span class="pct mono">6%</span></div>
+      </div>
+    </div>
+
+    <div class="report-block">
+      <h3>결제구분별 합계</h3>
+      <div class="split-bar">
+        <div class="seg-b" style="width:40%"></div>
+        <div class="seg-a" style="width:60%"></div>
+      </div>
+      <div class="split-legend">
+        <span><i class="dot-b"></i>개인결제 <span class="amt mono">-1,392,500 (40%)</span></span>
+        <span><i class="dot-a"></i>법인결제 <span class="amt mono">-2,088,700 (60%)</span></span>
+      </div>
+    </div>
+
+    <div class="report-block">
+      <h3>주요 지출 Top 5</h3>
+      <table class="top5">
+        <tr><td class="d mono">08-05</td><td>스튜디오밝음</td><td class="c">사용료</td><td class="n mono">-1,200,000</td></tr>
+        <tr><td class="d mono">08-21</td><td>코스트코 광명점</td><td class="c">식대</td><td class="n mono">-286,400</td></tr>
+        <tr><td class="d mono">08-03</td><td>SK텔레콤</td><td class="c">통신비</td><td class="n mono">-159,000</td></tr>
+        <tr><td class="d mono">08-15</td><td>Notion (USD 96.00)</td><td class="c">구독료</td><td class="n mono">-132,900</td></tr>
+        <tr><td class="d mono">08-09</td><td>역삼타워 관리사무소</td><td class="c">공과금</td><td class="n mono">-128,000</td></tr>
+      </table>
+    </div>
+
+    <div class="report-block">
+      <h3>결산 비고</h3>
+      <div class="memo">
+        <strong>확인 필요 2건</strong>
+        <ul class="flags">
+          <li>7행 · 해외결제 1건 — 원화 환산 금액 확인이 필요합니다</li>
+          <li>23행 · 결제대행사 결제 1건 — 실제 가맹점명을 확인하지 못했습니다</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="downloads">
+      <button class="btn inert">PDF 리포트 받기</button>
+      <button class="btn btn-ghost inert">결제내역 장부 받기 (엑셀)</button>
+    </div>
+  </div>
+</section>
+</div>
+
+<footer>
+  <div class="wrap">
+    이 페이지는 샘플 데이터로 구성된 데모입니다. 실제 결산 실행·파일 업로드·다운로드는 정식 버전에서 제공됩니다.<br>
+    Ledger Flow — 월말결산 비서 · <a href="https://github.com/team-T6/ledger-flow" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* 테마 전환 — data-theme 토큰 교체, 선택은 localStorage에 유지 */
+  var THEME_KEY = "lf-theme";
+  var dots = document.querySelectorAll(".theme-dot");
+  function setTheme(name) {
+    document.documentElement.dataset.theme = name;
+    dots.forEach(function (d) { d.classList.toggle("on", d.dataset.set === name); });
+    try { localStorage.setItem(THEME_KEY, name); } catch (e) { /* 저장 불가 환경은 무시 */ }
+  }
+  dots.forEach(function (d) {
+    d.addEventListener("click", function () { setTheme(d.dataset.set); });
+  });
+  try {
+    var saved = localStorage.getItem(THEME_KEY);
+    if (saved === "ledger" || saved === "fintech" || saved === "green") setTheme(saved);
+  } catch (e) { /* 무시 */ }
+
+  /* 토스트 */
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+  }
+  document.querySelectorAll(".inert").forEach(function (b) {
+    b.addEventListener("click", function () {
+      showToast("데모에서는 동작하지 않습니다 — 정식 버전에서 제공됩니다");
+    });
+  });
+
+  /* 진행형 공개 — 숨겨진 섹션을 열고 그 화면으로 스냅 이동.
+     공개 직후 같은 프레임에 스크롤하면 스냅 재계산에 밀려 제자리로 돌아오므로
+     레이아웃이 잡힌 다음 틱에 스크롤한다 */
+  function openSection(id) {
+    var el = document.getElementById(id);
+    el.classList.remove("hidden");
+    setTimeout(function () { el.scrollIntoView({ behavior: "instant", block: "start" }); }, 60);
+  }
+
+  /* 뷰 전환 — 랜딩 ↔ 월말결산하기 (해시 라우팅: #app) */
+  var viewLanding = document.getElementById("view-landing");
+  var viewApp = document.getElementById("view-app");
+  var navApp = document.getElementById("nav-app");
+  function showView(name) {
+    var isApp = name === "app";
+    viewLanding.classList.toggle("hidden", isApp);
+    viewApp.classList.toggle("hidden", !isApp);
+    navApp.classList.toggle("active", isApp);
+    window.scrollTo(0, 0);
+    if (isApp) document.getElementById("invite-input").focus({ preventScroll: true });
+  }
+  function route() { showView(location.hash === "#app" ? "app" : "landing"); }
+  window.addEventListener("hashchange", route);
+
+  /* 헤더 브랜드 클릭 → 랜딩 맨 위로 */
+  document.getElementById("home-link").addEventListener("click", function (e) {
+    e.preventDefault();
+    if (location.hash) history.pushState(null, "", location.pathname);
+    showView("landing");
+  });
+
+  /* 시작하기 → 월말결산하기 메뉴로 이동 */
+  document.getElementById("start").addEventListener("click", function () {
+    if (location.hash === "#app") showView("app");
+    else location.hash = "app";
+  });
+
+  /* 초대코드 확인 — 데모는 고정 코드, 정식 버전은 서버에서 검증한다 */
+  var DEMO_CODE = "LEDGER";
+  function checkInvite() {
+    var input = document.getElementById("invite-input");
+    var error = document.getElementById("invite-error");
+    if (input.value.trim().toUpperCase() === DEMO_CODE) {
+      error.classList.remove("show");
+      openSection("months-sec");
+    } else {
+      error.classList.add("show");
+      input.focus({ preventScroll: true });
+    }
+  }
+  document.getElementById("invite-btn").addEventListener("click", checkInvite);
+  document.getElementById("invite-input").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") checkInvite();
+  });
+
+  /* 월 동그라미 — 5·6·7월 완료, 8월 진행 가능 */
+  var DONE = { 5: "-291만", 6: "-312만", 7: "-348만" };
+  var monthsEl = document.getElementById("months");
+  for (var m = 1; m <= 12; m++) {
+    var btn = document.createElement("button");
+    btn.className = "month" + (DONE[m] ? " done" : m === 8 ? " now" : "");
+    btn.type = "button";
+    btn.innerHTML = '<span class="circle">' + m + '월</span>' +
+      (DONE[m] ? '<span class="amt mono">' + DONE[m] + '</span>' :
+       m === 8 ? '<span class="amt">진행 가능</span>' : "");
+    if (m === 8) {
+      btn.addEventListener("click", function () { openSection("upload-sec"); });
+    } else {
+      btn.addEventListener("click", function () {
+        showToast("데모에서는 8월 결산만 진행할 수 있습니다");
+      });
+    }
+    monthsEl.appendChild(btn);
+  }
+
+  /* 결산 진행 연출 — 실제 파이프라인의 이벤트 로그 형식을 그대로 따른다 */
+  var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var SCRIPTED = [
+    ["수집", "active", "수집 | 시작 | 카드사 파일 3건, 캡처 3장 읽는 중"],
+    ["수집", "done",   "수집 | 완료 | 거래 42건 정리 (전부 정상)"],
+    ["가공", "active", "가공 | 시작 | 실제 가맹점 찾기·카테고리 분류 중"],
+    ["가공", "done",   "가공 | 완료 | 42건 중 40건 분류, 2건은 확인 필요"],
+    // 검증 둘은 병렬 실행 — 칩은 "검증" 하나로 묶고(둘 다 끝나야 done), 로그에서 분류/금액을 나눠 보여준다
+    ["검증", "active", "분류 검증 | 시작 | 카테고리가 분류 기준에 맞는지 확인 중 (금액 검증과 동시 진행)", 120],
+    ["검증", "active", "금액 검증 | 시작 | 대상 월·금액 부호·해외결제 환산 확인 중 (분류 검증과 동시 진행)", 1100],
+    ["검증", "active", "분류 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요", 150],
+    ["검증", "done", "금액 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요"],
+    ["통합", "active", "통합 | 시작 | 장부·리포트 만드는 중"],
+    ["통합", "done",   "통합 | 완료 | 결산 리포트(PDF)·결제내역 장부(엑셀) 생성"]
+  ];
+  var running = false;
+  document.getElementById("run-btn").addEventListener("click", function () {
+    if (running) return;
+    running = true;
+    var runSec = document.getElementById("run-sec");
+    var log = document.getElementById("runlog");
+    openSection("run-sec");
+    var i = 0;
+    var stepEls = {};
+    runSec.querySelectorAll(".step").forEach(function (s) { stepEls[s.dataset.stage] = s; });
+    function tick() {
+      if (i >= SCRIPTED.length) { finish(); return; }
+      var ev = SCRIPTED[i++];
+      var el = stepEls[ev[0]];
+      el.classList.remove("active", "done");
+      el.classList.add(ev[1]);
+      var line = document.createElement("div");
+      line.innerHTML = '<span class="stage">' + ev[2].split(" | ")[0] + "</span> | " +
+        ev[2].split(" | ").slice(1).join(" | ");
+      log.appendChild(line);
+      setTimeout(tick, REDUCED ? 0 : (ev[3] || 550)); // ev[3] = 이 이벤트 뒤 대기 시간(ms, 기본 550)
+    }
+    function finish() {
+      setTimeout(function () {
+        openSection("result-sec");
+        document.querySelectorAll("#result-sec .bar").forEach(function (bar) {
+          void bar.offsetWidth; // 강제 리플로우 — 0폭에서 transition이 시작되게 (백그라운드 탭에서도 동작)
+          bar.style.width = bar.dataset.w;
+        });
+      }, REDUCED ? 0 : 500);
+    }
+    tick();
+  });
+
+  /* 스크롤 등장 */
+  if (!REDUCED && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0, rootMargin: "0px 0px -10% 0px" });
+    document.querySelectorAll(".reveal").forEach(function (el) {
+      // 앵커 진입·빠른 스크롤로 이미 화면 안(또는 위)에 있는 요소는 바로 보여준다
+      if (el.getBoundingClientRect().top < window.innerHeight * 0.9) el.classList.add("in");
+      else io.observe(el);
+    });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+
+  route(); // 첫 진입 — #app으로 새로고침해도 월말결산하기 뷰가 유지된다
+})();
+</script>
+</body>
+</html>

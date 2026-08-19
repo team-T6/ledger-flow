@@ -55,6 +55,14 @@
 
 ## 10. Branch & PR Rules — [MUST]
 
+### 상시 브랜치 (확정)
+
+- [MUST] 다음 세 브랜치는 **상시 유지하며 삭제하지 않는다**:
+  - `main` — 정본. 개발 기준 브랜치 (기능 개발은 feature 브랜치 → PR 병합)
+  - `demo` — GitHub Pages 데모 배포용. `web/` 변경이 push되면 자동 배포 (`.github/workflows/deploy-pages.yml`)
+  - `production` — 실서버 배포용
+- `demo`·`production`은 **배포 전용 브랜치** — 이 브랜치들에서 직접 기능 개발을 하지 않고, 배포할 내용을 main(또는 feature 브랜치)에서 가져와 반영한다
+
 - [MUST] **기능 개발**은 main에 직접 커밋·push 금지 — feature 브랜치에서 작업하고 PR로 올린다
   - 공통 작업(프로젝트 설정·공통 기능·에이전트 지침·문서 등 도메인 모듈 기능 코드가 아닌 것)은 main 직접 커밋 허용
 - 브랜치 이름 자체는 자유(`agent/collect`, `agent/verify1` 등 목적에 맞게 사용 가능). 다만 **기능 개발용 브랜치를 새로 만드는데 이름이 정해지지 않은 경우**(사용자가 브랜치명을 지정하지 않고 그냥 "기능 개발 시작해줘" 류로 요청한 경우) 기본값은 `feature/{git user.name}`을 쓴다

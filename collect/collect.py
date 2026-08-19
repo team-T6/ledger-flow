@@ -2,24 +2,37 @@
 
 sample_data/hana_card/*.csv(카드사 원본, 월별 1파일)를 읽어 표준 거래 표로 정규화하고,
 collect/result.csv 하나로 합쳐 만든다 (칸 폴더 공용 관례 result.*, AGENTS.md §2).
+컬럼은 interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로 13개 —
+금액은 부호로 지출/수익 구분(지출 음수·수익 양수), 결제자 대신 결제구분(개인결제/법인결제),
+해외결제 식별은 원거래통화·원거래금액(국내 결제는 빈칸), 카테고리는 가공 몫이라 빈칸.
+
 할부 거래는 최초 구매일 기준으로 transaction_id를 한 번만 부여하고, 이후 회차가
-다른 월 파일에 다시 나와도 같은 id를 재사용한다 (지시서 "하는 단계 4" 규칙).
+다른 월 파일에 다시 나와도 같은 id를 재사용한다 (단계 문서 "하는 단계 4" 규칙).
 
 구매항목: 가공(refine) 담당 요청으로 추가된 필드 — 영수증으로 구매 물품까지 확인된
 거래(collect_status=확인됨)만 채우고, 나머지(확인 필요)는 빈칸으로 둔다. 실제 영수증
-OCR이 아직 없어 이 더미 데이터의 구매항목은 사람이 채운 가짜 값이다(명세서 8장 참고).
+OCR이 아직 없어 이 더미 데이터의 구매항목은 사람이 채운 가짜 값이다.
+
+지휘(orchestrator)가 파이프라인에서 부를 땐 run(month)을 쓴다 — 대상 월(YYYY-MM,
+interface-spec.md §실행 파라미터)의 원본 파일 위주로 수집하고, 단계 결과 보고
+(envelope JSON)를 호출 응답으로 반환한다 (보고 파일은 남기지 않는다 — 전달 방식 확정).
+
+사용법: python3 collect/collect.py [YYYY-MM]
 """
 
 import csv
 import glob
 import os
 import random
+import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(BASE_DIR, "..", "sample_data", "hana_card")
 
-OUT_FIELDS = ["transaction_id", "날짜", "지출", "수익", "결제처",
-              "비고", "결제수단", "결제자", "source_type", "collect_status", "구매항목"]
+# interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로
+OUT_FIELDS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
+              "결제수단", "결제구분", "원거래통화", "원거래금액",
+              "source_type", "collect_status", "구매항목"]
 
 # stub.md 예시가 참조하는 거래는 확인됨으로 고정한다 — 견본 문서와 값이 어긋나지 않게.
 PINNED_VERIFIED = {"tx_260202_01", "tx_260224_01", "tx_260210_01"}
@@ -88,15 +101,17 @@ def normalize(files):
                 by_month.setdefault(file_month, []).append({
                     "transaction_id": tx_id,
                     "날짜": date,
-                    "지출": expense,
-                    "수익": 0,
+                    "금액": -expense,  # 스키마 v1 — 지출은 음수
                     "결제처": merchant,
-                    "구매항목": "",
+                    "카테고리": "",     # 가공(refine) 몫 — 자리만 만들어 둔다
                     "비고": memo,
                     "결제수단": "하나카드",
-                    "결제자": "개인카드",
+                    "결제구분": "개인결제",
+                    "원거래통화": "",   # 국내 결제 — 해외결제 여부는 이 컬럼 유무로 판별
+                    "원거래금액": "",
                     "source_type": "card_excel",
                     "collect_status": "확인됨",
+                    "구매항목": "",
                 })
 
     return by_month
@@ -133,14 +148,57 @@ def write_output(by_month):
         writer.writeheader()
         for r in rows:
             writer.writerow(r)
-    return out_path, len(rows)
+    return out_path, rows
+
+
+def build_envelope(rows, message=""):
+    """지휘에게 호출 응답으로 돌려주는 단계 결과 보고 — interface-spec.md "단계 결과 보고" 규격."""
+    total = len(rows)
+    if total == 0:
+        return {
+            "stage": "collect", "status": "empty", "output": "",
+            "counts": {"total": 0, "ok": 0, "flagged": 0}, "flags": [],
+            "message": message or "수집 대상 없음",
+        }
+    flags = []
+    for idx, r in enumerate(rows, start=1):
+        if r["collect_status"] != "확인됨":
+            flags.append({
+                "row": idx, "type": "확인 필요",
+                "reason": f"{r['결제처']} 거래 — {r['collect_status']} 상태",
+            })
+    ok = total - len(flags)
+    return {
+        "stage": "collect",
+        "status": "ok" if not flags else "partial",
+        "output": "collect/result.csv",
+        "counts": {"total": total, "ok": ok, "flagged": len(flags)},
+        "flags": flags,
+        "message": message,
+    }
+
+
+def run(month=None):
+    """파이프라인 진입점 — 대상 월(YYYY-MM) 원본을 정규화해 result.csv를 만들고 envelope를 반환한다.
+
+    month가 None이면 원본 전체를 수집한다 (수동 실행용). 대상 월 위주로 모으되
+    걸러내는 책임은 지지 않는다 — 범위 밖 데이터의 반려는 검증 2 몫 (interface-spec.md §실행 파라미터).
+    """
+    files = sorted(glob.glob(os.path.join(SRC_DIR, "*.csv")))
+    if month:
+        files = [p for p in files if os.path.basename(p).startswith(month)]
+    if not files:
+        return {"out_path": None, "rows": [], "envelope": build_envelope([])}
+
+    by_month = normalize(files)
+    out_path, rows = write_output(by_month)
+    return {"out_path": out_path, "rows": rows, "envelope": build_envelope(rows)}
 
 
 if __name__ == "__main__":
-    files = sorted(glob.glob(os.path.join(SRC_DIR, "*.csv")))
-    if not files:
+    month_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    result = run(month_arg)
+    if result["out_path"] is None:
         print("수집 대상 없음")
     else:
-        by_month = normalize(files)
-        out_path, count = write_output(by_month)
-        print(f"{os.path.basename(out_path)}: {count}건")
+        print(f"{os.path.basename(result['out_path'])}: {len(result['rows'])}건")

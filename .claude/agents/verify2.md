@@ -15,7 +15,7 @@ model: sonnet
 
 - 입력: `refine/result.csv`의 가공된 거래 표 (검증 1과 동일 입력), **CSV**. 스키마는 interface-spec.md "거래 표 스키마 (확정 v1)": `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목
 - 실행 파라미터: 대상 월(`YYYY-MM`) — 지휘가 호출 시 전달한다 (interface-spec.md §실행 파라미터)
-- 출력: 거래 행별 통과/반려 결과 + 이유 한 줄, CSV로 `verify2/result.csv`에 저장 (검증 1의 `verify1/result.csv`와 자리로 구분). 판정·이유 컬럼명 등 세부 모양은 검증 1·통합과 합의 중.
+- 출력: 거래 행별 통과/반려 결과 + 이유 한 줄, CSV로 `verify2/result.csv`에 저장 (검증 1의 `verify1/result.csv`와 자리로 구분). 모양(확정 — interface-spec.md 검증 2 행): 입력 행 뒤에 `verify2_result`(`통과`/`반려`)·`verify2_reason`(반려 사유 한 줄, 통과면 빈칸) 두 열을 덧붙인다. 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
 
 ## 처리 절차
 
@@ -44,6 +44,6 @@ model: sonnet
 ## 알려진 블로커 (임의로 채우지 말 것)
 
 - 대상 월 파라미터가 실행 컨텍스트에 없으면 임의로 추정하지 말고 실패로 보고한다 (전달 방식 자체는 interface-spec.md §실행 파라미터로 확정됨).
-- 검증 결과 CSV의 세부 컬럼 구성(판정·이유 컬럼명, `transaction_id` 대조 방식)은 검증 1·통합과 합의 중이다. 실제 통합 단계 연동 전 확정 여부를 확인한다.
+- ~~검증 결과 CSV의 세부 컬럼 구성~~ — 해소: `verify2_result`·`verify2_reason` 열 덧붙임 방식으로 확정 (interface-spec.md 검증 2 행 · "다음 단계" 확정 로그)
 
 docs/interface-spec.md가 갱신되면 이 문서도 함께 갱신한다.

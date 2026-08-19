@@ -981,27 +981,28 @@ function rowsToCSV(rows) {
   return lines.join("\n") + "\n";
 }
 
-// 결과물(표)이 나올 때마다 collect/result.csv로 저장하고,
-// 같은 시점의 단계 결과 보고를 지휘가 읽을 수 있게 collect/result-report.json으로 전달한다.
+// 결과물(표)이 나올 때마다 collect/result.csv로 저장한다.
+// 단계 결과 보고는 파일로 남기지 않는다 — 파이프라인 실행 시 수집 호출의 응답으로
+// 지휘에게 직접 전달한다 (interface-spec.md §단계 결과 보고 전달 방식 확정).
+// 아래 "보고 만들기" 버튼은 그 보고의 미리보기·복사용이다.
 async function saveResultAndReport() {
   if (!dataRows || dataRows.length === 0) return;
 
   const csv = rowsToCSV(dataRows);
-  const report = buildOrchestratorReport();
 
   try {
     const response = await fetch("/save-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ csv, report }),
+      body: JSON.stringify({ csv }),
     });
     const data = await response.json();
     if (!response.ok || data.error) {
       throw new Error(data.error || response.statusText);
     }
-    showFileMessage("collect/result.csv에 저장하고, 결과 보고를 지휘에 전달했습니다 (collect/result-report.json).", false);
+    showFileMessage("collect/result.csv에 저장했습니다.", false);
   } catch (err) {
-    showFileMessage(`결과 저장/보고 전달에 실패했습니다: ${err.message}`, true);
+    showFileMessage(`결과 저장에 실패했습니다: ${err.message}`, true);
   }
 }
 

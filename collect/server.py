@@ -2,9 +2,10 @@
 
 screen.html을 정적 파일로 내주고, POST /call-agent·POST /read-receipt·POST /convert-table
 요청을 받으면 call-agent.py의 call_agent()·call_agent_with_image()·call_agent_convert_table()을
-그대로 호출해 결과를 돌려준다. POST /save-result는 collect/result.csv(산출물)와
-collect/result-report.json(지휘에게 줄 단계 결과 보고, interface-spec.md §단계 결과 보고 형식)을
-디스크에 그대로 써준다.
+그대로 호출해 결과를 돌려준다. POST /save-result는 collect/result.csv(산출물)를
+디스크에 써준다. 단계 결과 보고는 파일로 남기지 않는다 — 보고는 파이프라인 실행 시
+수집 호출의 응답(반환값)으로 지휘에게 직접 전달한다(interface-spec.md §단계 결과 보고
+전달 방식 확정). 이 화면·서버는 데이터 준비 도구다.
 """
 
 import base64
@@ -89,13 +90,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _handle_save_result(self):
         body = self._read_json_body()
         csv_text = body.get("csv", "")
-        report = body.get("report", {})
 
         try:
             (BASE_DIR / "result.csv").write_text(csv_text, encoding="utf-8")
-            (BASE_DIR / "result-report.json").write_text(
-                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
             payload = {"ok": True}
             status = 200
         except Exception as e:

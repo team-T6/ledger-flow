@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>카테고리 분류 검증 담당</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   body {
     background: #ffffff;
@@ -180,7 +181,56 @@
     }
   }
 
-  // 끌어다 놓기 — 연습용이라 파일 내용을 읽지 않고 이름만 표시한다
+  // 끌어다 놓기 — 파일 내용을 읽어 검증할 글 칸(inputText)에 채워 넣는다
+  // 받는 재료는 CSV(verify1/input-sample.md 기준)가 정본이지만,
+  // 담당자가 손에 쥔 xlsx/txt/md도 바로 시험해볼 수 있게 함께 지원한다
+  function fileExt(name) {
+    var i = name.lastIndexOf('.');
+    return i === -1 ? '' : name.slice(i + 1).toLowerCase();
+  }
+
+  function loadTextFile(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      inputText.value = e.target.result;
+      fileName.textContent = file.name + ' — 읽음';
+    };
+    reader.onerror = function () {
+      fileName.textContent = file.name + ' — 읽기 실패';
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function loadExcelFile(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        inputText.value = XLSX.utils.sheet_to_csv(firstSheet);
+        fileName.textContent = file.name + ' — 읽음 (' + workbook.SheetNames[0] + ' 시트)';
+      } catch (err) {
+        fileName.textContent = file.name + ' — 엑셀 해석 실패: ' + err.message;
+      }
+    };
+    reader.onerror = function () {
+      fileName.textContent = file.name + ' — 읽기 실패';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function handleDroppedFile(file) {
+    var ext = fileExt(file.name);
+    fileName.textContent = file.name + ' — 읽는 중...';
+    if (ext === 'csv' || ext === 'txt' || ext === 'md') {
+      loadTextFile(file);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      loadExcelFile(file);
+    } else {
+      fileName.textContent = file.name + ' — 지원하지 않는 형식입니다 (csv/txt/md/xlsx만 가능)';
+    }
+  }
+
   drop.addEventListener('dragover', function (e) {
     e.preventDefault();
     drop.classList.add('over');
@@ -192,7 +242,7 @@
     e.preventDefault();
     drop.classList.remove('over');
     if (e.dataTransfer.files.length > 0) {
-      fileName.textContent = e.dataTransfer.files[0].name;
+      handleDroppedFile(e.dataTransfer.files[0]);
     }
   });
 

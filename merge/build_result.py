@@ -11,6 +11,7 @@ refine/result.*·verify1/result.*가 실제로 생기면 TRANSACTIONS를 그쪽�
 사용법: python3 merge/build_result.py
 """
 
+import json
 import os
 
 from openpyxl import Workbook
@@ -35,6 +36,9 @@ XLSX_PATH = os.path.join(BASE_DIR, "result.xlsx")
 PDF_PATH = os.path.join(BASE_DIR, "result.pdf")
 FONT_PATH = os.path.join(BASE_DIR, "fonts", "NanumGothic-Regular.ttf")
 FONT_NAME = "NanumGothic"
+
+# 지휘에게 보내는 단계 결과 보고의 output 필드 — repo 기준 상대 경로 (interface-spec.md 예시와 동일 관례)
+OUTPUT_PATHS = ["merge/result.xlsx", "merge/result.pdf"]
 
 LEDGER_COLUMNS = ["날짜", "지출", "수익", "결제처", "카테고리", "비고", "결제수단", "결제자"]
 
@@ -79,16 +83,39 @@ TRANSACTIONS = [
 
 
 def split_transactions(transactions):
-    """verify1·verify2 중 하나라도 반려면 확인 필요 목록으로 뺀다 (재시도 없음)."""
+    """verify1·verify2 중 하나라도 반려면 확인 필요 목록으로 뺀다 (재시도 없음).
+    flagged_rows에는 지휘 보고의 flags[].row로 쓸 1-기준 행 번호(row)를 함께 담는다."""
     ok_rows, flagged_rows = [], []
-    for row in transactions:
+    for idx, row in enumerate(transactions, start=1):
         if row["verify1"] == "반려":
-            flagged_rows.append({**row, "reason": row.get("verify1_reason", "")})
+            flagged_rows.append({**row, "row": idx, "reason": row.get("verify1_reason", "")})
         elif row["verify2"] == "반려":
-            flagged_rows.append({**row, "reason": row["verify2_reason"]})
+            flagged_rows.append({**row, "row": idx, "reason": row["verify2_reason"]})
         else:
             ok_rows.append(row)
     return ok_rows, flagged_rows
+
+
+def build_envelope(total, ok_rows, flagged_rows, failed=False, message=""):
+    """지휘(orchestrator)에게 돌려주는 단계 결과 보고 — interface-spec.md "단계 결과 보고" 규격.
+    status 어휘 4개 고정: ok(정상) · empty(대상 없음) · partial(확인 필요 건 있음) · failed(단계 실패).
+    output은 empty·failed일 때 빈 값(interface-spec.md "단계 결과 보고" 필드 설명)."""
+    if failed:
+        status, output = "failed", []
+    elif total == 0:
+        status, output = "empty", []
+    else:
+        status = "ok" if not flagged_rows else "partial"
+        output = OUTPUT_PATHS
+
+    return {
+        "stage": "merge",
+        "status": status,
+        "output": output,
+        "counts": {"total": total, "ok": len(ok_rows), "flagged": len(flagged_rows)},
+        "flags": [{"row": r["row"], "type": "확인 필요", "reason": r["reason"]} for r in flagged_rows],
+        "message": message,
+    }
 
 
 def build_ledger(ok_rows, xlsx_path):
@@ -314,23 +341,37 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path):
 
 
 def run():
-    """xlsx·pdf를 실제로 만들고, 화면 미리보기에 쓸 결과를 함께 돌려준다."""
+    """xlsx·pdf를 실제로 만들고, 화면 미리보기·지휘 보고에 쓸 결과를 함께 돌려준다."""
+    total = len(TRANSACTIONS)
+    if total == 0:
+        empty_envelope = build_envelope(0, [], [], message="확인 대상 없음")
+        return {"ok_rows": [], "flagged_rows": [], "summary": summarize([]), "envelope": empty_envelope}
+
     ok_rows, flagged_rows = split_transactions(TRANSACTIONS)
     summary = summarize(ok_rows)
-    build_ledger(ok_rows, XLSX_PATH)
-    build_report(ok_rows, flagged_rows, summary, PDF_PATH)
-    return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary}
+    try:
+        build_ledger(ok_rows, XLSX_PATH)
+        build_report(ok_rows, flagged_rows, summary, PDF_PATH)
+    except Exception as e:
+        envelope = build_envelope(total, ok_rows, flagged_rows, failed=True, message=f"산출물 생성 실패: {e}")
+        return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary, "envelope": envelope}
+
+    envelope = build_envelope(total, ok_rows, flagged_rows)
+    return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary, "envelope": envelope}
 
 
 def main():
-    if not TRANSACTIONS:
+    result = run()
+    envelope = result["envelope"]
+    if envelope["status"] == "empty":
         print("확인 대상 없음")
         return
 
-    result = run()
     print(f"엑셀 회계장부: {XLSX_PATH}")
     print(f"PDF 결산 리포트: {PDF_PATH}")
     print(f"장부 반영 {len(result['ok_rows'])}건 · 확인 필요 {len(result['flagged_rows'])}건")
+    print("지휘에게 보내는 단계 결과 보고:")
+    print(json.dumps(envelope, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

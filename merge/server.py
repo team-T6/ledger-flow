@@ -120,6 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                     "by_method": result["summary"]["by_method"],
                     "by_payer": result["summary"]["by_payer"],
                 },
+                "envelope": result["envelope"],
             })
         except Exception as e:
             self._send_json(500, {"error": str(e)})

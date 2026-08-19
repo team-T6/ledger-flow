@@ -2,98 +2,177 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>검증2 담당 화면</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기간·금액 검증 담당</title>
 <style>
   body {
-    font-family: -apple-system, "Apple SD Gothic Neo", sans-serif;
-    max-width: 800px;
-    margin: 40px auto;
-    padding: 0 20px;
-    color: #222;
+    background: #ffffff;
+    color: #000000;
+    font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    margin: 0;
+    padding: 32px 24px 64px;
   }
-  h1 {
-    font-size: 20px;
-    border-bottom: 2px solid #333;
-    padding-bottom: 8px;
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  .notice {
+    border: 2px solid #000000;
+    padding: 12px 16px;
+    margin-bottom: 28px;
+    font-size: 16px;
   }
-  h2 {
-    font-size: 15px;
-    color: #555;
-    margin-top: 32px;
-  }
-  .banner {
-    background: #fff8e1;
-    border: 1px solid #f0c36d;
-    color: #7a5c00;
-    padding: 8px 12px;
-    font-size: 13px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-  }
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    font-family: monospace;
-    font-size: 13px;
-    padding: 8px;
-  }
-  button {
-    margin-top: 10px;
-    padding: 8px 16px;
-    font-size: 14px;
+
+  h1 { font-size: 30px; margin: 0 0 28px; }
+  h2 { font-size: 21px; margin: 32px 0 12px; }
+
+  /* 입력 자리 — 파일을 끌어다 놓는 칸 */
+  .drop {
+    border: 2px dashed #666666;
+    padding: 44px 20px;
+    text-align: center;
+    color: #333333;
     cursor: pointer;
   }
-  table {
+  .drop.over { border-color: #000000; background: #f2f2f2; }
+  .drop .file { margin-top: 10px; font-weight: bold; }
+
+  /* 입력 칸 — 검증할 글을 직접 넣는 칸 */
+  #inputText {
     width: 100%;
-    border-collapse: collapse;
-    margin-top: 8px;
-    font-size: 14px;
+    box-sizing: border-box;
+    margin-top: 12px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 15px;
+    border: 1px solid #999999;
   }
-  th, td {
-    border: 1px solid #ddd;
-    padding: 6px 10px;
-    text-align: left;
+
+  button {
+    font-family: inherit;
+    font-size: 18px;
+    padding: 12px 32px;
+    margin-top: 20px;
+    border: 2px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    cursor: pointer;
   }
-  th {
-    background: #f5f5f5;
+  button:hover { background: #000000; color: #ffffff; }
+
+  #result { margin-top: 12px; }
+  .hidden { display: none; }
+
+  #status {
+    margin-top: 20px;
+    font-weight: bold;
+    color: #0033cc;
   }
-  .pass { color: #1a7f37; font-weight: bold; }
-  .reject { color: #c0392b; font-weight: bold; }
-  .note {
-    font-size: 12px;
-    color: #888;
-    margin-top: 8px;
+
+  #resultText {
+    border: 1px solid #999999;
+    background: #f9f9f9;
+    padding: 16px 18px;
+    font-size: 16px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
-  #result-section {
-    display: none;
-  }
+
+  .error { color: #c00000; font-weight: bold; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="banner">연습용 화면 - 아직 실제로 처리하지 않고, 미리 넣어둔 결과를 보여줍니다</div>
+  <p class="notice">실제로 담당자를 부릅니다</p>
 
-<h1>검증2 담당 화면</h1>
+  <h1>기간·금액 검증 담당</h1>
 
-<h2>확인할 거래 내역</h2>
-<textarea id="input-area" rows="6" placeholder="여기에 거래 내역을 여러 줄 붙여넣으세요"></textarea>
+  <!-- 입력 자리 -->
+  <div class="drop" id="drop">
+    가공된 거래 표 파일을 이곳에 끌어다 놓으세요
+    <div class="file" id="fileName"></div>
+  </div>
+  <textarea id="inputText" rows="10" placeholder="검증할 글을 이곳에 붙여넣으세요"></textarea>
 
-<button id="check-btn" onclick="document.getElementById('result-section').style.display='block'">확인하기</button>
+  <!-- 누르는 자리 -->
+  <button id="runBtn">검증하기</button>
 
-<div id="result-section">
-<h2>결과</h2>
-<p class="note">(verify2 검증 결과 - input-sample.md 기준)</p>
-<table>
-  <tr><th>항목</th><th>결과</th><th>이유</th></tr>
-  <tr><td>2026-02-09 교촌치킨</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
-  <tr><td>2026-02-13 이마트 성수점</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
-  <tr><td>2026-02-17 넷플릭스</td><td class="pass">통과</td><td>대상 월 맞음, 지출만 단일 기입됨 (해외결제 환산 여부는 자료에 없어 확인 불가)</td></tr>
-  <tr><td>2026-03-01 올리브영</td><td class="reject">반려</td><td>대상 월 아님 (날짜: 2026-03-01)</td></tr>
-  <tr><td>2026-02-15 교촌치킨</td><td class="reject">반려</td><td>지출/수익 동시 기입 (지출 22,805 / 수익 22,805)</td></tr>
-</table>
-<p class="note">※ 해외결제 환산 기준: input-sample.md에 해외결제 여부·원거래통화·원거래금액 컬럼이 없어 전체 행에 대해 판정 불가 (자료에 없는 내용을 임의로 채우지 않음).</p>
-<p class="note">출처: verify2/result.md</p>
+  <!-- 부르는 동안 -->
+  <p id="status" class="hidden">부르는 중…</p>
+
+  <!-- 결과 자리 -->
+  <div id="result" class="hidden">
+    <h2>판정 결과</h2>
+    <div id="resultText"></div>
+  </div>
+
 </div>
 
+<script>
+  var drop = document.getElementById('drop');
+  var fileName = document.getElementById('fileName');
+  var inputText = document.getElementById('inputText');
+  var runBtn = document.getElementById('runBtn');
+  var statusEl = document.getElementById('status');
+  var result = document.getElementById('result');
+  var resultText = document.getElementById('resultText');
+
+  // 끌어다 놓기 — 파일 내용을 읽지 않고 이름만 표시한다
+  drop.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    drop.classList.add('over');
+  });
+  drop.addEventListener('dragleave', function () {
+    drop.classList.remove('over');
+  });
+  drop.addEventListener('drop', function (e) {
+    e.preventDefault();
+    drop.classList.remove('over');
+    if (e.dataTransfer.files.length > 0) {
+      fileName.textContent = e.dataTransfer.files[0].name;
+    }
+  });
+
+  // verify2/server.py가 열어주는 로컬 주소 — 열쇠는 여기(화면)가 아니라
+  // call-agent.py 쪽에서만 .env를 읽어 쓴다
+  var SERVER_URL = 'http://localhost:8788/call-agent';
+
+  runBtn.addEventListener('click', function () {
+    var text = inputText.value.trim();
+
+    result.classList.add('hidden');
+    resultText.classList.remove('error');
+    statusEl.classList.remove('hidden');
+    runBtn.disabled = true;
+
+    fetch(SERVER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          resultText.classList.add('error');
+          resultText.textContent = '오류: ' + data.error;
+        } else {
+          resultText.textContent = data.result;
+        }
+        result.classList.remove('hidden');
+      })
+      .catch(function (err) {
+        resultText.classList.add('error');
+        resultText.textContent = '호출 실패: ' + err.message + ' (verify2/server.py가 실행 중인지 확인하세요)';
+        result.classList.remove('hidden');
+      })
+      .finally(function () {
+        statusEl.classList.add('hidden');
+        runBtn.disabled = false;
+      });
+  });
+</script>
 </body>
 </html>

@@ -26,11 +26,130 @@
     font-size: 28px;
     margin-bottom: 24px;
   }
+  h2 { font-size: 20px; margin: 28px 0 12px 0; }
   label {
     display: block;
     margin-bottom: 8px;
     font-weight: bold;
   }
+
+  /* 탭 */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #000;
+    margin-bottom: 24px;
+  }
+  .tab {
+    font-size: 16px;
+    padding: 10px 24px;
+    background: #ffffff;
+    color: #000000;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+  }
+  .tab:hover { background: #eeeeee; }
+  .tab.active {
+    background: #000000;
+    color: #ffffff;
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* 가공 현황 — 실행 */
+  .run-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .run-bar label { margin-bottom: 0; }
+  input[type="month"] {
+    font-size: 16px;
+    font-family: inherit;
+    padding: 8px 10px;
+    border: 1px solid #999;
+  }
+
+  /* 단계 타임라인 */
+  .stage-card {
+    border: 1px solid #ccc;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+  }
+  .stage-card.parallel { margin-left: 24px; border-left: 3px solid #000; }
+  .stage-head {
+    display: grid;
+    grid-template-columns: 90px 110px 1fr;
+    gap: 8px 16px;
+    align-items: baseline;
+  }
+  .stage-name { font-weight: bold; }
+  .badge {
+    display: inline-block;
+    font-size: 13px;
+    padding: 2px 12px;
+    border-radius: 999px;
+    border: 1px solid #999;
+    color: #888;
+    background: #fff;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .badge.running { border-color: #000; color: #000; }
+  .badge.ok      { background: #000; color: #fff; border-color: #000; }
+  .badge.empty   { background: #f2f2f2; color: #000; border-color: #999; }
+  .badge.partial { background: #fff; color: #000; border-color: #000; border-style: dashed; }
+  .badge.failed  { background: #fff; color: #000; border-color: #000; text-decoration: line-through; }
+  .stage-detail { font-size: 14px; color: #333; }
+  .stage-detail .memo { color: #777; }
+  .stage-flags { margin: 8px 0 0 0; }
+  .stage-flags summary { font-size: 13px; color: #333; cursor: pointer; }
+  .stage-flags table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .stage-flags th, .stage-flags td {
+    border: 1px solid #999;
+    padding: 4px 8px;
+    font-size: 13px;
+    text-align: left;
+  }
+  .stage-flags th { background: #f2f2f2; }
+
+  /* 실행 로그 */
+  #log-box {
+    border: 1px solid #ccc;
+    background: #fafafa;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    padding: 10px 14px;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: #444;
+  }
+
+  /* 리포트 */
+  .downloads { margin: 16px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+  .downloads a {
+    display: inline-block;
+    padding: 10px 20px;
+    border: 1px solid #000;
+    color: #000;
+    text-decoration: none;
+    font-size: 15px;
+  }
+  .downloads a:hover { background: #eeeeee; }
+
+  /* 기존 데모 (결과 보고 확인) */
+  .legacy-demo { margin-top: 40px; border-top: 1px dashed #bbb; padding-top: 8px; }
+  .legacy-demo > summary { font-size: 15px; color: #555; cursor: pointer; margin-bottom: 12px; }
   .preset-groups {
     margin-bottom: 12px;
   }
@@ -76,46 +195,54 @@
     border: 1px solid #999;
     margin-bottom: 16px;
   }
-  button {
+  button.primary {
     font-size: 16px;
     padding: 10px 24px;
     background: #000000;
     color: #ffffff;
     border: none;
     cursor: pointer;
-    margin-bottom: 24px;
   }
-  button:hover {
-    background: #333333;
-  }
-  #result {
+  button.primary:hover { background: #333333; }
+  button.primary:disabled { background: #aaaaaa; cursor: default; }
+
+  .md-box {
     border: 1px solid #ccc;
     padding: 16px;
     min-height: 60px;
   }
-  #result table {
+  .md-box table {
     border-collapse: collapse;
     width: 100%;
     margin: 12px 0 20px 0;
   }
-  #result th, #result td {
+  .md-box th, .md-box td {
     border: 1px solid #999;
     padding: 6px 10px;
     text-align: left;
     font-size: 15px;
   }
-  #result th {
+  .md-box th {
     background: #f2f2f2;
   }
-  #result h1, #result h2, #result h3 {
+  .md-box h1, .md-box h2, .md-box h3 {
     margin-top: 20px;
     margin-bottom: 8px;
   }
-  #result p {
+  .md-box h1 { font-size: 22px; }
+  .md-box h2 { font-size: 17px; }
+  .md-box p {
     margin: 8px 0;
   }
-  #result ul {
+  .md-box ul {
     margin: 8px 0;
+  }
+  .md-box blockquote {
+    background: #f2f2f2;
+    border-left: 4px solid #000;
+    margin: 8px 0;
+    padding: 8px 12px;
+    font-size: 14px;
   }
   .placeholder {
     color: #888888;
@@ -124,24 +251,244 @@
 </head>
 <body>
 
-<div class="notice">확인하기를 누르면 지휘 담당자(Claude)를 실제로 불러 결과를 보여줍니다 — 먼저 <code>python3 orchestrator/server.py</code>를 실행해 두세요</div>
+<div class="notice">지휘 대시보드 — 먼저 <code>python3 orchestrator/server.py</code>를 실행한 뒤 <code>http://localhost:8788</code>로 여세요</div>
 
 <h1>지휘 담당</h1>
 
-<label for="report-input">단계 결과 보고 형식</label>
-<div class="preset-groups" id="preset-groups"></div>
-<textarea id="report-input"></textarea>
+<div class="tabs">
+  <button class="tab active" data-panel="panel-link">연동</button>
+  <button class="tab" data-panel="panel-status">가공 현황</button>
+  <button class="tab" data-panel="panel-report">리포트</button>
+</div>
 
-<button id="check-btn">확인하기</button>
+<!-- ============ 연동 ============ -->
+<div class="panel active" id="panel-link">
+  <h2>데이터 출처</h2>
+  <p>현재 버전은 repo의 테스트용 가짜 데이터 <code>sample_data/hana_card/</code>(카드사 이용내역 CSV)를 수집 입력으로 사용합니다.</p>
+  <p class="placeholder">Google 로그인으로 Drive의 카드사 파일을 가져오는 연동은 준비 중입니다 — 연동 시에도 계정·토큰은 브라우저에만 두고 서버에는 저장하지 않습니다.</p>
+</div>
 
-<div id="result"><span class="placeholder">확인하기 버튼을 누르면 결과가 여기에 표시됩니다.</span></div>
+<!-- ============ 가공 현황 ============ -->
+<div class="panel" id="panel-status">
+  <div class="run-bar">
+    <label for="month-input">결산 대상 월</label>
+    <input type="month" id="month-input">
+    <button class="primary" id="run-btn">실행</button>
+    <span id="run-note" class="placeholder"></span>
+  </div>
+
+  <div id="timeline"></div>
+
+  <h2>실행 기록</h2>
+  <div id="log-box"><span class="placeholder">실행하면 logs/run_*/run.log 내용이 여기에 흐릅니다.</span></div>
+
+  <details class="legacy-demo">
+    <summary>결과 보고 확인 (단계 결과 보고 JSON을 붙여넣어 지휘 담당자에게 확인)</summary>
+
+    <label for="report-input">단계 결과 보고 형식</label>
+    <div class="preset-groups" id="preset-groups"></div>
+    <textarea id="report-input"></textarea>
+
+    <button class="primary" id="check-btn">확인하기</button>
+
+    <div id="result" class="md-box" style="margin-top:16px"><span class="placeholder">확인하기 버튼을 누르면 결과가 여기에 표시됩니다.</span></div>
+  </details>
+</div>
+
+<!-- ============ 리포트 ============ -->
+<div class="panel" id="panel-report">
+  <div class="downloads" id="downloads" style="display:none">
+    <a href="artifacts/result.xlsx">회계장부 내려받기 (result.xlsx)</a>
+    <a href="artifacts/result.pdf">결산 리포트 내려받기 (result.pdf)</a>
+  </div>
+  <div id="summary" class="md-box"><span class="placeholder">파이프라인이 끝나면 최종 결과 요약(orchestrator/result-summary.md)이 여기에 표시됩니다.</span></div>
+</div>
 
 <script>
-// 통합 서버(server.py)든 개별 서버(orchestrator/server.py)든 화면을 열어준
-// 서버의 call-agent 경로로 보낸다 — 열쇠는 여기(화면)가 아니라
-// call-agent.py 쪽에서만 .env를 읽어 쓴다
+// 화면을 열어준 서버의 경로로 상대 호출한다 — 열쇠는 여기(화면)가 아니라
+// call-agent.py / run-pipeline.py 쪽에서만 .env를 읽어 쓴다
 const SERVER_URL = "call-agent";
 
+// ---------- 탭 ----------
+document.querySelectorAll(".tab").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(tab.dataset.panel).classList.add("active");
+  });
+});
+
+// ---------- 가공 현황: 단계 타임라인 ----------
+const PIPELINE_STAGES = [
+  { key: "collect", label: "수집",   parallel: false },
+  { key: "refine",  label: "가공",   parallel: false },
+  { key: "verify1", label: "검증 1", parallel: true  },
+  { key: "verify2", label: "검증 2", parallel: true  },
+  { key: "merge",   label: "통합",   parallel: false },
+];
+
+const timelineEl = document.getElementById("timeline");
+PIPELINE_STAGES.forEach(function (s) {
+  const card = document.createElement("div");
+  card.className = "stage-card" + (s.parallel ? " parallel" : "");
+  card.innerHTML =
+    '<div class="stage-head">' +
+      '<span class="stage-name">' + s.label + '</span>' +
+      '<span class="badge" id="badge-' + s.key + '">대기</span>' +
+      '<span class="stage-detail" id="detail-' + s.key + '"></span>' +
+    '</div>' +
+    '<div id="flags-' + s.key + '"></div>';
+  timelineEl.appendChild(card);
+});
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function resetTimeline() {
+  PIPELINE_STAGES.forEach(function (s) {
+    const badge = document.getElementById("badge-" + s.key);
+    badge.className = "badge";
+    badge.textContent = "대기";
+    document.getElementById("detail-" + s.key).innerHTML = "";
+    document.getElementById("flags-" + s.key).innerHTML = "";
+  });
+}
+
+function applyEvent(event) {
+  // 로그 흐름
+  const logBox = document.getElementById("log-box");
+  if (logBox.querySelector(".placeholder")) logBox.textContent = "";
+  const c = event.counts
+    ? "total=" + event.counts.total + ", ok=" + event.counts.ok + ", flagged=" + event.counts.flagged
+    : "";
+  logBox.textContent += event.time + " | " + event.stage_label + " | " + event.state + " | " + c + " | " + (event.memo || "") + "\n";
+  logBox.scrollTop = logBox.scrollHeight;
+
+  // 단계 카드
+  if (!PIPELINE_STAGES.some(s => s.key === event.stage)) return;
+  const badge = document.getElementById("badge-" + event.stage);
+  const detail = document.getElementById("detail-" + event.stage);
+
+  if (event.state === "시작") {
+    badge.className = "badge running";
+    badge.textContent = "진행 중…";
+    return;
+  }
+  if (event.state === "실패" && !event.envelope) {
+    // 1차 실패 → 재시도 진행 중 (확정 envelope는 재시도 후에 온다)
+    badge.className = "badge running";
+    badge.textContent = "재시도 중…";
+    detail.innerHTML = '<span class="memo">1차 실패: ' + escapeHtml(event.memo || "") + '</span>';
+    return;
+  }
+  if (!event.envelope) return;
+
+  // 확정 결과
+  const env = event.envelope;
+  badge.className = "badge " + env.status;
+  badge.textContent = env.status;
+  const outputs = Array.isArray(env.output) ? env.output.join(", ") : env.output;
+  let text = "";
+  if (env.counts) {
+    text += env.counts.total + "건 (정상 " + env.counts.ok + " / 확인필요 " + env.counts.flagged + ")";
+  }
+  if (outputs) text += ' · <span class="memo">' + escapeHtml(outputs) + '</span>';
+  if (env.message) text += ' · <span class="memo">' + escapeHtml(env.message) + '</span>';
+  detail.innerHTML = text;
+
+  // flags — 어느 행에서 무엇이 걸렸는지 카드에서 바로 펼쳐본다
+  if (env.flags && env.flags.length > 0) {
+    let rows = env.flags.map(f =>
+      "<tr><td>" + escapeHtml(f.row ?? "-") + "</td><td>" + escapeHtml(f.type) + "</td><td>" + escapeHtml(f.reason) + "</td></tr>"
+    ).join("");
+    document.getElementById("flags-" + event.stage).innerHTML =
+      '<details class="stage-flags"><summary>확인 필요 ' + env.flags.length + '건 펼쳐보기</summary>' +
+      '<table><tr><th>행 번호</th><th>유형</th><th>사유</th></tr>' + rows + '</table></details>';
+  }
+}
+
+// ---------- 가공 현황: 실행 + 폴링 ----------
+let lastSeq = 0;
+let polling = null;
+
+function poll() {
+  fetch("runs/current?since=" + lastSeq)
+    .then(res => res.json())
+    .then(function (data) {
+      data.events.forEach(function (event) {
+        lastSeq = Math.max(lastSeq, event.seq);
+        applyEvent(event);
+      });
+      if (!data.running) {
+        clearInterval(polling);
+        polling = null;
+        document.getElementById("run-btn").disabled = false;
+        const note = document.getElementById("run-note");
+        note.textContent = data.error ? "실행기 오류: " + data.error : "실행 종료";
+        if (data.summary_ready) loadSummary();
+      }
+    })
+    .catch(function () { /* 서버 순단은 다음 폴링에서 회복 */ });
+}
+
+document.getElementById("run-btn").addEventListener("click", function () {
+  const month = document.getElementById("month-input").value;
+  const note = document.getElementById("run-note");
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    note.textContent = "결산 대상 월을 선택하세요";
+    return;
+  }
+  const btn = this;
+  btn.disabled = true;
+  note.textContent = "";
+  fetch("runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ month: month })
+  })
+    .then(res => res.json().then(data => ({ ok: res.ok, data: data })))
+    .then(function (r) {
+      if (!r.ok) {
+        note.textContent = r.data.error || "실행 시작 실패";
+        btn.disabled = false;
+        return;
+      }
+      lastSeq = 0;
+      resetTimeline();
+      document.getElementById("log-box").innerHTML = '<span class="placeholder">실행 중…</span>';
+      note.textContent = "실행 중 (" + month + ")";
+      polling = setInterval(poll, 1500);
+    })
+    .catch(function (err) {
+      note.textContent = "호출 실패: " + err.message + " (orchestrator/server.py가 실행 중인지 확인하세요)";
+      btn.disabled = false;
+    });
+});
+
+// ---------- 리포트 ----------
+function loadSummary() {
+  fetch("summary")
+    .then(function (res) {
+      if (!res.ok) throw new Error("요약 없음");
+      return res.text();
+    })
+    .then(function (md) {
+      document.getElementById("summary").innerHTML = renderMarkdown(md);
+      // 산출물 다운로드는 이번 요약이 통합 산출물을 실었을 때만 노출
+      // (파일 존재만 보면 이전 실행의 잔재가 이번 결과처럼 보인다)
+      const hasArtifacts = md.includes("merge/result.xlsx");
+      document.getElementById("downloads").style.display = hasArtifacts ? "flex" : "none";
+    })
+    .catch(function () { /* 요약이 아직 없으면 placeholder 유지 */ });
+}
+loadSummary(); // 이전 실행의 요약이 남아 있으면 바로 보여준다
+
+// ---------- 기존 데모: 단계 x 상태 프리셋 ----------
 // 단계 x 상태(4개 고정 어휘: ok/empty/partial/failed) 조합별 "단계 결과 보고" 프리셋
 const STAGES = [
   { key: "collect", label: "수집", output: "collect/202608_transactions.csv", total: 128, flagType: "오류", flagReason: "OCR 금액 인식 실패", failMessage: "카드사 원본 파일 형식을 인식하지 못함" },
@@ -214,22 +561,16 @@ function renderPresets() {
 renderPresets();
 document.querySelector('.chip[data-stage="collect"][data-status="ok"]').click();
 
-// 아주 단순한 마크다운 -> HTML 변환 (제목 / 표 / 목록 / 문단만 처리)
+// 아주 단순한 마크다운 -> HTML 변환 (제목 / 표 / 목록 / 인용 / 문단만 처리)
 function renderMarkdown(md) {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   let html = "";
   let i = 0;
 
-  function escapeHtml(text) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
   function inline(text) {
     text = escapeHtml(text);
     text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+    text = text.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
     return text;
   }
 
@@ -240,6 +581,12 @@ function renderMarkdown(md) {
       const level = line.match(/^#+/)[0].length;
       const text = line.replace(/^#{1,3}\s+/, "");
       html += `<h${level}>${inline(text)}</h${level}>\n`;
+      i++;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      html += `<blockquote>${inline(line.replace(/^>\s?/, ""))}</blockquote>\n`;
       i++;
       continue;
     }

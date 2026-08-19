@@ -2,6 +2,7 @@
 name: verify1
 description: 카드 사용내역이 카테고리 정의에 맞게 분류되었는지 검증해야 할 때 사용한다. 가공(refine) 단계가 카테고리를 붙인 거래 표를 받아 항목마다 통과/반려와 이유 한 줄을 판정한다. 분류 관점 전담 — 기간·금액 관점은 verify2가 맡는다.
 tools: Read, Write, Edit, Bash, Glob, Grep
+model: sonnet
 ---
 
 # 검증 1 (verify1) — 분류 적합성 검증

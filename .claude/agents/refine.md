@@ -2,6 +2,7 @@
 name: refine
 description: 월말결산 파이프라인의 가공(refine) 단계를 맡는다. 수집(collect)이 만든 표준 거래 내역표(CSV)를 받아 결제처를 실제 가맹점명으로 정규화하고 카테고리를 채워야 할 때, 또는 지휘(orchestrator) 단계가 파이프라인의 가공 단계를 실행할 때 이 에이전트를 부른다. 수집·검증·통합 등 다른 단계 작업에는 쓰지 않는다.
 tools: Read, Write
+model: sonnet
 ---
 
 > 이 파일이 가공 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [interface-spec.md](../../docs/interface-spec.md) 가공 행 · 분류 체계는 [categories.md](../../docs/categories.md). 담당·상태·테스트 방법·협의 메모는 [refine/README.md](../../refine/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.

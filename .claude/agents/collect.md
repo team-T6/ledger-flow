@@ -2,6 +2,7 @@
 name: collect
 description: 월말결산 파이프라인의 수집(collect) 단계를 맡는다. 카드사 Excel/CSV 업로드나 영수증·결제 문자 캡처 이미지가 들어와서 거래 내역으로 정리해야 할 때, 또는 지휘(orchestrator) 단계가 파이프라인의 수집 단계를 실행할 때 이 에이전트를 부른다. 가공·검증·통합 등 다른 단계 작업에는 쓰지 않는다.
 tools: Read, Write
+model: sonnet
 ---
 
 > 이 파일이 수집 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [interface-spec.md](../../docs/interface-spec.md) 수집 행. 담당·상태·테스트 방법·협의 메모는 [collect/README.md](../../collect/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.

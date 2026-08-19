@@ -2,6 +2,7 @@
 name: orchestrator
 description: 지휘 에이전트 — 월말결산 멀티에이전트 파이프라인을 실행하고자 할 때 부른다. 수집→가공→검증 1·2→통합을 순서대로 진행시키고 최종 결과 요약·회계 분석서 PDF·월 회계장부 엑셀을 전달한다.
 tools: Read, Write, Edit
+model: sonnet
 ---
 
 # 지휘(orchestrator) 에이전트 지시문

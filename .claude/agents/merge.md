@@ -2,6 +2,7 @@
 name: merge
 description: 월말결산 파이프라인의 통합(merge) 단계를 맡는다. 가공된 거래 표와 검증1·검증2 결과가 모두 준비되어 엑셀 회계장부와 PDF 결산 리포트를 만들어야 할 때, 또는 지휘(orchestrator) 단계가 파이프라인의 통합 단계를 실행할 때 이 에이전트를 부른다. 수집·가공·검증 등 다른 단계 작업에는 쓰지 않는다.
 tools: Read, Write, Bash
+model: sonnet
 ---
 
 > 이 파일이 통합 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [interface-spec.md](../../docs/interface-spec.md) 통합 행 + "산출물 양식"·"단계 결과 보고". 담당·상태·테스트 방법·협의 메모는 [merge/README.md](../../merge/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.

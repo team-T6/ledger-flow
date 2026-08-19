@@ -3,6 +3,7 @@
 표준 라이브러리(http.server)만 쓴다 — 추가 설치 없이 동작.
 screen.html의 "검증하기" 버튼이 POST /call-agent 로 입력 글을 보내면,
 call-agent.py의 call_verify1_agent()를 그대로 불러 처리 결과를 돌려준다.
+call_verify1_agent()가 verify1/result.csv를 직접 쓰므로 이 서버는 파일 입출력을 하지 않는다.
 API 키는 이 서버가 아니라 call-agent.py 쪽에서 .env를 읽어 쓴다.
 
 사용법: python3 verify1/server.py  (그다음 verify1/screen.html을 브라우저로 연다)
@@ -58,10 +59,6 @@ class Handler(BaseHTTPRequestHandler):
             input_text = json.loads(raw).get("input", "") if raw else ""
         except json.JSONDecodeError:
             input_text = raw
-        input_text = input_text.strip()
-        if not input_text:
-            self._send_json(200, {"result": "확인 대상 없음"})
-            return
         try:
             result = call_agent.call_verify1_agent(input_text)
             self._send_json(200, {"result": result})

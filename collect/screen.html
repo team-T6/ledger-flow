@@ -152,6 +152,10 @@
     padding: 2px 4px;
     border: 1px solid #3366cc;
   }
+  .row-receipt-btn {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
   .placeholder {
     color: #888888;
   }
@@ -352,6 +356,17 @@ function fileToBase64(file) {
   });
 }
 
+// 이미 메모리에 있는 바이트 배열(xlsx-input에서 읽은 파일)을 서버로 보낼 base64로 바꾼다.
+// 큰 파일에서 콜스택이 넘치지 않게 청크 단위로 처리한다.
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 // ---------- 표준 거래 id ----------
 
 // 같은 날짜(YYMMDD)에 이미 있는 tx_id 중 가장 큰 순번 다음 번호를 돌려준다.
@@ -374,6 +389,44 @@ function todayStr() {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// ---------- 중복(겹침) 감지 ----------
+// 영수증·엑셀 등 서로 다른 경로로 같은 거래가 두 번 들어오는 경우를 잡는다
+// (collect.md "하는 단계 5·6" — 날짜+금액+결제처 기준 매칭, 불명확하면 review).
+
+function normalizeMerchant(s) {
+  return String(s || "").replace(/\s+/g, "").toLowerCase();
+}
+
+function rowAmount(row) {
+  return (Number(row.지출) || 0) || (Number(row.수익) || 0);
+}
+
+// candidate와 날짜·금액이 같고 결제처가 겹치는(포함 관계) 기존 행을 찾는다.
+function findPotentialDuplicate(candidate) {
+  const candMerchant = normalizeMerchant(candidate.결제처);
+  const candAmount = rowAmount(candidate);
+  if (!candidate.날짜 || !candAmount || !candMerchant) return null;
+  return dataRows.find(r => {
+    if (r === candidate) return false;
+    if (r.날짜 !== candidate.날짜 || rowAmount(r) !== candAmount) return false;
+    const rMerchant = normalizeMerchant(r.결제처);
+    return rMerchant && (rMerchant.includes(candMerchant) || candMerchant.includes(rMerchant));
+  }) || null;
+}
+
+// dataRows에 새 행을 추가하기 전에 겹치는 기존 거래가 있는지 확인하고, 있으면
+// 확정 상태를 확인 필요로 낮춰 사람이 같은 거래인지 판단하게 한다.
+function pushRow(row) {
+  const dup = findPotentialDuplicate(row);
+  if (dup) {
+    row.collect_status = "확인 필요";
+    const note = `${dup.transaction_id}(${dup.source_type})와 날짜·금액·결제처가 겹침 — 같은 거래 중복 등록인지 확인 필요`;
+    row.비고 = row.비고 ? `${row.비고} / ${note}` : note;
+  }
+  dataRows.push(row);
+  return dup;
 }
 
 // ---------- 데이터 준비 ----------
@@ -455,7 +508,7 @@ function pushAiConvertedRows(rows, sourceType) {
   let confirmedCount = 0;
   rows.forEach(r => {
     const date = r.날짜 || todayStr();
-    dataRows.push({
+    pushRow({
       transaction_id: nextTxId(date),
       날짜: date,
       지출: r.지출 || 0,
@@ -489,6 +542,8 @@ document.getElementById("receipt-input").addEventListener("change", async functi
   showFileMessage(`"${file.name}" 읽는 중...`, false);
 
   let row;
+  let baseMessage;
+  let baseIsError;
   try {
     const imageB64 = await fileToBase64(file);
     const response = await fetch("/read-receipt", {
@@ -516,7 +571,8 @@ document.getElementById("receipt-input").addEventListener("change", async functi
       collect_status: ocr.확인됨 ? "확인됨" : "확인 필요",
       구매항목: ocr.구매항목 || "",
     };
-    showFileMessage(`영수증 "${file.name}" — AI로 읽어서 ${row.collect_status === "확인됨" ? "등록했습니다" : "확인 필요로 등록했습니다"}.`, row.collect_status !== "확인됨");
+    baseIsError = row.collect_status !== "확인됨";
+    baseMessage = `영수증 "${file.name}" — AI로 읽어서 ${baseIsError ? "확인 필요로 등록했습니다." : "등록했습니다."}`;
   } catch (err) {
     const date = todayStr();
     row = {
@@ -532,11 +588,19 @@ document.getElementById("receipt-input").addEventListener("change", async functi
       collect_status: "확인 필요",
       구매항목: "",
     };
-    showFileMessage(`영수증 "${file.name}" — AI 인식에 실패해 확인 필요로만 등록했습니다 (${err.message}).`, true);
+    baseIsError = true;
+    baseMessage = `영수증 "${file.name}" — AI 인식에 실패해 확인 필요로만 등록했습니다 (${err.message}).`;
   } finally {
     receiptBtn.disabled = false;
   }
-  dataRows.push(row);
+  // 미리 등록된 영수증·엑셀 등과 날짜·금액·결제처가 겹치면, AI 인식 성공 여부와 무관하게
+  // 중복 의심 쪽을 우선 알려준다 (pushRow가 collect_status·비고도 확인 필요로 맞춰 둔다).
+  const dup = pushRow(row);
+  if (dup) {
+    showFileMessage(`영수증 "${file.name}" — ${dup.transaction_id}(${dup.source_type})와 날짜·금액·결제처가 겹쳐 중복 의심으로 등록했습니다. 같은 거래인지 확인해주세요.`, true);
+  } else {
+    showFileMessage(baseMessage, baseIsError);
+  }
   afterDataChange();
   e.target.value = "";
 });
@@ -574,8 +638,12 @@ document.getElementById("manual-submit-btn").addEventListener("click", function 
     collect_status: "확인됨",
     구매항목: items,
   };
-  dataRows.push(row);
-  showFileMessage(`수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원`, false);
+  const dup = pushRow(row);
+  showFileMessage(
+    dup ? `수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원 (${dup.transaction_id}와 겹쳐 확인 필요로 등록)`
+        : `수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원`,
+    !!dup
+  );
 
   document.getElementById("manual-date").value = "";
   document.getElementById("manual-expense").value = "";
@@ -599,41 +667,67 @@ document.getElementById("xlsx-input").addEventListener("change", function (e) {
 
   const reader = new FileReader();
   reader.onload = async function () {
-    const text = String(reader.result);
+    const bytes = new Uint8Array(reader.result);
 
-    // 진짜 바이너리 xlsx(zip 포맷, "PK"로 시작)는 이 연습용 화면에 엑셀 파서가 없어서
-    // 글자로 읽을 수조차 없다 — 담당자에게 넘길 텍스트 자체가 없으므로 AI 변환도 못 한다.
-    if (text.startsWith("PK")) {
-      const date = todayStr();
-      dataRows.push({
-        transaction_id: nextTxId(date),
-        날짜: date,
-        지출: "",
-        수익: "",
-        결제처: "",
-        비고: `카드사 파일 등록: ${file.name} (엑셀 바이너리라 이 연습용 화면에서 열어볼 수 없음 — 내용은 수동 입력으로 반영 필요)`,
-        결제수단: "",
-        결제자: "",
-        source_type: "card_excel",
-        collect_status: "확인 필요",
-        구매항목: "",
-      });
-      showFileMessage(`"${file.name}" — 엑셀(바이너리) 파일이라 자동으로 못 읽어서 확인 필요로 등록만 해뒀습니다. 내용은 수동 입력으로 반영해주세요.`, true);
-      afterDataChange();
-      e.target.value = "";
-      return;
+    // 진짜 바이너리 엑셀(xlsx=zip 시그니처 "PK", 구형 xls=OLE2 시그니처)은 브라우저가
+    // 직접 텍스트로 읽을 수 없다 — 서버(/read-excel)가 xlrd·openpyxl로 대신 파싱해
+    // CSV로 돌려준다. 텍스트로 디코딩을 시도하기 전에 원본 바이트로 먼저 판별한다.
+    const isZipXlsx = bytes[0] === 0x50 && bytes[1] === 0x4B;
+    const isOleXls = bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0;
+
+    let text;
+    if (isZipXlsx || isOleXls) {
+      showFileMessage(`"${file.name}" — 엑셀 파일을 서버에서 읽는 중...`, false);
+      try {
+        const response = await fetch("/read-excel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: bytesToBase64(bytes) }),
+        });
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error || response.statusText);
+        text = data.result.csv;
+      } catch (err) {
+        const date = todayStr();
+        pushRow({
+          transaction_id: nextTxId(date),
+          날짜: date,
+          지출: "",
+          수익: "",
+          결제처: "",
+          비고: `카드사 파일 등록: ${file.name} (서버에서 엑셀을 읽지 못함: ${err.message} — 내용은 수동 입력으로 반영 필요)`,
+          결제수단: "",
+          결제자: "",
+          source_type: "card_excel",
+          collect_status: "확인 필요",
+          구매항목: "",
+        });
+        showFileMessage(`"${file.name}" — 서버에서 엑셀을 읽지 못해 확인 필요로 등록만 해뒀습니다: ${err.message}`, true);
+        afterDataChange();
+        e.target.value = "";
+        return;
+      }
+    } else {
+      // 카드사 CSV는 UTF-8이 아니라 CP949(EUC-KR)로 저장되는 경우가 많다 — 무조건 UTF-8로
+      // 읽으면 한글만 깨지고 영문·숫자만 남아 "인코딩 손상"으로 오인된다. UTF-8로 먼저
+      // 시도해(엄격 모드) 깨지면 EUC-KR로 다시 읽는다.
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch (err) {
+        text = new TextDecoder("euc-kr").decode(bytes);
+      }
     }
 
     const { header, records } = csvToObjects(text);
     if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
-      records.forEach(r => dataRows.push(normalizeHanaRow(r)));
+      records.forEach(r => pushRow(normalizeHanaRow(r)));
       showFileMessage(`"${file.name}" (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
       afterDataChange();
       e.target.value = "";
       return;
     }
     if (records.length > 0 && headersMatch(header, COLUMNS)) {
-      records.forEach(r => dataRows.push(r));
+      records.forEach(r => pushRow(r));
       showFileMessage(`"${file.name}" (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
       afterDataChange();
       e.target.value = "";
@@ -660,7 +754,7 @@ document.getElementById("xlsx-input").addEventListener("change", function (e) {
       e.target.value = "";
     }
   };
-  reader.readAsText(file, "utf-8");
+  reader.readAsArrayBuffer(file);
   e.target.value = "";
 });
 
@@ -685,14 +779,14 @@ document.getElementById("paste-submit-btn").addEventListener("click", async func
   // 엑셀에서 복사하면 칸은 탭, 줄은 개행으로 구분된 표가 클립보드에 담긴다.
   const { header, records } = csvToObjects(text, "\t");
   if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
-    records.forEach(r => dataRows.push(normalizeHanaRow(r)));
+    records.forEach(r => pushRow(normalizeHanaRow(r)));
     showFileMessage(`엑셀 붙여넣기 (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
     textarea.value = "";
     afterDataChange();
     return;
   }
   if (records.length > 0 && headersMatch(header, COLUMNS)) {
-    records.forEach(r => dataRows.push(r));
+    records.forEach(r => pushRow(r));
     showFileMessage(`엑셀 붙여넣기 (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
     textarea.value = "";
     afterDataChange();
@@ -802,6 +896,13 @@ function buildTableHead() {
     filterTh.appendChild(input);
     filterRow.appendChild(filterTh);
   });
+
+  // 데이터 컬럼이 아닌 동작 칸 — 행별로 구매내역 영수증을 붙여 구매항목을 채운다.
+  const actionTh = document.createElement("th");
+  actionTh.textContent = "영수증";
+  actionTh.title = "구매내역 영수증 이미지를 올리면 이 행의 구매항목을 채웁니다";
+  headerRow.appendChild(actionTh);
+  filterRow.appendChild(document.createElement("th"));
 }
 
 function renderBody() {
@@ -820,7 +921,7 @@ function renderBody() {
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${COLUMNS.length}">표시할 내용이 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${COLUMNS.length + 1}">표시할 내용이 없습니다.</td></tr>`;
     return;
   }
 
@@ -841,8 +942,62 @@ function renderBody() {
       tr.appendChild(td);
     });
 
+    // 모든 행에 영수증을 다 넣을 수는 없으니, 구매항목이 비어 있는 행에만 첨부 버튼을 보여준다
+    // (구매항목이 이미 있으면 어차피 표의 그 셀을 클릭해 직접 고칠 수 있다).
+    const actionTd = document.createElement("td");
+    if (!row.구매항목) {
+      const receiptBtn = document.createElement("button");
+      receiptBtn.type = "button";
+      receiptBtn.className = "row-receipt-btn";
+      receiptBtn.textContent = "영수증";
+      receiptBtn.title = "구매내역 영수증 이미지를 올리거나, 표의 구매항목 칸을 클릭해 직접 입력하세요";
+      receiptBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        attachReceiptToRow(row);
+      });
+      actionTd.appendChild(receiptBtn);
+    }
+    tr.appendChild(actionTd);
+
     tbody.appendChild(tr);
   });
+}
+
+// 결제처만으론 뭘 샀는지 알 수 없어 확인 필요로 남은 행에, 실제 구매내역 영수증을 붙여
+// 구매항목만 채운다 (날짜·금액·결제처는 이미 카드 내역으로 확정돼 있으니 건드리지 않는다).
+function attachReceiptToRow(row) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.addEventListener("change", async function () {
+    const file = input.files[0];
+    if (!file) return;
+    showFileMessage(`"${file.name}" — 영수증에서 구매항목을 읽는 중...`, false);
+    try {
+      const imageB64 = await fileToBase64(file);
+      const response = await fetch("/read-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageB64, media_type: file.type }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || response.statusText);
+
+      const ocr = data.result;
+      if (!ocr.구매항목) {
+        showFileMessage(`"${file.name}" — 영수증에서 구매 항목을 읽지 못했습니다. 직접 입력해주세요.`, true);
+        return;
+      }
+      row.구매항목 = ocr.구매항목;
+      row.collect_status = "확인됨";
+      row.비고 = row.비고 ? `${row.비고} / 영수증으로 구매항목 확인: ${file.name}` : `영수증으로 구매항목 확인: ${file.name}`;
+      showFileMessage(`"${file.name}" — 구매항목을 "${ocr.구매항목}"(으)로 채웠습니다.`, false);
+      afterDataChange();
+    } catch (err) {
+      showFileMessage(`"${file.name}" — 영수증 인식에 실패했습니다: ${err.message}`, true);
+    }
+  });
+  input.click();
 }
 
 // 셀을 입력칸(상태 컬럼은 드롭다운)으로 바꿔서 값을 고치게 한다.

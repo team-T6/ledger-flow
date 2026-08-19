@@ -54,12 +54,17 @@ LEDGER_COLUMNS = ["transaction_id", "날짜", "금액", "결제처", "카테고�
                   "결제수단", "결제구분", "원거래통화", "원거래금액",
                   "source_type", "collect_status", "구매항목"]
 
-ACCENT = colors.HexColor("#1F4E78")  # 제목·섹션 띠·표 헤더 — 구조적 요소
-ACCENT_LIGHT = colors.HexColor("#DCE6F1")
-CHART_COLOR = colors.HexColor("#1baf7a")  # 막대그래프 전용 — ACCENT(남색)와 겹치지 않는 색
-FLAG_COLOR = colors.HexColor("#C00000")
-FLAG_LIGHT = colors.HexColor("#FBE4E4")
-GRID_COLOR = colors.HexColor("#BFBFBF")
+# 데모(web/index.html) "장부 에디토리얼" 테마와 톤을 맞춘 팔레트
+PAGE_BG = colors.HexColor("#FAF7F2")
+INK = colors.HexColor("#1C1917")
+MUTED = colors.HexColor("#7A7263")
+ACCENT = colors.HexColor("#1E5B45")  # 제목·섹션 띠·표 헤더 — 구조적 요소
+ACCENT_CONTRAST = colors.HexColor("#FAF7F2")
+ACCENT_LIGHT = colors.HexColor("#EFE9DD")
+CHART_COLOR = ACCENT  # 데모 미리보기 막대그래프도 accent 한 가지 색만 쓴다
+FLAG_COLOR = colors.HexColor("#A63A2E")
+FLAG_LIGHT = colors.HexColor("#F3E3DF")
+GRID_COLOR = colors.HexColor("#E6DFD2")
 
 # 표·그래프·섹션 배너가 전부 같은 좌우 여백을 쓰게 만드는 기준값 —
 # 이 폭에서 벗어나는 요소가 없어야 열(오른쪽 끝)이 서로 어긋나지 않는다.
@@ -171,9 +176,9 @@ def build_ledger(ok_rows, xlsx_path):
 
 def _styles():
     return {
-        "title": ParagraphStyle("title", fontName=FONT_NAME, fontSize=22, leading=26, textColor=ACCENT),
-        "meta": ParagraphStyle("meta", fontName=FONT_NAME, fontSize=10, leading=14, textColor=colors.grey),
-        "body": ParagraphStyle("body", fontName=FONT_NAME, fontSize=11, leading=16),
+        "title": ParagraphStyle("title", fontName=FONT_NAME, fontSize=24, leading=28, textColor=ACCENT),
+        "meta": ParagraphStyle("meta", fontName=FONT_NAME, fontSize=10, leading=14, textColor=MUTED),
+        "body": ParagraphStyle("body", fontName=FONT_NAME, fontSize=11, leading=16, textColor=INK),
         "flag": ParagraphStyle("flag", fontName=FONT_NAME, fontSize=10, leading=14, textColor=FLAG_COLOR),
     }
 
@@ -187,7 +192,7 @@ def _section_heading(text):
         ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
         ("FONTSIZE", (0, 0), (-1, -1), 13),
         ("BACKGROUND", (0, 0), (-1, -1), ACCENT),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("TEXTCOLOR", (0, 0), (-1, -1), ACCENT_CONTRAST),
         ("TOPPADDING", (0, 0), (-1, -1), 7),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
@@ -202,9 +207,9 @@ def _table(header, rows, col_widths, num_cols=()):
         ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("TEXTCOLOR", (0, 0), (-1, 0), ACCENT_CONTRAST),
         ("GRID", (0, 0), (-1, -1), 0.5, GRID_COLOR),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ACCENT_LIGHT]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [PAGE_BG, ACCENT_LIGHT]),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
@@ -252,7 +257,7 @@ def _category_chart(by_category):
     chart.groupSpacing = 8
     chart.barWidth = 10 * mm
     chart.bars[0].fillColor = CHART_COLOR
-    chart.bars[0].strokeColor = colors.white
+    chart.bars[0].strokeColor = PAGE_BG
     chart.bars[0].strokeWidth = 0.4
 
     drawing.add(chart)
@@ -286,6 +291,14 @@ def summarize(ok_rows):
         "by_payer": list(by_payer.items()),
         "top_spenders": top_spenders,
     }
+
+
+def _paint_page_background(canvas, doc):
+    """데모 랜딩 페이지와 같은 크림색(PAGE_BG) 바탕지를 매 페이지에 깐다."""
+    canvas.saveState()
+    canvas.setFillColor(PAGE_BG)
+    canvas.rect(0, 0, A4[0], A4[1], fill=1, stroke=0)
+    canvas.restoreState()
 
 
 def build_report(ok_rows, flagged_rows, summary, pdf_path):
@@ -376,19 +389,18 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path):
     if flagged_rows:
         table = _table(
             ["날짜", "결제처", "사유"],
-            [[r["날짜"], r["결제처"], r["reason"]] for r in flagged_rows],
+            [[r["날짜"], r["결제처"], Paragraph(r["reason"], s["flag"])] for r in flagged_rows],
             col_widths=_col_widths(0.18, 0.26, 0.56),
         )
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), FLAG_COLOR),
-            ("TEXTCOLOR", (2, 1), (2, -1), FLAG_COLOR),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, FLAG_LIGHT]),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [PAGE_BG, FLAG_LIGHT]),
         ]))
         story.append(table)
     else:
         story.append(Paragraph("확인 필요 항목 없음", s["body"]))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_paint_page_background, onLaterPages=_paint_page_background)
 
 
 def run():

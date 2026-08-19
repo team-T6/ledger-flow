@@ -77,7 +77,10 @@ ENVELOPE_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"row": {"type": "integer"}, "type": {"type": "string"},
+                "properties": {"row": {"type": "integer"},
+                               # interface-spec "단계 결과 보고" flags[].type 어휘 고정
+                               "type": {"type": "string",
+                                        "enum": ["확인 필요", "반려", "오류", "미완"]},
                                "reason": {"type": "string"}},
                 "required": ["row", "type", "reason"],
                 "additionalProperties": False,

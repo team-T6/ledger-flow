@@ -26,7 +26,9 @@
 | `stub.md` | 산출물 모양 견본 — 최종 결과 요약 (가짜 데이터) |
 | `result-summary.md` | 진짜 산출물 — 실행하면 생김 |
 | `result.md` | 초기 연습 실행 결과 (파일명 규칙 정리 전 산출물 — 참고용으로 유지) |
-| `screen.html` | 연습 화면 |
+| `run-pipeline.py` | 파이프라인 실행기 — CLI와 웹이 같은 본체(`run_pipeline()`)를 쓴다 |
+| `server.py` | 대시보드 웹 서버 (포트 8788) — 실행 시작·진행 폴링·요약·산출물 내려받기 |
+| `screen.html` | 대시보드 화면 — 연동 / 가공 현황 / 리포트 3탭 (+ 결과 보고 확인 연습 기능) |
 
 칸 폴더를 옮기지 않고, 기존 파일을 지우지 않는다. 새 산출물은 견본 옆에 만든다.
 
@@ -42,7 +44,8 @@
 
 ## 실행 방법
 
-- 파이프라인 실행: `python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>` — 수집→가공→검증 1·2(병렬)→통합을 돌리고 run 디렉터리(`logs/run_*/`)와 최종 결과 요약(`result-summary.md`)을 만든다
+- 파이프라인 실행 (CLI): `python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>` — 수집→가공→검증 1·2(병렬)→통합을 돌리고 run 디렉터리(`logs/run_*/`)와 최종 결과 요약(`result-summary.md`)을 만든다
+- 파이프라인 실행 (웹): `python3 orchestrator/server.py` 실행 후 `http://localhost:8788` — 가공 현황 탭에서 대상 월을 골라 실행하면 같은 실행기가 돌고, 단계별 진행·확인 필요 건·실행 로그가 화면에 흐른다. 리포트 탭에서 최종 요약과 통합 산출물(엑셀·PDF)을 받는다
 - 단계 실행 방식은 [단계 문서](../.claude/agents/orchestrator.md) "도구·코드" 확정 참조 — 수집·통합은 칸 코드 직접 호출, 가공·검증은 단계 문서 기반 API 호출(구조화 출력 강제)
 
 ## 지켜야 할 것

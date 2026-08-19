@@ -25,6 +25,7 @@ import json
 import os
 import re
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -157,10 +158,16 @@ def validate_envelope(env, stage):
 
 
 class Run:
-    """실행 1회 — run 디렉터리·로그·보고 아카이브의 쓰기 주체는 지휘 하나다."""
+    """실행 1회 — run 디렉터리·로그·보고 아카이브의 쓰기 주체는 지휘 하나다.
 
-    def __init__(self, month):
+    on_event: 웹 서버 등 관찰자에게 진행을 알리는 훅 (없으면 CLI 그대로).
+    로그 한 줄이 곧 이벤트 한 건 — 파일 기록과 통지가 어긋나지 않는다.
+    """
+
+    def __init__(self, month, on_event=None):
         self.month = month
+        self.on_event = on_event
+        self._seq = 0
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_dir = os.path.join(LOGS_DIR, f"run_{stamp}")
         os.makedirs(self.run_dir, exist_ok=True)
@@ -169,15 +176,33 @@ class Run:
         self.retried = {}          # stage -> [1차 message, 2차 message] (재시도 발생 시)
         self.warnings = []         # 요약 맨 앞에 실을 경고
         self.notes = []            # 요약 4장 메모
+        self._lock = threading.Lock()  # 검증 병렬 구간의 로그·이벤트 직렬화용
         self.log("run", "시작", memo=f"대상 월 {month}")
 
-    def log(self, stage, state, counts=None, memo=""):
+    def log(self, stage, state, counts=None, memo="", envelope=None):
         counts_txt = ""
         if counts:
             counts_txt = f"total={counts['total']}, ok={counts['ok']}, flagged={counts['flagged']}"
-        line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {STAGE_LABELS.get(stage, stage)} | {state} | {counts_txt} | {memo}"
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        line = f"{now} | {STAGE_LABELS.get(stage, stage)} | {state} | {counts_txt} | {memo}"
+        with self._lock:
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            if self.on_event:
+                self._seq += 1
+                event = {"seq": self._seq, "time": now, "stage": stage,
+                         "stage_label": STAGE_LABELS.get(stage, stage),
+                         "state": state, "counts": counts, "memo": memo}
+                if envelope is not None:
+                    event["envelope"] = {"status": envelope["status"],
+                                         "output": envelope["output"],
+                                         "counts": envelope["counts"],
+                                         "flags": envelope["flags"],
+                                         "message": envelope["message"]}
+                try:
+                    self.on_event(event)
+                except Exception:
+                    pass  # 관찰자 오류가 파이프라인을 멈추면 안 된다
 
     def archive(self, stage, envelope, retry=False):
         name = f"report-{stage}-retry.json" if retry else f"report-{stage}.json"
@@ -197,10 +222,10 @@ class Run:
             self.retried[stage] = [envelope["message"], retry_env["message"]]
             envelope = retry_env
 
-        state = "실패" if envelope["status"] == "failed" else "완료"
-        self.log(stage, state, envelope["counts"], envelope["message"])
         if envelope["status"] == "failed" and not envelope["message"]:
             envelope["message"] = "사유 미기재 실패"
+        state = "실패" if envelope["status"] == "failed" else "완료"
+        self.log(stage, state, envelope["counts"], envelope["message"], envelope=envelope)
         self.envelopes[stage] = envelope
         return envelope
 
@@ -336,13 +361,28 @@ def write_summary(run):
 ENV_PROBLEM_KEYWORDS = ("없음", "없습니다", "찾을 수 없", "로드 실패", "누락", "권한", "열 수 없")
 
 
-def main():
-    if len(sys.argv) != 2 or not re.fullmatch(r"\d{4}-\d{2}", sys.argv[1]):
-        print("사용법: python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>")
-        sys.exit(1)
-    month = sys.argv[1]
+def run_pipeline(month, on_event=None):
+    """파이프라인 1회 실행 — CLI(main)와 웹 서버가 같은 본체를 쓴다. Run을 돌려준다.
 
-    run = Run(month)
+    예외로 중단돼도 요약(run.log·result-summary.md)은 남기고, on_event에는
+    반드시 종결 이벤트(state: 종료/오류)가 마지막으로 흐른다.
+    """
+    run = Run(month, on_event=on_event)
+    try:
+        _run_stages(run, month)
+        run.log("run", "종료", memo="정상 종결")
+    except Exception as e:
+        run.notes.append(f"실행기 오류로 중단: {e}")
+        try:
+            write_summary(run)
+        except Exception:
+            pass
+        run.log("run", "오류", memo=str(e))
+        raise
+    return run
+
+
+def _run_stages(run, month):
     run.notes.append(f"대상 월: {month}")
 
     # 신선도 — 이번 실행이 만들 판단형 단계 산출물의 이전 실행 잔재를 지운다
@@ -424,6 +464,13 @@ def main():
 
     run.notes.append("전 단계 counts.total 대조 완료" + (" — 유실 의심 있음 (경고 참고)" if any("유실" in w for w in run.warnings) else " — 유실 없음"))
     finish()
+
+
+def main():
+    if len(sys.argv) != 2 or not re.fullmatch(r"\d{4}-\d{2}", sys.argv[1]):
+        print("사용법: python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>")
+        sys.exit(1)
+    run_pipeline(sys.argv[1])
 
 
 if __name__ == "__main__":

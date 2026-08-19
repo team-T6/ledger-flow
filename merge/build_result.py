@@ -1,9 +1,10 @@
 """merge 최종 산출물(result.xlsx, result.pdf)을 만드는 스크립트.
 
-refine·verify1의 실제 산출물이 아직 없어, merge/input-sample.md·stub.md와 같은
-예시 값을 그대로 써서 만든다 (collect/collect.py가 sample_data를 쓰는 것과 같은 방식).
-refine/result.*·verify1/result.*가 실제로 생기면 TRANSACTIONS를 그쪽을 읽어
-채우도록 바꾸면 된다.
+입력은 앞 단계의 실제 산출물 — 가공 거래 표 refine/result.csv(거래 표 스키마 v1)와
+두 검증 결과 verify1/result.csv·verify2/result.csv(입력 행 + verify{n}_result·verify{n}_reason,
+interface-spec.md 검증 1·2 행 확정). 행 대조 키는 transaction_id.
+가공 산출물이 없으면 취합 불가라 failed로 보고하고, 검증 결과가 없으면 그 자리는
+"미완" 표시 + 사유를 남기고 나머지를 정상 진행한다 (단계 문서 "못 할 때").
 
 한글 PDF 폰트는 merge/fonts/NanumGothic-Regular.ttf(OFL 라이선스, 리포에 포함)를 쓴다 —
 운영체제마다 다른 시스템 폰트 경로에 기대지 않기 위함이다.
@@ -11,6 +12,7 @@ refine/result.*·verify1/result.*가 실제로 생기면 TRANSACTIONS를 그쪽�
 사용법: python3 merge/build_result.py
 """
 
+import csv
 import json
 import os
 
@@ -40,7 +42,17 @@ FONT_NAME = "NanumGothic"
 # 지휘에게 보내는 단계 결과 보고의 output 필드 — repo 기준 상대 경로 (interface-spec.md 예시와 동일 관례)
 OUTPUT_PATHS = ["merge/result.xlsx", "merge/result.pdf"]
 
-LEDGER_COLUMNS = ["날짜", "지출", "수익", "결제처", "카테고리", "비고", "결제수단", "결제자"]
+REPO_ROOT = os.path.dirname(BASE_DIR)
+REFINE_CSV = os.path.join(REPO_ROOT, "refine", "result.csv")
+VERIFY_CSVS = {
+    "verify1": os.path.join(REPO_ROOT, "verify1", "result.csv"),
+    "verify2": os.path.join(REPO_ROOT, "verify2", "result.csv"),
+}
+
+# 엑셀 회계장부 컬럼 — 거래 표 스키마 (확정 v1)와 동일 (interface-spec.md "산출물 양식")
+LEDGER_COLUMNS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
+                  "결제수단", "결제구분", "원거래통화", "원거래금액",
+                  "source_type", "collect_status", "구매항목"]
 
 ACCENT = colors.HexColor("#1F4E78")  # 제목·섹션 띠·표 헤더 — 구조적 요소
 ACCENT_LIGHT = colors.HexColor("#DCE6F1")
@@ -62,24 +74,50 @@ def _col_widths(*fractions):
     widths.append(CONTENT_WIDTH - sum(widths))
     return widths
 
-# merge/input-sample.md와 동일한 예시 입력 — 가공 거래 표 + 검증1·검증2 결과를 합친 것
-TRANSACTIONS = [
-    {"날짜": "2026-02-09", "지출": 23787, "수익": None, "결제처": "교촌치킨",
-     "카테고리": "식비", "비고": "포인트 적립 476원", "결제수단": "하나카드", "결제자": "개인카드",
-     "verify1": "통과", "verify2": "통과", "verify2_reason": ""},
-    {"날짜": "2026-02-13", "지출": 85589, "수익": None, "결제처": "이마트 성수점",
-     "카테고리": "소모품·비품", "비고": "", "결제수단": "하나카드", "결제자": "개인카드",
-     "verify1": "통과", "verify2": "통과", "verify2_reason": ""},
-    {"날짜": "2026-02-17", "지출": 17000, "수익": None, "결제처": "넷플릭스",
-     "카테고리": "구독·소프트웨어", "비고": "", "결제수단": "하나카드", "결제자": "개인카드",
-     "verify1": "통과", "verify2": "통과", "verify2_reason": ""},
-    {"날짜": "2026-03-01", "지출": 29432, "수익": None, "결제처": "올리브영",
-     "카테고리": "소모품·비품", "비고": "포인트 적립 589원", "결제수단": "하나카드", "결제자": "개인카드",
-     "verify1": "통과", "verify2": "반려", "verify2_reason": "대상 월 아님 (날짜: 2026-03-01)"},
-    {"날짜": "2026-02-15", "지출": 22805, "수익": 22805, "결제처": "교촌치킨",
-     "카테고리": "식비", "비고": "", "결제수단": "하나카드", "결제자": "개인카드",
-     "verify1": "통과", "verify2": "반려", "verify2_reason": "지출·수익 동시 기입 (지출 22,805 / 수익 22,805)"},
-]
+def _parse_amount(value):
+    """금액 문자열을 정수로 바꾼다 (콤마 허용). 해석 불가·빈 값은 None."""
+    s = str(value or "").replace(",", "").strip()
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+def load_transactions():
+    """가공 거래 표(스키마 v1)에 두 검증 판정을 transaction_id로 붙여 돌려준다.
+
+    반환: (rows, incomplete) — incomplete는 검증 결과가 통째로 없는 쪽의 "미완" 사유 목록.
+    화면(screen.html)이 아직 쓰는 구 필드(지출/수익/결제자)는 금액·결제구분에서 파생해 채운다.
+    """
+    with open(REFINE_CSV, encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    incomplete = []
+    verdicts = {}  # stage -> {transaction_id: (result, reason)}
+    for stage, path in VERIFY_CSVS.items():
+        if not os.path.exists(path):
+            incomplete.append(f"{stage} 결과 없음 ({os.path.relpath(path, REPO_ROOT)}) — 미완 처리")
+            verdicts[stage] = None
+            continue
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            verdicts[stage] = {
+                v["transaction_id"]: (v.get(f"{stage}_result", ""), v.get(f"{stage}_reason", ""))
+                for v in csv.DictReader(f)
+            }
+
+    for row in rows:
+        amount = _parse_amount(row.get("금액"))
+        # 화면 호환용 파생 필드 — 스키마 v1의 금액(부호)·결제구분에서 계산
+        row["지출"] = -amount if (amount is not None and amount < 0) else None
+        row["수익"] = amount if (amount is not None and amount > 0) else None
+        row["결제자"] = row.get("결제구분", "")
+        for stage in VERIFY_CSVS:
+            if verdicts[stage] is None:
+                row[f"{stage}_result"], row[f"{stage}_reason"] = "미완", f"{stage} 결과 없음"
+            else:
+                result, reason = verdicts[stage].get(row.get("transaction_id"), ("미완", f"{stage} 결과에 해당 행 없음"))
+                row[f"{stage}_result"], row[f"{stage}_reason"] = result, reason
+    return rows, incomplete
 
 
 def split_transactions(transactions):
@@ -87,33 +125,36 @@ def split_transactions(transactions):
     flagged_rows에는 지휘 보고의 flags[].row로 쓸 1-기준 행 번호(row)를 함께 담는다."""
     ok_rows, flagged_rows = [], []
     for idx, row in enumerate(transactions, start=1):
-        if row["verify1"] == "반려":
+        if row["verify1_result"] == "반려":
             flagged_rows.append({**row, "row": idx, "reason": row.get("verify1_reason", "")})
-        elif row["verify2"] == "반려":
-            flagged_rows.append({**row, "row": idx, "reason": row["verify2_reason"]})
+        elif row["verify2_result"] == "반려":
+            flagged_rows.append({**row, "row": idx, "reason": row.get("verify2_reason", "")})
         else:
             ok_rows.append(row)
     return ok_rows, flagged_rows
 
 
-def build_envelope(total, ok_rows, flagged_rows, failed=False, message=""):
+def build_envelope(total, ok_rows, flagged_rows, failed=False, message="", incomplete=()):
     """지휘(orchestrator)에게 돌려주는 단계 결과 보고 — interface-spec.md "단계 결과 보고" 규격.
     status 어휘 4개 고정: ok(정상) · empty(대상 없음) · partial(확인 필요 건 있음) · failed(단계 실패).
-    output은 empty·failed일 때 빈 값(interface-spec.md "단계 결과 보고" 필드 설명)."""
+    output은 empty·failed일 때 빈 값(interface-spec.md "단계 결과 보고" 필드 설명).
+    incomplete는 검증 결과 부재 등 자리 단위 "미완" 사유 목록 — flags에 type 미완으로 싣는다."""
     if failed:
         status, output = "failed", []
     elif total == 0:
         status, output = "empty", []
     else:
-        status = "ok" if not flagged_rows else "partial"
+        status = "ok" if not (flagged_rows or incomplete) else "partial"
         output = OUTPUT_PATHS
 
+    flags = [{"row": 0, "type": "미완", "reason": reason} for reason in incomplete]
+    flags += [{"row": r["row"], "type": "확인 필요", "reason": r["reason"]} for r in flagged_rows]
     return {
         "stage": "merge",
         "status": status,
         "output": output,
         "counts": {"total": total, "ok": len(ok_rows), "flagged": len(flagged_rows)},
-        "flags": [{"row": r["row"], "type": "확인 필요", "reason": r["reason"]} for r in flagged_rows],
+        "flags": flags,
         "message": message,
     }
 
@@ -297,10 +338,10 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path):
     ))
     story.append(Spacer(1, 7 * mm))
 
-    story.append(_section_heading("4. 결제자별 합계"))
+    story.append(_section_heading("4. 결제구분별 합계 (개인/법인)"))
     story.append(Spacer(1, 2 * mm))
     story.append(_table(
-        ["결제자", "금액"],
+        ["결제구분", "금액"],
         [[payer, f"{amount:,}원"] for payer, amount in summary["by_payer"]],
         col_widths=_col_widths(0.5, 0.5), num_cols=(1,),
     ))
@@ -317,7 +358,17 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path):
 
     story.append(_section_heading("6. 해외결제 명세"))
     story.append(Spacer(1, 2 * mm))
-    story.append(Paragraph("해당 없음 (해외결제 건 없음)", s["body"]))
+    # 해외결제 여부는 원거래통화가 채워져 있는지로 판별한다 (스키마 v1)
+    foreign_rows = [r for r in ok_rows if (r.get("원거래통화") or "").strip()]
+    if foreign_rows:
+        story.append(_table(
+            ["날짜", "결제처", "원거래", "원화 환산"],
+            [[r["날짜"], r["결제처"], f"{r['원거래금액']} {r['원거래통화']}", f"{(r['지출'] or r['수익'] or 0):,}원"]
+             for r in foreign_rows],
+            col_widths=_col_widths(0.18, 0.34, 0.24, 0.24), num_cols=(3,),
+        ))
+    else:
+        story.append(Paragraph("해당 없음 (해외결제 건 없음)", s["body"]))
     story.append(Spacer(1, 7 * mm))
 
     story.append(_section_heading("7. 확인 필요 항목"))
@@ -342,12 +393,20 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path):
 
 def run():
     """xlsx·pdf를 실제로 만들고, 화면 미리보기·지휘 보고에 쓸 결과를 함께 돌려준다."""
-    total = len(TRANSACTIONS)
+    if not os.path.exists(REFINE_CSV):
+        failed_envelope = build_envelope(
+            0, [], [], failed=True,
+            message=f"가공 산출물 없음: {os.path.relpath(REFINE_CSV, REPO_ROOT)} — 취합 불가",
+        )
+        return {"ok_rows": [], "flagged_rows": [], "summary": summarize([]), "envelope": failed_envelope}
+
+    transactions, incomplete = load_transactions()
+    total = len(transactions)
     if total == 0:
         empty_envelope = build_envelope(0, [], [], message="확인 대상 없음")
         return {"ok_rows": [], "flagged_rows": [], "summary": summarize([]), "envelope": empty_envelope}
 
-    ok_rows, flagged_rows = split_transactions(TRANSACTIONS)
+    ok_rows, flagged_rows = split_transactions(transactions)
     summary = summarize(ok_rows)
     try:
         build_ledger(ok_rows, XLSX_PATH)
@@ -356,7 +415,8 @@ def run():
         envelope = build_envelope(total, ok_rows, flagged_rows, failed=True, message=f"산출물 생성 실패: {e}")
         return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary, "envelope": envelope}
 
-    envelope = build_envelope(total, ok_rows, flagged_rows)
+    envelope = build_envelope(total, ok_rows, flagged_rows,
+                              message=" / ".join(incomplete), incomplete=incomplete)
     return {"ok_rows": ok_rows, "flagged_rows": flagged_rows, "summary": summary, "envelope": envelope}
 
 

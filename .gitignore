@@ -228,6 +228,9 @@ uploads/
 *.pdf
 !sample_data/**
 
+# 지휘에게 전달하는 단계 결과 보고 — 실거래 정보(결제처·비고 등)를 그대로 담고 있어 커밋 금지
+collect/result-report.json
+
 # collect 산출물을 CSV 그대로 담은 refine 입력 견본 (.md라 위 *.csv 규칙에 안 걸림) — 커밋 제외
 refine/input-sample.md
 

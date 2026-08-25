@@ -245,7 +245,11 @@ class Run:
 
 # ---------- 단계 실행 함수 ----------
 
-def run_collect(month):
+def run_collect(month, upload_dir=None):
+    if upload_dir and any(e.is_file() for e in os.scandir(upload_dir)):
+        mod = load_module("collect_uploads_stage",
+                          os.path.join(REPO_ROOT, "collect", "collect_uploads.py"))
+        return mod.run(month, upload_dir)["envelope"]
     mod = load_module("collect_stage", os.path.join(REPO_ROOT, "collect", "collect.py"))
     return mod.run(month)["envelope"]
 
@@ -364,15 +368,17 @@ def write_summary(run):
 ENV_PROBLEM_KEYWORDS = ("없음", "없습니다", "찾을 수 없", "로드 실패", "누락", "권한", "열 수 없")
 
 
-def run_pipeline(month, on_event=None):
+def run_pipeline(month, on_event=None, upload_dir=None):
     """파이프라인 1회 실행 — CLI(main)와 웹 서버가 같은 본체를 쓴다. Run을 돌려준다.
 
+    upload_dir가 주어지고 파일이 있으면 수집을 그 업로드 파일들로 실행한다
+    (없으면 기존 sample_data 경로 — CLI·대시보드 하위 호환).
     예외로 중단돼도 요약(run.log·result-summary.md)은 남기고, on_event에는
     반드시 종결 이벤트(state: 종료/오류)가 마지막으로 흐른다.
     """
     run = Run(month, on_event=on_event)
     try:
-        _run_stages(run, month)
+        _run_stages(run, month, upload_dir=upload_dir)
         run.log("run", "종료", memo="정상 종결")
     except Exception as e:
         run.notes.append(f"실행기 오류로 중단: {e}")
@@ -385,8 +391,11 @@ def run_pipeline(month, on_event=None):
     return run
 
 
-def _run_stages(run, month):
+def _run_stages(run, month, upload_dir=None):
     run.notes.append(f"대상 월: {month}")
+    if upload_dir:
+        upload_count = sum(1 for e in os.scandir(upload_dir) if e.is_file())
+        run.notes.append(f"수집 원천: 웹 업로드 파일 {upload_count}건")
 
     # 신선도 — 이번 실행이 만들 판단형 단계 산출물의 이전 실행 잔재를 지운다
     # (통합이 파일로 읽는 자리라, 옛 결과가 이번 실행 것으로 오인되지 않게)
@@ -403,7 +412,7 @@ def _run_stages(run, month):
         print(f"실행 기록: {run.run_dir}/")
 
     # 1. 수집
-    collect_env = run.call_stage("collect", lambda: run_collect(month))
+    collect_env = run.call_stage("collect", lambda: run_collect(month, upload_dir))
     if collect_env["status"] == "empty":
         run.notes.append("수집 empty — 특례로 이후 단계 호출 없이 종료 (결산 대상 없음)")
         finish()

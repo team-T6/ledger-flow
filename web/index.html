@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="ledger">
+<html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,30 +7,15 @@
 <meta name="description" content="카드사 엑셀과 영수증을 올리면 월말결산 비서가 분류하고 검증해 월 결산 리포트를 만들어 드립니다. (샘플 데이터 데모)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&family=Noto+Sans+KR:wght@400;500;700&family=Do+Hyeon&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
-  /* ---------- 테마 토큰 — 색·모서리·서체는 여기서만 정의한다 ---------- */
-  :root, :root[data-theme="ledger"] {
+  /* ---------- 테마 토큰 — 색·모서리·서체는 여기서만 정의한다 (장부 에디토리얼 고정) ---------- */
+  :root {
     --bg: #FAF7F2; --ink: #1C1917; --muted: #7A7263;
     --line: #E6DFD2; --soft: #EFE9DD; --card: #F5F1E8;
     --accent: #1E5B45; --accent-contrast: #FAF7F2; --accent-soft: #C9D8CC;
     --red: #A63A2E; --radius: 4px;
     --font-display: "Noto Serif KR", serif; --display-weight: 900;
-  }
-  :root[data-theme="fintech"] {
-    --bg: #FFFFFF; --ink: #191F28; --muted: #8B95A1;
-    --line: #EDF0F3; --soft: #F2F4F6; --card: #F9FAFB;
-    --accent: #3182F6; --accent-contrast: #FFFFFF; --accent-soft: #B9D5FB;
-    --red: #F04452; --radius: 12px;
-    --font-display: "Noto Sans KR", sans-serif; --display-weight: 700;
-  }
-  :root[data-theme="green"] {
-    /* 딥 그린 다크 — 라이트 테마 둘과 확실히 갈리도록 바탕을 진초록으로 뒤집고 전용 서체를 쓴다 */
-    --bg: #172A20; --ink: #EFE9DA; --muted: #9DB0A0;
-    --line: #2C4334; --soft: #22382B; --card: #1D3327;
-    --accent: #6FBE8C; --accent-contrast: #14261C; --accent-soft: #3B5A48;
-    --red: #E08A7A; --radius: 6px;
-    --font-display: "Do Hyeon", "Noto Sans KR", sans-serif; --display-weight: 400;
   }
 
   * { box-sizing: border-box; }
@@ -41,7 +26,6 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
     line-height: 1.65; -webkit-font-smoothing: antialiased;
-    transition: background 0.25s ease, color 0.25s ease;
   }
   .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
   h1, h2 { font-family: var(--font-display); font-weight: var(--display-weight); text-wrap: balance; }
@@ -72,26 +56,6 @@
   .page .wrap { width: 100%; max-width: 720px; margin: 0 auto; }
   .page h2 { font-size: clamp(26px, 5vw, 38px); line-height: 1.35; letter-spacing: -0.015em; margin: 0 0 16px; }
   .page .lead { font-size: 16.5px; color: var(--muted); max-width: 52ch; margin: 0 0 8px; }
-
-  /* ---------- 테마 전환 ---------- */
-  .theme-picker {
-    position: fixed; top: 66px; right: 16px; z-index: 8;
-    display: flex; gap: 8px; padding: 7px 9px;
-    background: var(--bg); border: 1px solid var(--line); border-radius: 999px;
-    box-shadow: 0 4px 16px rgba(20, 18, 12, 0.10);
-  }
-  .theme-dot {
-    width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
-    border: 2px solid transparent; position: relative;
-  }
-  .theme-dot::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; }
-  .theme-dot[data-set="ledger"]  { background: #FAF7F2; border-color: #E6DFD2; }
-  .theme-dot[data-set="ledger"]::after  { background: #1E5B45; }
-  .theme-dot[data-set="fintech"] { background: #FFFFFF; border-color: #EDF0F3; }
-  .theme-dot[data-set="fintech"]::after { background: #3182F6; }
-  .theme-dot[data-set="green"]   { background: #1B4332; border-color: #1B4332; }
-  .theme-dot[data-set="green"]::after   { background: #F6F1E3; }
-  .theme-dot.on { border-color: var(--ink); }
 
   /* ---------- 고정 헤더 ---------- */
   .site-header {
@@ -197,6 +161,10 @@
   .month.now { cursor: pointer; }
   .month.now .circle { background: transparent; border-color: var(--accent); color: var(--accent); }
   .month.now:hover .circle { background: var(--soft); }
+  .month.selected .circle {
+    background: transparent; border-color: var(--accent); color: var(--accent);
+  }
+  .month.selected .amt { color: var(--accent); font-weight: 700; }
   .month .amt { font-size: 11px; color: var(--muted); margin-top: 7px; line-height: 1.3; }
 
   /* ---------- 자료 넣기 ---------- */
@@ -214,7 +182,13 @@
     background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   }
   .file-list .ok { color: var(--accent); font-weight: 700; }
+  .file-list .del {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font: inherit; font-size: 13px; color: var(--muted);
+  }
+  .file-list .del:hover { color: var(--red); }
   .run-cta { margin-top: 28px; text-align: center; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* ---------- 결산 진행 ---------- */
   .hidden { display: none; }
@@ -226,6 +200,7 @@
   }
   .step.active { background: var(--soft); color: var(--accent); font-weight: 700; }
   .step.done { background: var(--accent); color: var(--accent-contrast); }
+  .step.fail { background: var(--red); color: var(--accent-contrast); }
   .step .tick { display: none; font-weight: 700; }
   .step.done .tick { display: inline; }
   .runlog {
@@ -276,7 +251,33 @@
   }
   .memo strong { font-weight: 700; }
   .flags { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
-  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
+
+  /* ---------- 더보기 접이식 블록 (결산 요약 전문 · PDF 미리보기) ---------- */
+  .more {
+    margin-top: 14px; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .more summary {
+    cursor: pointer; padding: 14px 18px; font-size: 14px; font-weight: 700;
+    list-style: none; display: flex; align-items: center; gap: 9px;
+  }
+  .more summary::-webkit-details-marker { display: none; }
+  .more summary::before {
+    content: "\25B8"; color: var(--accent); transition: transform 0.15s ease;
+  }
+  .more[open] summary::before { transform: rotate(90deg); }
+  .more summary .sub { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+  .more .more-body { padding: 0 18px 18px; }
+  .summary-pre {
+    margin: 0; white-space: pre-wrap; word-break: break-all;
+    font-size: 12px; line-height: 1.8; color: var(--muted);
+  }
+  .summary-pre .h { color: var(--ink); font-weight: 600; }
+  .pdf-frame {
+    width: 100%; height: 480px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: #FFFFFF;
+  }
+  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
 
   /* ---------- 푸터 ---------- */
   /* 푸터가 짧아 바닥이 마지막 화면 스냅 지점으로 되돌아가지 않도록, 바닥 자체를 스냅 지점으로 둔다 */
@@ -311,12 +312,6 @@
   <div class="header-right">
     <nav><a class="nav-link" id="nav-app" href="#app">결산하기</a></nav>
   </div>
-</div>
-
-<div class="theme-picker" role="group" aria-label="테마 선택">
-  <button class="theme-dot on" data-set="ledger" title="장부 에디토리얼" aria-label="장부 에디토리얼 테마"></button>
-  <button class="theme-dot" data-set="fintech" title="클린 핀테크" aria-label="클린 핀테크 테마"></button>
-  <button class="theme-dot" data-set="green" title="회계 그린" aria-label="회계 그린 테마"></button>
 </div>
 
 <div id="view-landing">
@@ -420,7 +415,7 @@
       <button class="btn" id="invite-btn">확인</button>
     </div>
     <p class="invite-error" id="invite-error">초대코드가 맞지 않습니다. 다시 확인해 주세요.</p>
-    <div class="hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
+    <div class="hint" id="invite-hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
   </div>
 </section>
 
@@ -437,23 +432,23 @@
 <section id="upload-sec" class="page hidden">
   <div class="wrap">
     <div class="eyebrow">1 · 자료 넣기</div>
-    <h2>8월에 쓴 카드 자료를 올려 주세요</h2>
-    <div class="dropzone">
+    <h2 id="upload-title">8월에 쓴 카드 자료를 올려 주세요</h2>
+    <div class="dropzone" id="dropzone">
       <strong>파일을 끌어다 놓으세요</strong><br>
       카드사 엑셀·CSV, 영수증·결제 문자 캡처 이미지
       <div class="src-buttons">
-        <button class="btn btn-ghost inert">파일 선택</button>
-        <button class="btn btn-ghost inert">Google Drive 연결</button>
+        <button class="btn btn-ghost inert" id="pick-files">파일 선택</button>
+        <button class="btn btn-ghost inert" id="drive-btn">Google Drive 연결</button>
       </div>
     </div>
-    <ul class="file-list">
+    <ul class="file-list" id="file-list">
       <li><span>국민카드_202608_이용내역.xlsx</span><span class="ok">준비됨</span></li>
       <li><span>신한카드_202608.csv</span><span class="ok">준비됨</span></li>
       <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
     </ul>
     <div class="run-cta">
       <button class="btn" id="run-btn">이 자료로 결산 시작하기</button>
-      <div class="hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
+      <div class="hint" id="upload-hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
     </div>
   </div>
 </section>
@@ -477,21 +472,21 @@
 <section id="result-sec" class="page hidden">
   <div class="wrap">
     <div class="eyebrow">3 · 결산 결과</div>
-    <h2>2026년 8월 결산이 끝났습니다</h2>
+    <h2 id="r-title">2026년 8월 결산이 끝났습니다</h2>
 
     <div class="report-block">
       <h3>결산 개요</h3>
       <div class="stats">
-        <div class="stat"><div class="k">총지출</div><div class="v minus mono">-3,481,200</div></div>
-        <div class="stat"><div class="k">총수익</div><div class="v mono">+5,214,000</div></div>
-        <div class="stat"><div class="k">순액</div><div class="v mono">+1,732,800</div></div>
+        <div class="stat"><div class="k">총지출</div><div class="v minus mono" id="r-expense">-3,481,200</div></div>
+        <div class="stat"><div class="k">총수익</div><div class="v mono" id="r-income">+5,214,000</div></div>
+        <div class="stat"><div class="k">순액</div><div class="v mono" id="r-net">+1,732,800</div></div>
       </div>
-      <div class="hint">거래 42건 · 카드 3장 통합</div>
+      <div class="hint" id="r-count">거래 42건 · 카드 3장 통합</div>
     </div>
 
     <div class="report-block">
       <h3>카테고리별 지출</h3>
-      <div class="cats">
+      <div class="cats" id="r-cats">
         <div class="cat"><span>사용료</span><div class="bar-track"><div class="bar" data-w="100%"></div></div><span class="num mono">-1,200,000</span><span class="pct mono">34%</span></div>
         <div class="cat"><span>식대</span><div class="bar-track"><div class="bar" data-w="70%"></div></div><span class="num mono">-842,300</span><span class="pct mono">24%</span></div>
         <div class="cat"><span>그 외 5개</span><div class="bar-track"><div class="bar" data-w="54%"></div></div><span class="num mono">-649,000</span><span class="pct mono">19%</span></div>
@@ -503,11 +498,11 @@
 
     <div class="report-block">
       <h3>결제구분별 합계</h3>
-      <div class="split-bar">
+      <div class="split-bar" id="r-split">
         <div class="seg-b" style="width:40%"></div>
         <div class="seg-a" style="width:60%"></div>
       </div>
-      <div class="split-legend">
+      <div class="split-legend" id="r-split-legend">
         <span><i class="dot-b"></i>개인결제 <span class="amt mono">-1,392,500 (40%)</span></span>
         <span><i class="dot-a"></i>법인결제 <span class="amt mono">-2,088,700 (60%)</span></span>
       </div>
@@ -515,7 +510,7 @@
 
     <div class="report-block">
       <h3>주요 지출 Top 5</h3>
-      <table class="top5">
+      <table class="top5" id="r-top5">
         <tr><td class="d mono">08-05</td><td>스튜디오밝음</td><td class="c">사용료</td><td class="n mono">-1,200,000</td></tr>
         <tr><td class="d mono">08-21</td><td>코스트코 광명점</td><td class="c">식대</td><td class="n mono">-286,400</td></tr>
         <tr><td class="d mono">08-03</td><td>SK텔레콤</td><td class="c">통신비</td><td class="n mono">-159,000</td></tr>
@@ -526,7 +521,7 @@
 
     <div class="report-block">
       <h3>결산 비고</h3>
-      <div class="memo">
+      <div class="memo" id="r-memo">
         <strong>확인 필요 2건</strong>
         <ul class="flags">
           <li>7행 · 해외결제 1건 — 원화 환산 금액 확인이 필요합니다</li>
@@ -535,7 +530,54 @@
       </div>
     </div>
 
-    <div class="downloads">
+    <div class="report-block">
+      <h3>자세히 보기</h3>
+
+      <details class="more" id="pdf-more">
+        <summary>분석 리포트(PDF) 미리보기 <span class="sub">결산 리포트를 내려받기 전에 훑어봅니다</span></summary>
+        <div class="more-body" id="pdf-preview">
+          <div class="mini-bar"><span>사용료</span><i style="width:100%"></i></div>
+          <div class="mini-bar"><span>식대</span><i style="width:70%"></i></div>
+          <div class="mini-bar"><span>구독료</span><i style="width:27%"></i></div>
+          <div class="mini-bar"><span>교통비</span><i style="width:23%"></i></div>
+          <div class="hint">데모 미리보기입니다 — 실제 PDF 미리보기는 로컬 실행 모드에서 제공됩니다.</div>
+        </div>
+      </details>
+
+      <details class="more" id="summary-more">
+        <summary>결산 요약 전문 <span class="sub">단계별 진행·확인 필요 목록·실행 기록</span></summary>
+        <div class="more-body">
+          <pre class="summary-pre" id="summary-body"># 최종 결과 요약 (2026-08 결산)
+
+## 1. 단계별 진행 현황
+
+| 단계 | 상태 | 처리 건수 (전체/정상/확인필요) | 산출물 |
+| 수집 | ok | 42 / 42 / 0 | collect/result.csv |
+| 가공 | partial | 42 / 40 / 2 | refine/result.csv |
+| 검증 1 | partial | 42 / 41 / 1 | verify1/result.csv |
+| 검증 2 | partial | 42 / 41 / 1 | verify2/result.csv |
+| 통합 | partial | 42 / 40 / 2 | merge/result.xlsx, merge/result.pdf |
+
+## 2. 확인 필요 목록
+
+| 행 번호 | 단계 | 유형 | 사유 |
+| 7 | 검증 2 | 확인 필요 | 해외결제 1건 — 원화 환산 금액 확인 필요 |
+| 23 | 가공 | 확인 필요 | 결제대행사 결제 — 실제 가맹점명 미확인 |
+
+## 3. 산출물 위치
+
+- 엑셀 회계장부: merge/result.xlsx
+- PDF 결산 리포트: merge/result.pdf
+
+## 4. 메모
+
+전 단계 counts.total(42건) 대조 결과 유실 없음.
+실행 기록: logs/run_20260901_090000/ (진행 로그 + 단계별 보고 아카이브)</pre>
+        </div>
+      </details>
+    </div>
+
+    <div class="downloads" id="downloads">
       <button class="btn inert">PDF 리포트 받기</button>
       <button class="btn btn-ghost inert">결제내역 장부 받기 (엑셀)</button>
     </div>
@@ -545,7 +587,7 @@
 
 <footer>
   <div class="wrap">
-    이 페이지는 샘플 데이터로 구성된 데모입니다. 실제 결산 실행·파일 업로드·다운로드는 정식 버전에서 제공됩니다.<br>
+    <span id="footer-note">이 페이지는 샘플 데이터로 구성된 데모입니다. 실제 결산 실행·파일 업로드·다운로드는 정식 버전에서 제공됩니다.</span><br>
     Ledger Flow — 월말결산 비서 · <a href="https://github.com/team-T6/ledger-flow" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
@@ -555,22 +597,6 @@
 <script>
 (function () {
   "use strict";
-
-  /* 테마 전환 — data-theme 토큰 교체, 선택은 localStorage에 유지 */
-  var THEME_KEY = "lf-theme";
-  var dots = document.querySelectorAll(".theme-dot");
-  function setTheme(name) {
-    document.documentElement.dataset.theme = name;
-    dots.forEach(function (d) { d.classList.toggle("on", d.dataset.set === name); });
-    try { localStorage.setItem(THEME_KEY, name); } catch (e) { /* 저장 불가 환경은 무시 */ }
-  }
-  dots.forEach(function (d) {
-    d.addEventListener("click", function () { setTheme(d.dataset.set); });
-  });
-  try {
-    var saved = localStorage.getItem(THEME_KEY);
-    if (saved === "ledger" || saved === "fintech" || saved === "green") setTheme(saved);
-  } catch (e) { /* 무시 */ }
 
   /* 토스트 */
   var toastEl = document.getElementById("toast");
@@ -589,11 +615,12 @@
 
   /* 진행형 공개 — 숨겨진 섹션을 열고 그 화면으로 스냅 이동.
      공개 직후 같은 프레임에 스크롤하면 스냅 재계산에 밀려 제자리로 돌아오므로
-     레이아웃이 잡힌 다음 틱에 스크롤한다 */
+     레이아웃이 잡힌 다음에 스크롤한다. 선택 표시가 눈에 들어온 뒤
+     부드럽게 내려가도록 잠깐 여유를 두고 smooth로 이동한다 */
   function openSection(id) {
     var el = document.getElementById(id);
     el.classList.remove("hidden");
-    setTimeout(function () { el.scrollIntoView({ behavior: "instant", block: "start" }); }, 60);
+    setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 280);
   }
 
   /* 뷰 전환 — 랜딩 ↔ 월말결산하기 (해시 라우팅: #app) */
@@ -624,11 +651,33 @@
     else location.hash = "app";
   });
 
-  /* 초대코드 확인 — 데모는 고정 코드, 정식 버전은 서버에서 검증한다 */
+  /* 초대코드 확인 — 데모는 고정 코드, 실제 모드는 서버(.env의 INVITE_CODE)에서 검증한다 */
   var DEMO_CODE = "LEDGER";
   function checkInvite() {
     var input = document.getElementById("invite-input");
     var error = document.getElementById("invite-error");
+    if (REAL) {
+      fetch("auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: input.value.trim() })
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (res.ok && res.data.ok) {
+            error.classList.remove("show");
+            openSection("months-sec");
+          } else {
+            error.textContent = res.data.error || "초대코드가 맞지 않습니다. 다시 확인해 주세요.";
+            error.classList.add("show");
+            input.focus({ preventScroll: true });
+          }
+        })
+        .catch(function () {
+          error.textContent = "서버에 연결하지 못했습니다 — orchestrator/server.py가 실행 중인지 확인하세요.";
+          error.classList.add("show");
+        });
+      return;
+    }
     if (input.value.trim().toUpperCase() === DEMO_CODE) {
       error.classList.remove("show");
       openSection("months-sec");
@@ -645,6 +694,10 @@
   /* 월 동그라미 — 5·6·7월 완료, 8월 진행 가능 */
   var DONE = { 5: "-291만", 6: "-312만", 7: "-348만" };
   var monthsEl = document.getElementById("months");
+  function markMonthSelected(btn) {
+    monthsEl.querySelectorAll(".month.selected").forEach(function (b) { b.classList.remove("selected"); });
+    btn.classList.add("selected");
+  }
   for (var m = 1; m <= 12; m++) {
     var btn = document.createElement("button");
     btn.className = "month" + (DONE[m] ? " done" : m === 8 ? " now" : "");
@@ -653,7 +706,10 @@
       (DONE[m] ? '<span class="amt mono">' + DONE[m] + '</span>' :
        m === 8 ? '<span class="amt">진행 가능</span>' : "");
     if (m === 8) {
-      btn.addEventListener("click", function () { openSection("upload-sec"); });
+      btn.addEventListener("click", function () {
+        markMonthSelected(this);
+        openSection("upload-sec");
+      });
     } else {
       btn.addEventListener("click", function () {
         showToast("데모에서는 8월 결산만 진행할 수 있습니다");
@@ -680,6 +736,7 @@
   var running = false;
   document.getElementById("run-btn").addEventListener("click", function () {
     if (running) return;
+    if (REAL) { runReal(); return; }
     running = true;
     var runSec = document.getElementById("run-sec");
     var log = document.getElementById("runlog");
@@ -710,6 +767,384 @@
     }
     tick();
   });
+
+  /* ==================== 실제 모드 (로컬 서버) ====================
+     같은 파일이 orchestrator 서버(python3 orchestrator/server.py, localhost:8788)에서
+     서빙되면 실제 파이프라인으로 동작한다. 감지는 GET /health 프로브 — 실패하면
+     위의 데모 연출이 그대로 남는다 (데모가 기본값, 실제 모드는 opt-in). */
+  var REAL = false;
+  var selectedMonth = null;
+  var uploadCount = 0;
+
+  function apiJson(path, opts) {
+    return fetch(path, opts).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; });
+    });
+  }
+
+  function probeServer() {
+    if (location.protocol !== "http:" && location.protocol !== "https:") return Promise.resolve(false);
+    return fetch("health", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { return !!(d && d.service === "ledger-flow"); })
+      .catch(function () { return false; });
+  }
+
+  function fmt(n) { return Math.abs(n).toLocaleString("ko-KR"); }
+
+  /* ---- 업로드 ---- */
+  var fileListEl = document.getElementById("file-list");
+  var runBtn = document.getElementById("run-btn");
+
+  function renderFileList(files) {
+    uploadCount = files.length;
+    fileListEl.innerHTML = "";
+    files.forEach(function (f) {
+      var li = document.createElement("li");
+      var name = document.createElement("span");
+      name.textContent = f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + "KB)";
+      var del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.textContent = "삭제";
+      del.addEventListener("click", function () {
+        apiJson("uploads/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: f.name })
+        }).then(function (res) { renderFileList(res.data.files || []); });
+      });
+      li.appendChild(name);
+      li.appendChild(del);
+      fileListEl.appendChild(li);
+    });
+    if (!files.length) {
+      var empty = document.createElement("li");
+      empty.innerHTML = "<span>아직 올린 파일이 없습니다</span>";
+      fileListEl.appendChild(empty);
+    }
+    runBtn.disabled = !files.length;
+  }
+
+  function uploadFiles(fileArray) {
+    var files = Array.prototype.slice.call(fileArray);
+    if (!files.length) return;
+    Promise.all(files.map(function (file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          resolve({ name: file.name, data_base64: String(reader.result).split(",")[1] || "" });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    })).then(function (payload) {
+      return apiJson("uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: payload })
+      });
+    }).then(function (res) {
+      if (!res.ok) { showToast(res.data.error || "업로드에 실패했습니다"); return; }
+      renderFileList(res.data.files || []);
+    }).catch(function () { showToast("업로드 중 오류가 났습니다"); });
+  }
+
+  /* ---- 실행 + 폴링 ---- */
+  var POLL_MS = 1500;
+  var STAGE_CHIP = { collect: "수집", refine: "가공", verify1: "검증", verify2: "검증", merge: "통합" };
+
+  function runReal() {
+    if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
+    running = true;
+    apiJson("runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: selectedMonth, source: "uploads" })
+    }).then(function (res) {
+      if (!res.ok) {
+        running = false;
+        showToast(res.data.error || "실행 요청에 실패했습니다");
+        return;
+      }
+      startPolling();
+    }).catch(function () {
+      running = false;
+      showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+    });
+  }
+
+  function startPolling() {
+    var runSec = document.getElementById("run-sec");
+    var log = document.getElementById("runlog");
+    log.innerHTML = "";
+    var stepEls = {};
+    runSec.querySelectorAll(".step").forEach(function (s) {
+      s.classList.remove("active", "done", "fail");
+      stepEls[s.dataset.stage] = s;
+    });
+    openSection("run-sec");
+
+    var lastSeq = 0;
+    var pollFails = 0;
+    var mergeDone = false;
+    var verifyFinal = { verify1: null, verify2: null }; // null=진행 전/중, "완료"/"실패"=확정
+
+    function addLine(head, rest, isError) {
+      var line = document.createElement("div");
+      var stage = document.createElement("span");
+      stage.className = "stage";
+      stage.textContent = head;
+      line.appendChild(stage);
+      line.appendChild(document.createTextNode(" | " + rest));
+      if (isError) line.style.color = "var(--red)";
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function applyEvent(ev) {
+      lastSeq = Math.max(lastSeq, ev.seq);
+      var rest = ev.state;
+      if (ev.counts) {
+        rest += " | " + ev.counts.total + "건 중 정상 " + ev.counts.ok + "건, 확인 필요 " + ev.counts.flagged + "건";
+      }
+      if (ev.memo) rest += " | " + ev.memo;
+      addLine(ev.stage_label, rest, ev.state === "실패" || ev.state === "오류");
+
+      var chipName = STAGE_CHIP[ev.stage];
+      if (!chipName) return;
+      var chip = stepEls[chipName];
+      if (ev.stage === "merge" && ev.state === "완료") mergeDone = true;
+
+      if (chipName === "검증") {
+        // 검증 1·2는 병렬 — 칩 하나로 묶고, 둘 다 확정돼야 done/fail로 굳힌다
+        if (ev.state === "완료" || ev.state === "실패") verifyFinal[ev.stage] = ev.state;
+        var states = [verifyFinal.verify1, verifyFinal.verify2];
+        chip.classList.remove("active", "done", "fail");
+        if (states.every(function (s) { return s !== null; })) {
+          chip.classList.add(states.indexOf("실패") >= 0 ? "fail" : "done");
+        } else {
+          chip.classList.add("active");
+        }
+        return;
+      }
+      chip.classList.remove("active", "done", "fail");
+      chip.classList.add(ev.state === "시작" ? "active" : ev.state === "실패" ? "fail" : "done");
+    }
+
+    function poll() {
+      fetch("runs/current?since=" + lastSeq, { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          pollFails = 0;
+          (data.events || []).forEach(applyEvent);
+          if (data.running) {
+            setTimeout(poll, POLL_MS);
+            return;
+          }
+          running = false;
+          if (data.error) {
+            addLine("실행기", "오류 | " + data.error, true);
+            return;
+          }
+          if (mergeDone) {
+            apiJson("result-data").then(function (res) {
+              if (res.ok) renderResult(res.data);
+              else addLine("결과", "집계 실패 | " + (res.data.error || ""), true);
+            });
+          } else {
+            addLine("안내", "최종 산출물 없이 종료됐습니다 — 위 로그를 확인해 주세요", true);
+          }
+        })
+        .catch(function () {
+          pollFails += 1;
+          if (pollFails === 5) addLine("안내", "서버 연결이 끊겼습니다 — orchestrator/server.py 확인", true);
+          if (pollFails < 40) setTimeout(poll, POLL_MS); // 서버가 다시 살아나면 다음 폴링에서 회복
+          else running = false;
+        });
+    }
+    poll();
+  }
+
+  /* ---- 결과 렌더 ---- */
+  function renderResult(data) {
+    var month = data.month || selectedMonth || "";
+    if (/^\d{4}-\d{2}$/.test(month)) {
+      document.getElementById("r-title").textContent =
+        month.slice(0, 4) + "년 " + parseInt(month.slice(5), 10) + "월 결산이 끝났습니다";
+    }
+    var exp = document.getElementById("r-expense");
+    exp.textContent = data.total_expense ? "-" + fmt(data.total_expense) : "0";
+    document.getElementById("r-income").textContent = data.total_income ? "+" + fmt(data.total_income) : "0";
+    var netEl = document.getElementById("r-net");
+    netEl.textContent = (data.net > 0 ? "+" : data.net < 0 ? "-" : "") + fmt(data.net);
+    netEl.classList.toggle("minus", data.net < 0);
+    document.getElementById("r-count").textContent =
+      "거래 " + data.tx_count + "건 · 업로드 파일 " + (data.upload_count || 0) + "건" +
+      (data.flagged_count ? " · 확인 필요 " + data.flagged_count + "건" : "");
+
+    // 카테고리별 지출 — 상위 5개 + 나머지 합산, 막대는 최대값 대비 폭
+    var cats = (data.by_category || []).filter(function (kv) { return kv[1] > 0; });
+    var top = cats.slice(0, 5);
+    var restSum = cats.slice(5).reduce(function (acc, kv) { return acc + kv[1]; }, 0);
+    if (restSum > 0) top.push(["그 외 " + (cats.length - 5) + "개", restSum]);
+    top.sort(function (a, b) { return b[1] - a[1]; });
+    var maxAmt = top.length ? top[0][1] : 1;
+    var catsEl = document.getElementById("r-cats");
+    catsEl.innerHTML = "";
+    top.forEach(function (kv) {
+      var row = document.createElement("div");
+      row.className = "cat";
+      var pct = data.total_expense ? Math.round(kv[1] / data.total_expense * 100) : 0;
+      row.innerHTML = "<span></span>" +
+        '<div class="bar-track"><div class="bar" data-w="' + Math.round(kv[1] / maxAmt * 100) + '%"></div></div>' +
+        '<span class="num mono">-' + fmt(kv[1]) + "</span>" +
+        '<span class="pct mono">' + pct + "%</span>";
+      row.firstChild.textContent = kv[0] || "미분류";
+      catsEl.appendChild(row);
+    });
+
+    // 결제구분 비율 — 개인/법인 두 축
+    var payer = { "개인결제": 0, "법인결제": 0 };
+    (data.by_payer || []).forEach(function (kv) {
+      if (kv[0] in payer) payer[kv[0]] += kv[1];
+      else payer["개인결제"] += kv[1]; // 구분 미상은 개인 축으로 합산
+    });
+    var payerTotal = payer["개인결제"] + payer["법인결제"];
+    var pctA = payerTotal ? Math.round(payer["법인결제"] / payerTotal * 100) : 0;
+    document.getElementById("r-split").innerHTML =
+      '<div class="seg-b" style="width:' + (100 - pctA) + '%"></div>' +
+      '<div class="seg-a" style="width:' + pctA + '%"></div>';
+    document.getElementById("r-split-legend").innerHTML =
+      '<span><i class="dot-b"></i>개인결제 <span class="amt mono">-' + fmt(payer["개인결제"]) + " (" + (100 - pctA) + '%)</span></span>' +
+      '<span><i class="dot-a"></i>법인결제 <span class="amt mono">-' + fmt(payer["법인결제"]) + " (" + pctA + '%)</span></span>';
+
+    // 주요 지출 Top 5
+    var topEl = document.getElementById("r-top5");
+    topEl.innerHTML = "";
+    (data.top_spenders || []).slice(0, 5).forEach(function (t) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td class="d mono"></td><td></td><td class="c"></td><td class="n mono"></td>';
+      tr.children[0].textContent = (t["날짜"] || "").slice(5);
+      tr.children[1].textContent = t["결제처"] || "";
+      tr.children[2].textContent = t["카테고리"] || "";
+      tr.children[3].textContent = "-" + fmt(t["지출"] || 0);
+      topEl.appendChild(tr);
+    });
+
+    // 결산 비고 — 확인 필요 + 미완 사유
+    var memoEl = document.getElementById("r-memo");
+    var items = (data.flags || []).map(function (f) {
+      return f.row + "행 · " + (f["결제처"] || "") + " — " + f.reason;
+    }).concat(data.incomplete || []);
+    memoEl.innerHTML = "";
+    var strong = document.createElement("strong");
+    strong.textContent = items.length ? "확인 필요 " + items.length + "건" : "확인 필요 없음";
+    memoEl.appendChild(strong);
+    if (items.length) {
+      var ul = document.createElement("ul");
+      ul.className = "flags";
+      items.forEach(function (txt) {
+        var li = document.createElement("li");
+        li.textContent = txt;
+        ul.appendChild(li);
+      });
+      memoEl.appendChild(ul);
+    }
+
+    // 자세히 보기 — PDF 미리보기(인라인 서빙)와 결산 요약 전문(orchestrator/result-summary.md)
+    document.getElementById("pdf-preview").innerHTML =
+      '<iframe class="pdf-frame" src="artifacts/result.pdf?inline=1" title="분석 리포트 PDF 미리보기"></iframe>';
+    var summaryBody = document.getElementById("summary-body");
+    summaryBody.textContent = "요약을 불러오는 중…";
+    fetch("summary", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+      .then(function (text) { summaryBody.textContent = text; })
+      .catch(function () { summaryBody.textContent = "요약을 불러오지 못했습니다 (orchestrator/result-summary.md 확인)"; });
+
+    openSection("result-sec");
+    setTimeout(function () {
+      document.querySelectorAll("#result-sec .bar").forEach(function (bar) {
+        void bar.offsetWidth; // 강제 리플로우 — 0폭에서 transition 시작 (데모 finish()와 동일 트릭)
+        bar.style.width = bar.dataset.w;
+      });
+    }, REDUCED ? 0 : 200);
+  }
+
+  /* ---- 실제 모드 켜기 ---- */
+  function enableRealMode() {
+    REAL = true;
+
+    // 표식 교체 — 데모 문구를 로컬 실행 안내로
+    document.querySelector(".demo-badge").textContent = "로컬 실행 모드";
+    document.getElementById("invite-hint").textContent = ".env의 INVITE_CODE에 설정한 초대코드를 입력하세요";
+    document.getElementById("upload-hint").textContent = "올린 파일로 실제 결산 파이프라인이 실행됩니다 (Claude 에이전트 호출)";
+    document.getElementById("footer-note").textContent =
+      "로컬 실행 모드 — 업로드한 파일로 실제 결산 파이프라인이 실행됩니다.";
+
+    // 월 선택 — 1~12월 자유 선택 (수집은 "대상 월 위주로 모으되 거르지 않는다"가 확정 규칙)
+    monthsEl.innerHTML = "";
+    for (var m = 1; m <= 12; m++) {
+      (function (mm) {
+        var btn = document.createElement("button");
+        btn.className = "month now";
+        btn.type = "button";
+        btn.innerHTML = '<span class="circle">' + mm + "월</span>";
+        btn.addEventListener("click", function () {
+          markMonthSelected(this);
+          selectedMonth = "2026-" + ("0" + mm).slice(-2);
+          document.getElementById("upload-title").textContent = mm + "월에 쓴 카드 자료를 올려 주세요";
+          openSection("upload-sec");
+        });
+        monthsEl.appendChild(btn);
+      })(m);
+    }
+
+    // 업로드 UI — inert 버튼을 실동작으로 교체 (clone으로 기존 토스트 리스너 제거)
+    var input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = ".csv,.txt,.png,.jpg,.jpeg,.xlsx";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", function () {
+      uploadFiles(input.files);
+      input.value = "";
+    });
+
+    var pick = document.getElementById("pick-files");
+    var pickReal = pick.cloneNode(true);
+    pickReal.classList.remove("inert");
+    pick.parentNode.replaceChild(pickReal, pick);
+    pickReal.addEventListener("click", function () { input.click(); });
+
+    var drive = document.getElementById("drive-btn");
+    var driveReal = drive.cloneNode(true);
+    driveReal.classList.remove("inert");
+    drive.parentNode.replaceChild(driveReal, drive);
+    driveReal.addEventListener("click", function () {
+      showToast("Google Drive 연동은 아직 지원하지 않습니다 — 파일을 직접 올려 주세요");
+    });
+
+    var dropzone = document.getElementById("dropzone");
+    dropzone.addEventListener("dragover", function (e) { e.preventDefault(); });
+    dropzone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      uploadFiles(e.dataTransfer.files);
+    });
+
+    // 다운로드 버튼 — 실제 산출물 링크로 교체
+    var downloads = document.getElementById("downloads");
+    downloads.innerHTML =
+      '<a class="btn" href="artifacts/result.pdf">PDF 리포트 받기</a>' +
+      '<a class="btn btn-ghost" href="artifacts/result.xlsx">결제내역 장부 받기 (엑셀)</a>';
+
+    // 서버에 남아 있는 업로드 목록 복원
+    apiJson("uploads").then(function (res) { renderFileList(res.data.files || []); })
+      .catch(function () { renderFileList([]); });
+  }
+
+  probeServer().then(function (ok) { if (ok) enableRealMode(); });
 
   /* 스크롤 등장 */
   if (!REDUCED && "IntersectionObserver" in window) {

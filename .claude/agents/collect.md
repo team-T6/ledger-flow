@@ -15,6 +15,7 @@ model: sonnet
 
 - Google Drive의 카드사 Excel/CSV (카드사마다 컬럼 형식이 다르고, 법인카드·개인카드가 섞여 들어올 수 있다) — 실제 연동 전까지 테스트 자리는 `sample_data/hana_card/`의 더미 데이터
 - Google Drive·Photos의 영수증 이미지·결제 문자 캡처 (OCR 대상) — 사용자가 그 자리에서 촬영해 올리는 사진도 같은 경로로 들어온다
+- 웹 화면에서 사용자가 직접 올린 카드사 CSV·영수증 이미지 파일 — `uploads/inbox/`에 놓이며, 위 두 원천과 같은 규칙으로 처리한다
 
 # 하는 단계
 
@@ -68,7 +69,7 @@ model: sonnet
 
 # 도구 제한
 
-collect/ 폴더와 sample_data/ 폴더 안의 파일은 읽는다. 쓰기는 collect/ 폴더 안에서만 한다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
+collect/ 폴더, sample_data/ 폴더, uploads/ 폴더(웹 업로드 입력 원천) 안의 파일은 읽는다. 쓰기는 collect/ 폴더 안에서만 한다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
 
 # 결과 확인 (자체 점검)
 

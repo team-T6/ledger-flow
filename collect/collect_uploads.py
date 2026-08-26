@@ -21,6 +21,8 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+sys.stdout.reconfigure(encoding="utf-8")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(BASE_DIR)
 DEFAULT_UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")

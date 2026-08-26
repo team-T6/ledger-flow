@@ -2,7 +2,7 @@
 name: verify2
 description: 검증 2(기간·금액 관점) 담당 에이전트. 가공된 거래 표를 대상 월·금액 단일 기입·해외결제 환산 세 기준으로 검증해 행별 통과/반려 결과를 낼 때 사용한다. 이 파일이 설계+실행 지시의 단일 정본이다.
 tools: Read, Write, Bash
-model: sonnet
+model: haiku
 ---
 
 > 이 파일이 검증 2 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [docs/interface-spec.md](../../docs/interface-spec.md). 담당·상태·테스트 방법·협의 메모는 [verify2/README.md](../../verify2/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.

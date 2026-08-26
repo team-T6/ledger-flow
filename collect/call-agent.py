@@ -28,7 +28,9 @@ REPO_ROOT = BASE_DIR.parent
 ENV_PATH = REPO_ROOT / ".env"
 AGENT_INSTRUCTION_PATH = REPO_ROOT / ".claude" / "agents" / "collect.md"
 
-MODEL = "claude-sonnet-5"
+# 표 변환·영수증 판독은 서식 대조 위주의 기계적 추출이라 haiku로 충분하다
+# (수집 단계 문서 "하는 단계" 확정 — 사용량 절감)
+MODEL = "claude-haiku-4-5"
 
 # collect.md "하는 단계 3" (영수증 이미지에서 거래일·금액·결제처·결제수단·구매 물품 목록 추출)에
 # 맞춘 구조화 출력 스키마.
@@ -137,6 +139,10 @@ def _client():
 
 CLI_TIMEOUT_SECONDS = 600  # 호출 1건 상한 — CLI가 매달리는 것 방지
 
+# CLI 폴백 작업 디렉터리 — repo 안에서 실행하면 프로젝트 지침 파일(CLAUDE.md·AGENTS*.md)이
+# 호출마다 통째로 주입되어 사용량을 낭비한다 (지휘 단계 문서 "도구·코드" 확정과 동일)
+CLI_WORKDIR = tempfile.gettempdir()
+
 
 def _have_api_key():
     load_env_file(ENV_PATH)
@@ -170,7 +176,7 @@ def _call_cli(user_text, allowed_tools=None):
     if allowed_tools:
         cmd += ["--allowedTools", allowed_tools]
     result = subprocess.run(cmd, input=user_text, capture_output=True, text=True,
-                            timeout=CLI_TIMEOUT_SECONDS)
+                            timeout=CLI_TIMEOUT_SECONDS, cwd=CLI_WORKDIR)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()[:300]
         raise RuntimeError(f"claude CLI 실행 실패 (exit {result.returncode}): {detail}")

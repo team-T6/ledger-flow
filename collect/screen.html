@@ -204,6 +204,47 @@
     height: 3.4em;
     overflow-y: auto;
   }
+  .dropzone {
+    border: 2px dashed #999999;
+    padding: 24px;
+    text-align: center;
+    color: #666666;
+    font-size: 14px;
+    margin-bottom: 16px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .dropzone.dragover {
+    background: #eef6ff;
+    border-color: #3366cc;
+    color: #3366cc;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-box {
+    background: #ffffff;
+    border: 1px solid #999;
+    padding: 24px;
+    max-width: 400px;
+    text-align: center;
+  }
+  .modal-box p {
+    margin: 0 0 16px;
+    font-size: 15px;
+    word-break: break-all;
+  }
+  .modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 </style>
 </head>
 <body>
@@ -230,7 +271,9 @@
     <pre id="report-output" class="report-output"><span class="placeholder">보고 만들기 버튼을 누르면 지금까지의 데이터를 기준으로 interface-spec.md의 "단계 결과 보고" 형식이 여기에 표시됩니다.</span></pre>
   </div>
 </div>
-<input type="file" id="receipt-input" accept="image/*" style="display:none">
+<div class="dropzone" id="dropzone">파일을 여기로 끌어다 놓으세요 (영수증 이미지 · 영수증 zip · 카드사 xlsx/csv, 여러 개 동시 가능)</div>
+
+<input type="file" id="receipt-input" accept="image/*,.zip" style="display:none">
 <input type="file" id="xlsx-input" accept=".csv,.xlsx,.xls" style="display:none">
 
 <div id="manual-form" class="manual-form" style="display:none">
@@ -273,7 +316,8 @@
 
 <script>
 // 표준 산출물 컬럼만 담은 헤더 — 미리 넣어둔 결과 행은 없음
-const RESULT_CSV = `transaction_id,날짜,지출,수익,결제처,비고,결제수단,결제자,source_type,collect_status,구매항목
+// interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로 (collect.py OUT_FIELDS와 동일)
+const RESULT_CSV = `transaction_id,날짜,금액,결제처,카테고리,비고,결제수단,결제구분,원거래통화,원거래금액,source_type,collect_status,구매항목
 `;
 
 // 하나카드 원본(카드사 CSV) 컬럼 — collect.py와 같은 순서
@@ -400,7 +444,7 @@ function normalizeMerchant(s) {
 }
 
 function rowAmount(row) {
-  return (Number(row.지출) || 0) || (Number(row.수익) || 0);
+  return Number(row.금액) || 0;
 }
 
 // candidate와 날짜·금액이 같고 결제처가 겹치는(포함 관계) 기존 행을 찾는다.
@@ -431,19 +475,59 @@ function pushRow(row) {
 
 // ---------- 데이터 준비 ----------
 
-function ensureLoaded() {
+// 서버의 기존 collect/result.csv를 불러와 이어서 쓴다 — 없거나 못 읽으면 빈 표로 시작한다
+// (연습용 서버가 result.csv를 정적 파일로 내주므로 GET /result.csv로 바로 읽을 수 있다).
+async function ensureLoaded() {
   if (dataRows === null) {
-    const parsed = csvToObjects(RESULT_CSV);
+    let csvText = RESULT_CSV;
+    try {
+      const response = await fetch("/result.csv");
+      if (response.ok) {
+        const existing = (await response.text()).trim();
+        if (existing) csvText = existing + "\n";
+      }
+    } catch (err) {
+      // 못 읽으면 신규 결산으로 보고 빈 표로 시작한다
+    }
+    const parsed = csvToObjects(csvText);
     COLUMNS = parsed.header;
     dataRows = parsed.records;
     buildTableHead();
   }
 }
 
+// 카드사 명세서 파일은 한 파일 전체가 개인 아니면 법인 카드 하나다 — 등록된 카드 목록이
+// 없어 행 단위로는 판단 근거가 없으므로(collect.md "판단 규칙"), 파일을 넣을 때 한 번만
+// 사람에게 물어 그 파일에서 나온 모든 행에 동일하게 적용한다. "모름"을 고르면 문서 규칙대로
+// 빈칸으로 둔다.
+function askPaymentType(fileName) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML =
+      `<div class="modal-box">
+        <p>"${escapeHtml(fileName)}" — 이 파일은 개인결제인가요, 법인결제인가요?</p>
+        <div class="modal-buttons">
+          <button type="button" data-value="개인결제">개인결제</button>
+          <button type="button" data-value="법인결제">법인결제</button>
+          <button type="button" class="secondary" data-value="">모름 (확인 필요로 남김)</button>
+        </div>
+      </div>`;
+    overlay.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.body.removeChild(overlay);
+        resolve(btn.dataset.value);
+      });
+    });
+    document.body.appendChild(overlay);
+  });
+}
+
 // 하나카드 원본 CSV(카드사 Excel/CSV) 한 행을 표준 컬럼으로 정규화한다.
 // collect.py의 normalize()와 같은 규칙 — 단, 매달 파일이 나뉘어 있다고 가정하지 않고
 // 이용일자를 그대로 날짜로 쓴다(업로드 한 파일 = 한 시점 스냅샷이라는 단순화).
-function normalizeHanaRow(raw) {
+// paymentType은 askPaymentType()으로 파일 단위로 받아온 개인결제/법인결제/빈칸 값이다.
+function normalizeHanaRow(raw, paymentType) {
   const usageDate = raw["이용일자"];
   const merchant = raw["이용가맹점"];
   const amount = parseInt(raw["이용금액"], 10) || 0;
@@ -467,12 +551,14 @@ function normalizeHanaRow(raw) {
   return {
     transaction_id: nextTxId(usageDate),
     날짜: usageDate,
-    지출: expense,
-    수익: 0,
+    금액: -expense,  // 스키마 v1 — 지출은 음수 (collect.py normalize()와 동일)
     결제처: merchant,
+    카테고리: "",     // 가공(refine) 몫 — 자리만 만들어 둔다
     비고: memo,
     결제수단: "하나카드",
-    결제자: "개인카드",
+    결제구분: paymentType || "",
+    원거래통화: "",   // 국내 결제 — 해외결제 여부는 이 컬럼 유무로 판별
+    원거래금액: "",
     source_type: "card_excel",
     collect_status: "확인됨",
     구매항목: "",
@@ -503,20 +589,26 @@ async function convertUnknownFormatWithAI(text) {
   return data.result;
 }
 
-// AI가 변환해 온 행들을 dataRows에 추가하고, 확인됨 건수를 돌려준다.
-function pushAiConvertedRows(rows, sourceType) {
+// AI가 변환해 온 행(지출/수익/결제자 원시 형식)을 표준 스키마로 바꿔 dataRows에 추가하고,
+// 확인됨 건수를 돌려준다. 결제구분은 행 단위로 판단할 근거가 없어(등록된 카드 목록 없음),
+// askPaymentType()으로 파일 단위로 받아온 값을 그대로 쓴다.
+function pushAiConvertedRows(rows, sourceType, paymentType) {
   let confirmedCount = 0;
   rows.forEach(r => {
     const date = r.날짜 || todayStr();
+    const income = Number(r.수익) || 0;
+    const expense = Number(r.지출) || 0;
     pushRow({
       transaction_id: nextTxId(date),
       날짜: date,
-      지출: r.지출 || 0,
-      수익: r.수익 || 0,
+      금액: income > 0 ? income : -expense,
       결제처: r.결제처 || "",
+      카테고리: "",
       비고: r.비고 || "",
       결제수단: r.결제수단 || "",
-      결제자: r.결제자 || "",
+      결제구분: paymentType || "",
+      원거래통화: "",
+      원거래금액: "",
       source_type: sourceType,
       collect_status: r.확인됨 ? "확인됨" : "확인 필요",
       구매항목: r.구매항목 || "",
@@ -535,7 +627,22 @@ document.getElementById("receipt-btn").addEventListener("click", function () {
 document.getElementById("receipt-input").addEventListener("change", async function (e) {
   const file = e.target.files[0];
   if (!file) return;
-  ensureLoaded();
+  if (isZipFile(file)) {
+    await processZipFile(file);
+  } else {
+    await processReceiptFile(file);
+  }
+  e.target.value = "";
+});
+
+// zip 판별 — 확장자 우선, MIME 타입은 브라우저·OS에 따라 비어 있거나 제각각이라 보조로만 쓴다.
+function isZipFile(file) {
+  return /\.zip$/i.test(file.name) || file.type === "application/zip" || file.type === "application/x-zip-compressed";
+}
+
+// 영수증 이미지 1건 처리 — receipt-input 변경 이벤트와 드롭존 양쪽에서 재사용한다.
+async function processReceiptFile(file) {
+  await ensureLoaded();
 
   const receiptBtn = document.getElementById("receipt-btn");
   receiptBtn.disabled = true;
@@ -558,15 +665,18 @@ document.getElementById("receipt-input").addEventListener("change", async functi
 
     const ocr = data.result;
     const date = ocr.날짜 || todayStr();
+    const receiptAmount = Number(ocr.금액) || 0;  // 영수증 금액은 총 결제액 → 지출 음수 (map_receipt와 동일)
     row = {
       transaction_id: nextTxId(date),
       날짜: date,
-      지출: ocr.금액 || "",
-      수익: 0,
+      금액: receiptAmount > 0 ? -receiptAmount : receiptAmount,
       결제처: ocr.결제처 || "",
+      카테고리: "",
       비고: `영수증 자동 인식: ${file.name}`,
       결제수단: ocr.결제수단 || "",
-      결제자: "",
+      결제구분: "개인결제",
+      원거래통화: "",
+      원거래금액: "",
       source_type: "receipt",
       collect_status: ocr.확인됨 ? "확인됨" : "확인 필요",
       구매항목: ocr.구매항목 || "",
@@ -578,12 +688,14 @@ document.getElementById("receipt-input").addEventListener("change", async functi
     row = {
       transaction_id: nextTxId(date),
       날짜: date,
-      지출: "",
-      수익: "",
+      금액: "",
       결제처: "",
+      카테고리: "",
       비고: `영수증 업로드: ${file.name} (AI 인식 실패: ${err.message} — 확인 전이라 지어내지 않음)`,
       결제수단: "",
-      결제자: "",
+      결제구분: "",
+      원거래통화: "",
+      원거래금액: "",
       source_type: "receipt",
       collect_status: "확인 필요",
       구매항목: "",
@@ -602,8 +714,51 @@ document.getElementById("receipt-input").addEventListener("change", async functi
     showFileMessage(baseMessage, baseIsError);
   }
   afterDataChange();
-  e.target.value = "";
-});
+}
+
+// 영수증 이미지 여러 장을 담은 zip 1건 처리 — 서버(/extract-zip)가 압축을 풀어 이미지 목록을
+// base64로 돌려주면, 각각을 File로 되살려 processReceiptFile과 같은 경로로 순서대로 처리한다
+// (동시에 여러 장을 돌리면 tx_id 채번·중복 감지가 겹칠 수 있어 순서대로 처리한다).
+async function processZipFile(file) {
+  showFileMessage(`"${file.name}" — 압축을 푸는 중...`, false);
+
+  let images;
+  try {
+    const bytes = await readFileAsBytes(file);
+    const response = await fetch("/extract-zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: bytesToBase64(bytes) }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || response.statusText);
+    images = data.result;
+  } catch (err) {
+    showFileMessage(`"${file.name}" — 압축을 풀지 못했습니다: ${err.message}`, true);
+    return;
+  }
+
+  if (images.length === 0) {
+    showFileMessage(`"${file.name}" — zip 안에서 이미지 파일을 찾지 못했습니다 (png/jpg/jpeg만 지원).`, true);
+    return;
+  }
+
+  showFileMessage(`"${file.name}" — 이미지 ${images.length}장 처리 중...`, false);
+  for (const img of images) {
+    const imgBytes = Uint8Array.from(atob(img.data), c => c.charCodeAt(0));
+    await processReceiptFile(new File([imgBytes], img.name, { type: img.media_type }));
+  }
+}
+
+// FileReader를 Promise로 감싸 파일을 바이트 배열로 읽는다.
+function readFileAsBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file);
+  });
+}
 
 // ---------- 수동 입력 ----------
 
@@ -612,8 +767,8 @@ document.getElementById("manual-btn").addEventListener("click", function () {
   form.style.display = form.style.display === "none" ? "block" : "none";
 });
 
-document.getElementById("manual-submit-btn").addEventListener("click", function () {
-  ensureLoaded();
+document.getElementById("manual-submit-btn").addEventListener("click", async function () {
+  await ensureLoaded();
   const date = document.getElementById("manual-date").value;
   const expenseRaw = document.getElementById("manual-expense").value;
   const merchant = document.getElementById("manual-merchant").value.trim();
@@ -625,23 +780,26 @@ document.getElementById("manual-submit-btn").addEventListener("click", function 
     return;
   }
 
+  const expense = parseInt(expenseRaw, 10) || 0;
   const row = {
     transaction_id: nextTxId(date),
     날짜: date,
-    지출: parseInt(expenseRaw, 10) || 0,
-    수익: 0,
+    금액: -expense,  // 수동 입력은 지출만 받는 화면이라 항상 음수
     결제처: merchant,
+    카테고리: "",
     비고: memo,
     결제수단: "현금",
-    결제자: "개인카드",
+    결제구분: "개인결제",
+    원거래통화: "",
+    원거래금액: "",
     source_type: "manual",
     collect_status: "확인됨",
     구매항목: items,
   };
   const dup = pushRow(row);
   showFileMessage(
-    dup ? `수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원 (${dup.transaction_id}와 겹쳐 확인 필요로 등록)`
-        : `수동 입력 1건 추가 — ${merchant} ${row.지출.toLocaleString()}원`,
+    dup ? `수동 입력 1건 추가 — ${merchant} ${expense.toLocaleString()}원 (${dup.transaction_id}와 겹쳐 확인 필요로 등록)`
+        : `수동 입력 1건 추가 — ${merchant} ${expense.toLocaleString()}원`,
     !!dup
   );
 
@@ -663,100 +821,142 @@ document.getElementById("xlsx-btn").addEventListener("click", function () {
 document.getElementById("xlsx-input").addEventListener("change", function (e) {
   const file = e.target.files[0];
   if (!file) return;
-  ensureLoaded();
-
-  const reader = new FileReader();
-  reader.onload = async function () {
-    const bytes = new Uint8Array(reader.result);
-
-    // 진짜 바이너리 엑셀(xlsx=zip 시그니처 "PK", 구형 xls=OLE2 시그니처)은 브라우저가
-    // 직접 텍스트로 읽을 수 없다 — 서버(/read-excel)가 xlrd·openpyxl로 대신 파싱해
-    // CSV로 돌려준다. 텍스트로 디코딩을 시도하기 전에 원본 바이트로 먼저 판별한다.
-    const isZipXlsx = bytes[0] === 0x50 && bytes[1] === 0x4B;
-    const isOleXls = bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0;
-
-    let text;
-    if (isZipXlsx || isOleXls) {
-      showFileMessage(`"${file.name}" — 엑셀 파일을 서버에서 읽는 중...`, false);
-      try {
-        const response = await fetch("/read-excel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: bytesToBase64(bytes) }),
-        });
-        const data = await response.json();
-        if (!response.ok || data.error) throw new Error(data.error || response.statusText);
-        text = data.result.csv;
-      } catch (err) {
-        const date = todayStr();
-        pushRow({
-          transaction_id: nextTxId(date),
-          날짜: date,
-          지출: "",
-          수익: "",
-          결제처: "",
-          비고: `카드사 파일 등록: ${file.name} (서버에서 엑셀을 읽지 못함: ${err.message} — 내용은 수동 입력으로 반영 필요)`,
-          결제수단: "",
-          결제자: "",
-          source_type: "card_excel",
-          collect_status: "확인 필요",
-          구매항목: "",
-        });
-        showFileMessage(`"${file.name}" — 서버에서 엑셀을 읽지 못해 확인 필요로 등록만 해뒀습니다: ${err.message}`, true);
-        afterDataChange();
-        e.target.value = "";
-        return;
-      }
-    } else {
-      // 카드사 CSV는 UTF-8이 아니라 CP949(EUC-KR)로 저장되는 경우가 많다 — 무조건 UTF-8로
-      // 읽으면 한글만 깨지고 영문·숫자만 남아 "인코딩 손상"으로 오인된다. UTF-8로 먼저
-      // 시도해(엄격 모드) 깨지면 EUC-KR로 다시 읽는다.
-      try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      } catch (err) {
-        text = new TextDecoder("euc-kr").decode(bytes);
-      }
-    }
-
-    const { header, records } = csvToObjects(text);
-    if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
-      records.forEach(r => pushRow(normalizeHanaRow(r)));
-      showFileMessage(`"${file.name}" (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
-      afterDataChange();
-      e.target.value = "";
-      return;
-    }
-    if (records.length > 0 && headersMatch(header, COLUMNS)) {
-      records.forEach(r => pushRow(r));
-      showFileMessage(`"${file.name}" (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
-      afterDataChange();
-      e.target.value = "";
-      return;
-    }
-
-    // 알려진 두 형식 어디에도 안 맞으면 담당자(AI)에게 변환을 부탁한다.
-    showFileMessage(`"${file.name}" — 알려진 형식이 아니라 담당자에게 변환을 부탁하는 중...`, false);
-    const xlsxBtn = document.getElementById("xlsx-btn");
-    xlsxBtn.disabled = true;
-    try {
-      const rows = await convertUnknownFormatWithAI(text);
-      if (!rows || rows.length === 0) {
-        showFileMessage(`"${file.name}" — 담당자가 이 내용에서 읽을 행을 찾지 못했습니다.`, true);
-        return;
-      }
-      const confirmedCount = pushAiConvertedRows(rows, "card_excel_ai");
-      showFileMessage(`"${file.name}" (담당자가 변환) — ${rows.length}건 등록 (그중 확인됨 ${confirmedCount}건, 확인 필요 ${rows.length - confirmedCount}건).`, confirmedCount < rows.length);
-      afterDataChange();
-    } catch (err) {
-      showFileMessage(`"${file.name}" — 담당자 변환에 실패했습니다: ${err.message}`, true);
-    } finally {
-      xlsxBtn.disabled = false;
-      e.target.value = "";
-    }
-  };
-  reader.readAsArrayBuffer(file);
+  processXlsxFile(file);
   e.target.value = "";
 });
+
+// 카드사 xlsx/csv 1건 처리 — xlsx-input 변경 이벤트와 드롭존 양쪽에서 재사용한다.
+// FileReader는 콜백 기반이라, 드롭존에서 여러 파일을 순서대로 처리할 수 있게 Promise로 감싼다.
+async function processXlsxFile(file) {
+  await ensureLoaded();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = async function () {
+      const bytes = new Uint8Array(reader.result);
+
+      // 진짜 바이너리 엑셀(xlsx=zip 시그니처 "PK", 구형 xls=OLE2 시그니처)은 브라우저가
+      // 직접 텍스트로 읽을 수 없다 — 서버(/read-excel)가 xlrd·openpyxl로 대신 파싱해
+      // CSV로 돌려준다. 텍스트로 디코딩을 시도하기 전에 원본 바이트로 먼저 판별한다.
+      const isZipXlsx = bytes[0] === 0x50 && bytes[1] === 0x4B;
+      const isOleXls = bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0;
+
+      let text;
+      if (isZipXlsx || isOleXls) {
+        showFileMessage(`"${file.name}" — 엑셀 파일을 서버에서 읽는 중...`, false);
+        try {
+          const response = await fetch("/read-excel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: bytesToBase64(bytes) }),
+          });
+          const data = await response.json();
+          if (!response.ok || data.error) throw new Error(data.error || response.statusText);
+          text = data.result.csv;
+        } catch (err) {
+          const date = todayStr();
+          pushRow({
+            transaction_id: nextTxId(date),
+            날짜: date,
+            금액: "",
+            결제처: "",
+            카테고리: "",
+            비고: `카드사 파일 등록: ${file.name} (서버에서 엑셀을 읽지 못함: ${err.message} — 내용은 수동 입력으로 반영 필요)`,
+            결제수단: "",
+            결제구분: "",
+            원거래통화: "",
+            원거래금액: "",
+            source_type: "card_excel",
+            collect_status: "확인 필요",
+            구매항목: "",
+          });
+          showFileMessage(`"${file.name}" — 서버에서 엑셀을 읽지 못해 확인 필요로 등록만 해뒀습니다: ${err.message}`, true);
+          afterDataChange();
+          resolve();
+          return;
+        }
+      } else {
+        // 카드사 CSV는 UTF-8이 아니라 CP949(EUC-KR)로 저장되는 경우가 많다 — 무조건 UTF-8로
+        // 읽으면 한글만 깨지고 영문·숫자만 남아 "인코딩 손상"으로 오인된다. UTF-8로 먼저
+        // 시도해(엄격 모드) 깨지면 EUC-KR로 다시 읽는다.
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch (err) {
+          text = new TextDecoder("euc-kr").decode(bytes);
+        }
+      }
+
+      const { header, records } = csvToObjects(text);
+      if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
+        const paymentType = await askPaymentType(file.name);
+        records.forEach(r => pushRow(normalizeHanaRow(r, paymentType)));
+        showFileMessage(`"${file.name}" (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
+        afterDataChange();
+        resolve();
+        return;
+      }
+      if (records.length > 0 && headersMatch(header, COLUMNS)) {
+        records.forEach(r => pushRow(r));
+        showFileMessage(`"${file.name}" (이미 표준 형식) — ${records.length}건을 그대로 등록했습니다.`, false);
+        afterDataChange();
+        resolve();
+        return;
+      }
+
+      // 알려진 두 형식 어디에도 안 맞으면 담당자(AI)에게 변환을 부탁한다.
+      const paymentType = await askPaymentType(file.name);
+      showFileMessage(`"${file.name}" — 알려진 형식이 아니라 담당자에게 변환을 부탁하는 중...`, false);
+      const xlsxBtn = document.getElementById("xlsx-btn");
+      xlsxBtn.disabled = true;
+      try {
+        const rows = await convertUnknownFormatWithAI(text);
+        if (!rows || rows.length === 0) {
+          showFileMessage(`"${file.name}" — 담당자가 이 내용에서 읽을 행을 찾지 못했습니다.`, true);
+          resolve();
+          return;
+        }
+        const confirmedCount = pushAiConvertedRows(rows, "card_excel_ai", paymentType);
+        showFileMessage(`"${file.name}" (담당자가 변환) — ${rows.length}건 등록 (그중 확인됨 ${confirmedCount}건, 확인 필요 ${rows.length - confirmedCount}건).`, confirmedCount < rows.length);
+        afterDataChange();
+      } catch (err) {
+        showFileMessage(`"${file.name}" — 담당자 변환에 실패했습니다: ${err.message}`, true);
+      } finally {
+        xlsxBtn.disabled = false;
+      }
+      resolve();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ---------- 드래그 앤 드롭 ----------
+// 이미지는 영수증 처리로, 그 외(csv/xlsx/xls·낯선 서식 포함)는 카드사 파일 처리로 보낸다.
+// 여러 파일을 한 번에 끌어다 놓으면 tx_id 채번·중복 감지가 겹치지 않게 순서대로 처리한다.
+
+(function () {
+  const dropzone = document.getElementById("dropzone");
+
+  ["dragenter", "dragover"].forEach(evt => dropzone.addEventListener(evt, function (e) {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach(evt => dropzone.addEventListener(evt, function (e) {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+  }));
+
+  dropzone.addEventListener("drop", async function (e) {
+    const files = Array.from(e.dataTransfer.files || []);
+    for (const file of files) {
+      if (isZipFile(file)) {
+        await processZipFile(file);
+      } else if (file.type.startsWith("image/")) {
+        await processReceiptFile(file);
+      } else {
+        await processXlsxFile(file);
+      }
+    }
+  });
+})();
 
 // ---------- 엑셀 복사 붙여넣기 ----------
 
@@ -766,7 +966,7 @@ document.getElementById("paste-btn").addEventListener("click", function () {
 });
 
 document.getElementById("paste-submit-btn").addEventListener("click", async function () {
-  ensureLoaded();
+  await ensureLoaded();
   const textarea = document.getElementById("paste-textarea");
   const btn = document.getElementById("paste-submit-btn");
   const text = textarea.value;
@@ -779,7 +979,8 @@ document.getElementById("paste-submit-btn").addEventListener("click", async func
   // 엑셀에서 복사하면 칸은 탭, 줄은 개행으로 구분된 표가 클립보드에 담긴다.
   const { header, records } = csvToObjects(text, "\t");
   if (records.length > 0 && headersMatch(header, HANA_RAW_HEADER)) {
-    records.forEach(r => pushRow(normalizeHanaRow(r)));
+    const paymentType = await askPaymentType("엑셀 붙여넣기");
+    records.forEach(r => pushRow(normalizeHanaRow(r, paymentType)));
     showFileMessage(`엑셀 붙여넣기 (하나카드 원본 형식) — ${records.length}건을 표준 형식으로 변환해 등록했습니다.`, false);
     textarea.value = "";
     afterDataChange();
@@ -795,6 +996,7 @@ document.getElementById("paste-submit-btn").addEventListener("click", async func
 
   // 알려진 두 형식(하나카드 원본 / 표준 산출물) 어디에도 안 맞으면,
   // 담당자(AI)에게 표준 형식으로 변환해달라고 그대로 넘긴다.
+  const paymentType = await askPaymentType("엑셀 붙여넣기");
   showFileMessage("알려진 형식이 아니라 담당자에게 변환을 부탁하는 중...", false);
   btn.disabled = true;
 
@@ -805,7 +1007,7 @@ document.getElementById("paste-submit-btn").addEventListener("click", async func
       return;
     }
 
-    const confirmedCount = pushAiConvertedRows(rows, "paste_ai");
+    const confirmedCount = pushAiConvertedRows(rows, "paste_ai", paymentType);
     showFileMessage(`엑셀 붙여넣기 (담당자가 변환) — ${rows.length}건 등록 (그중 확인됨 ${confirmedCount}건, 확인 필요 ${rows.length - confirmedCount}건).`, confirmedCount < rows.length);
     textarea.value = "";
     afterDataChange();
@@ -1161,8 +1363,8 @@ async function saveResultAndReport() {
   }
 }
 
-document.getElementById("report-btn").addEventListener("click", function () {
-  ensureLoaded();
+document.getElementById("report-btn").addEventListener("click", async function () {
+  await ensureLoaded();
   const report = buildOrchestratorReport();
   document.getElementById("report-output").textContent = JSON.stringify(report, null, 2);
 });

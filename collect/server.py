@@ -4,7 +4,9 @@ screen.html을 정적 파일로 내주고, POST /call-agent·POST /read-receipt�
 요청을 받으면 call-agent.py의 call_agent()·call_agent_with_image()·call_agent_convert_table()을
 그대로 호출해 결과를 돌려준다. POST /read-excel은 진짜 바이너리 엑셀(.xls/.xlsx)을
 받아 서버에서 표로 파싱해 CSV 텍스트로 돌려준다 — 브라우저는 엑셀 파서가 없어 이 화면이
-대신 읽어준다. POST /save-result는 collect/result.csv(산출물)를 디스크에 써준다. 단계
+대신 읽어준다. POST /extract-zip은 영수증 이미지를 담은 zip을 풀어 이미지 목록(파일명·
+media_type·base64)으로 돌려준다 — 압축 해제도 브라우저 표준 API로는 안 돼서 서버가 대신한다.
+POST /save-result는 collect/result.csv(산출물)를 디스크에 써준다. 단계
 결과 보고는 파일로 남기지 않는다 — 보고는 파이프라인 실행 시 수집 호출의 응답(반환값)
 으로 지휘에게 직접 전달한다(interface-spec.md §단계 결과 보고 전달 방식 확정). 이
 화면·서버는 데이터 준비 도구다.
@@ -18,6 +20,7 @@ import importlib.util
 import io
 import json
 import socketserver
+import zipfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -82,6 +85,35 @@ def excel_bytes_to_csv(raw_bytes):
     return out.getvalue()
 
 
+IMAGE_EXTS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def zip_bytes_to_images(raw_bytes):
+    """영수증 이미지 zip을 풀어 {name, media_type, data(base64)} 목록으로 돌려준다.
+
+    이미지가 아닌 항목(폴더·__MACOSX 등 압축 부산물)은 조용히 건너뛴다 —
+    비어 있으면 사람이 잘못된 zip임을 file-message로 알 수 있게 빈 목록을 그대로 돌려준다.
+    """
+    images = []
+    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            name = info.filename
+            base = name.rsplit("/", 1)[-1]
+            if base.startswith(".") or name.startswith("__MACOSX/"):
+                continue
+            ext = "." + base.rsplit(".", 1)[-1].lower() if "." in base else ""
+            if ext not in IMAGE_EXTS:
+                continue
+            images.append({
+                "name": base,
+                "media_type": IMAGE_EXTS[ext],
+                "data": base64.standard_b64encode(zf.read(info)).decode("ascii"),
+            })
+    return images
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(BASE_DIR), **kwargs)
@@ -95,6 +127,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_convert_table()
         elif self.path == "/read-excel":
             self._handle_read_excel()
+        elif self.path == "/extract-zip":
+            self._handle_extract_zip()
         elif self.path == "/save-result":
             self._handle_save_result()
         else:
@@ -156,6 +190,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             raw_bytes = base64.b64decode(data_b64) if data_b64 else b""
             csv_text = excel_bytes_to_csv(raw_bytes)
             payload = {"result": {"csv": csv_text}}
+            status = 200
+        except Exception as e:
+            payload = {"error": str(e)}
+            status = 500
+
+        self._send_json(status, payload)
+
+    def _handle_extract_zip(self):
+        body = self._read_json_body()
+        data_b64 = body.get("data", "")
+
+        try:
+            raw_bytes = base64.b64decode(data_b64) if data_b64 else b""
+            images = zip_bytes_to_images(raw_bytes)
+            payload = {"result": images}
             status = 200
         except Exception as e:
             payload = {"error": str(e)}

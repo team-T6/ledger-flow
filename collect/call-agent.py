@@ -17,7 +17,7 @@ REPO_ROOT = BASE_DIR.parent
 ENV_PATH = REPO_ROOT / ".env"
 AGENT_INSTRUCTION_PATH = REPO_ROOT / ".claude" / "agents" / "collect.md"
 
-MODEL = "claude-opus-5"
+MODEL = "claude-sonnet-5"
 
 # collect.md "하는 단계 3" (영수증 이미지에서 거래일·금액·결제처·결제수단·구매 물품 목록 추출)에
 # 맞춘 구조화 출력 스키마.

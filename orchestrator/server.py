@@ -11,11 +11,16 @@
 - POST /runs                : 파이프라인 실행 시작 (run-pipeline.py를 백그라운드 스레드로)
                               body.source가 "uploads"면 업로드 파일로 수집한다
 - GET  /runs/current?since=N: 진행 이벤트 증분 조회 (화면이 1.5초 간격으로 폴링)
-- GET  /summary             : orchestrator/result-summary.md 원문
+                              중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담는다
+- POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
+                              (대기 상한 10분 — 초과하면 파이프라인이 전부 유지로 진행)
+- GET  /summary             : orchestrator/result-summary.md 원문 (?month=YYYY-MM이면 보관본)
 - GET  /result-data         : 결산 결과 화면용 통계 JSON (merge 집계 함수 재사용, 읽기 전용)
-- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기
+- GET  /months              : 월별 보관함 목록 (archive/<월>/summary.json 배열)
+- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기 (?month=YYYY-MM이면 보관본)
 - POST /call-agent          : (기존) 결과 보고 확인 — call-agent.py 호출
-실행 상태·이벤트는 메모리에만 둔다 (저장 안 함 원칙 — 영구 기록은 logs/run_*/ 규약뿐).
+실행 상태·이벤트는 메모리에만 둔다. 영구 기록은 logs/run_*/ 규약과, 결산 정상 종료 시
+파이프라인이 archive/<YYYY-MM>/에 남기는 월별 산출물 보관본(웹 보관함용 — gitignore 차단)뿐.
 API 키는 이 서버가 아니라 call-agent.py / run-pipeline.py 쪽에서 .env를 읽어 쓴다.
 
 사용법: python3 orchestrator/server.py  (그다음 http://localhost:8788 을 브라우저로 연다)
@@ -40,6 +45,7 @@ PORT = 8788  # merge/server.py(8787)와 동시에 띄울 수 있게 포트를 �
 WEB_INDEX_PATH = os.path.join(REPO_ROOT, "web", "index.html")
 ENV_PATH = os.path.join(REPO_ROOT, ".env")
 UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")  # .gitignore가 uploads/를 차단한다
+ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — .gitignore가 archive/를 차단한다
 UPLOAD_EXTS = {".csv", ".txt", ".png", ".jpg", ".jpeg", ".xlsx"}
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 파일당 10MB
 UPLOAD_MAX_COUNT = 30
@@ -97,7 +103,7 @@ def list_uploads():
             for e in sorted(os.scandir(UPLOAD_DIR), key=lambda e: e.name) if e.is_file()]
 
 
-def build_result_data():
+def build_result_data(month=None):
     """결산 결과 화면용 통계 — merge의 집계 함수를 읽기 전용으로 호출한다 (파일 재생성 없음)."""
     refine_csv = os.path.join(REPO_ROOT, "refine", "result.csv")
     if not os.path.exists(refine_csv):
@@ -107,7 +113,7 @@ def build_result_data():
     ok_rows, flagged_rows = merge_mod.split_transactions(transactions)
     summary = merge_mod.summarize(ok_rows)
     return {
-        "month": run_state.month,
+        "month": month or run_state.month,
         "tx_count": len(transactions),
         "ok_count": len(ok_rows),
         "flagged_count": len(flagged_rows),
@@ -127,6 +133,29 @@ def build_result_data():
     }
 
 
+def list_months():
+    """월별 보관함 목록 — archive/<YYYY-MM>/summary.json을 모아 월 오름차순으로 돌려준다."""
+    months = []
+    if not os.path.isdir(ARCHIVE_DIR):
+        return months
+    for name in sorted(os.listdir(ARCHIVE_DIR)):
+        if not re.fullmatch(r"\d{4}-\d{2}", name):
+            continue
+        try:
+            with open(os.path.join(ARCHIVE_DIR, name, "summary.json"), encoding="utf-8") as f:
+                entry = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue  # summary 없는(깨진) 보관 폴더는 목록에서 제외
+        entry["month"] = name
+        entry["files"] = {"pdf": os.path.exists(os.path.join(ARCHIVE_DIR, name, "result.pdf")),
+                          "xlsx": os.path.exists(os.path.join(ARCHIVE_DIR, name, "result.xlsx"))}
+        months.append(entry)
+    return months
+
+
+CONFIRM_WAIT_SECONDS = 600  # 중간 확인 응답 대기 상한 10분 — 초과 시 전부 유지로 진행 (단계 문서 확정)
+
+
 class RunState:
     """실행 1회의 관찰 상태 — 메모리에만 유지한다 (서버 재시작 시 소멸)."""
 
@@ -136,6 +165,10 @@ class RunState:
         self.month = None
         self.events = []       # run-pipeline.py의 on_event가 쌓는 진행 이벤트
         self.error = None      # 실행기 자체가 예외로 죽은 경우의 사유
+        self.confirm = None    # 대기 중인 중간 확인 요청 (없으면 None)
+        self.confirm_result = None
+        self.confirm_seq = 0
+        self.confirm_ready = threading.Event()
 
     def start(self, month, upload_dir=None):
         with self.lock:
@@ -145,23 +178,55 @@ class RunState:
             self.month = month
             self.events = []
             self.error = None
+            self.confirm = None
+            self.confirm_result = None
+            self.confirm_ready.clear()
         thread = threading.Thread(target=self._work, args=(month, upload_dir), daemon=True)
         thread.start()
         return True
 
     def _work(self, month, upload_dir):
+        # 월별 보관(archive/<월>/)은 파이프라인이 종료 직전에 직접 수행한다 — 실행 경로 무관
         try:
-            pipeline.run_pipeline(month, on_event=self.on_event, upload_dir=upload_dir)
+            pipeline.run_pipeline(month, on_event=self.on_event, upload_dir=upload_dir,
+                                  on_confirm=self.on_confirm)
         except Exception as e:
             with self.lock:
                 self.error = str(e)
         finally:
             with self.lock:
                 self.running = False
+                self.confirm = None
 
     def on_event(self, event):
         with self.lock:
             self.events.append(event)
+
+    def on_confirm(self, payload):
+        """파이프라인 스레드가 부르는 중간 확인 훅 — 화면 응답까지 블록한다.
+
+        반환: 사용자 입력(resolutions 목록, 빈 목록이면 전부 유지) / 대기 상한 초과면 None.
+        """
+        with self.lock:
+            self.confirm_seq += 1
+            self.confirm = dict(payload, seq=self.confirm_seq)
+            self.confirm_result = None
+            self.confirm_ready.clear()
+        answered = self.confirm_ready.wait(CONFIRM_WAIT_SECONDS)
+        with self.lock:
+            result = self.confirm_result if answered else None
+            self.confirm = None
+            self.confirm_result = None
+        return result
+
+    def resolve_confirm(self, stage, resolutions):
+        """POST /runs/confirm 처리 — 대기 중인 요청과 단계가 맞아야 반영한다."""
+        with self.lock:
+            if not self.confirm or self.confirm.get("stage") != stage:
+                return False
+            self.confirm_result = resolutions
+            self.confirm_ready.set()
+            return True
 
     def snapshot(self, since):
         with self.lock:
@@ -169,6 +234,7 @@ class RunState:
                 "running": self.running,
                 "month": self.month,
                 "error": self.error,
+                "confirm": self.confirm,
                 "events": [e for e in self.events if e["seq"] > since],
                 "summary_ready": (not self.running) and os.path.exists(SUMMARY_PATH),
             }
@@ -227,6 +293,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"files": list_uploads()})
             return
 
+        if path == "/months":
+            self._send_json(200, {"months": list_months()})
+            return
+
         if path == "/result-data":
             try:
                 data = build_result_data()
@@ -247,12 +317,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, run_state.snapshot(since))
             return
 
+        # month=YYYY-MM — 보관본을 서빙한다 (형식 강제라 경로 조작 불가). 없으면 최신본
+        month_match = re.search(r"(?:^|&)month=(\d{4}-\d{2})(?:&|$)", query)
+
         if path == "/summary":
-            self._send_file(SUMMARY_PATH, "text/markdown; charset=utf-8")
+            summary_path = SUMMARY_PATH
+            if month_match:
+                summary_path = os.path.join(ARCHIVE_DIR, month_match.group(1), "result-summary.md")
+            self._send_file(summary_path, "text/markdown; charset=utf-8")
             return
 
         if path in ARTIFACTS:
             file_path, content_type = ARTIFACTS[path]
+            if month_match:
+                file_path = os.path.join(ARCHIVE_DIR, month_match.group(1),
+                                         os.path.basename(file_path))
             # inline=1 — 브라우저 안에서 바로 보여준다 (화면 PDF 미리보기용). 없으면 내려받기
             inline = re.search(r"(?:^|&)inline=1(?:&|$)", query) is not None
             self._send_file(file_path, content_type,
@@ -288,6 +367,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"started": True, "month": month, "source": source})
             else:
                 self._send_json(409, {"error": f"이미 실행 중입니다 (대상 월 {run_state.month})"})
+            return
+
+        if self.path == "/runs/confirm":
+            try:
+                body = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                body = {}
+            stage = str(body.get("stage") or "")
+            resolutions = body.get("resolutions")
+            if not isinstance(resolutions, list):
+                self._send_json(400, {"error": "resolutions는 배열이어야 합니다"})
+                return
+            # 형식 방어는 파이프라인의 clean_resolutions가 한 번 더 한다 — 여기선 목록만 강제
+            if run_state.resolve_confirm(stage, resolutions):
+                self._send_json(200, {"ok": True})
+            else:
+                self._send_json(409, {"error": "대기 중인 확인 요청이 없거나 단계가 다릅니다"})
             return
 
         if self.path == "/auth":

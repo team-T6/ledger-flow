@@ -2,7 +2,8 @@
 
 파일 유형별 처리 (단계 문서 collect.md "판단 기준"의 AI 판단/일반 코드 구분 그대로):
 - 하나카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 normalize 재사용 — 일반 코드
-- 낯선 서식 CSV/TXT/XLSX: call-agent.py call_agent_convert_table — AI 판단
+- 낯선 서식 CSV/TXT/XLSX: call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
+  한 호출로 묶어 변환 — collect.md "하는 단계 1" 확정, 호출당 고정 비용 절감)
 - 영수증·결제 문자 캡처 이미지 (PNG/JPG): call-agent.py call_agent_with_image — AI 판단
 
 계약은 collect.run()과 동일 — collect/result.csv 작성 + {"out_path", "rows", "envelope"} 반환.
@@ -31,7 +32,7 @@ IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/
 HANA_HEADER = {"이용일자", "이용가맹점", "이용금액", "할부기간", "회차",
                "원금", "수수료", "이용혜택", "혜택금액"}
 
-AI_WORKERS = 3  # 이미지·낯선 서식 병렬 호출 수 (개별 실패는 flags로 흡수)
+AI_WORKERS = 3  # 이미지 병렬 호출 수 (개별 실패는 flags로 흡수 — 낯선 서식은 일괄 1호출)
 
 
 def _load(name, filename):
@@ -121,24 +122,49 @@ def map_receipt(r):
     }
 
 
-def process_file(path):
-    """파일 1건 처리 — (rows, error) 반환. AI 실패는 error 문자열로 흡수한다."""
+def process_image(path):
+    """이미지 1건 처리 — (rows, error) 반환. AI 실패는 error 문자열로 흡수한다.
+
+    영수증 판독은 정확도를 위해 개별 호출을 유지한다 (collect.md "하는 단계 1").
+    """
     name = os.path.basename(path)
-    ext = os.path.splitext(name)[1].lower()
     try:
-        if ext in IMAGE_MEDIA_TYPES:
-            data = call_agent.call_agent_with_image(open(path, "rb").read(), IMAGE_MEDIA_TYPES[ext])
-            return [map_receipt(data)], None
-        if ext == ".xlsx":
-            text = xlsx_to_text(path)
-        else:  # .csv / .txt
-            text = read_text_any(path)
-        if not text.strip():
-            return [], f"{name}: 내용이 비어 있음"
-        rows = call_agent.call_agent_convert_table(text)
-        return [map_table_row(r) for r in rows], None
+        ext = os.path.splitext(name)[1].lower()
+        data = call_agent.call_agent_with_image(open(path, "rb").read(), IMAGE_MEDIA_TYPES[ext])
+        return [map_receipt(data)], None
     except Exception as e:
         return [], f"{name}: 처리 실패 — {e}"
+
+
+def process_table_batch(paths):
+    """낯선 서식 파일 여러 건을 한 번의 AI 호출로 변환 — (rows, errors) 반환.
+
+    호출당 고정 비용(시스템 프롬프트·CLI 세션 오버헤드)을 줄이기 위해 묶는다
+    (collect.md "하는 단계 1" 확정). 읽기 실패·빈 파일은 개별 오류로 흡수한다.
+    """
+    sections, errors = [], []
+    for path in paths:
+        name = os.path.basename(path)
+        try:
+            text = xlsx_to_text(path) if os.path.splitext(name)[1].lower() == ".xlsx" \
+                else read_text_any(path)
+        except Exception as e:
+            errors.append(f"{name}: 처리 실패 — {e}")
+            continue
+        if not text.strip():
+            errors.append(f"{name}: 내용이 비어 있음")
+            continue
+        sections.append(f"=== 파일: {name} ===\n{text}")
+    if not sections:
+        return [], errors
+    combined = ("아래에 여러 파일의 표가 '=== 파일: 이름 ===' 구분선으로 이어진다. "
+                "구분선은 데이터가 아니니 행으로 변환하지 않는다.\n\n" + "\n\n".join(sections))
+    try:
+        rows = call_agent.call_agent_convert_table(combined)
+        return [map_table_row(r) for r in rows], errors
+    except Exception as e:
+        names = ", ".join(os.path.basename(p) for p in paths)
+        return [], errors + [f"{names}: 일괄 변환 실패 — {e}"]
 
 
 def assign_ids(rows, month):
@@ -192,31 +218,60 @@ def build_envelope(rows, stats, errors):
     }
 
 
-def run(month, upload_dir=DEFAULT_UPLOAD_DIR):
-    """파이프라인 진입점 — collect.run()과 동일 계약."""
+def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
+    """파이프라인 진입점 — collect.run()과 동일 계약.
+
+    on_progress(done, total): 처리한 파일 수 기준 진행 통지 (선택 — 지휘의 웹 진행률 표시용,
+    보고 규격·산출물에는 영향 없음).
+    """
     paths = sorted(e.path for e in os.scandir(upload_dir) if e.is_file()) if os.path.isdir(upload_dir) else []
     if not paths:
         return {"out_path": None, "rows": [], "envelope": build_envelope([], {"card": 0, "image": 0}, [])}
 
-    hana_paths, ai_paths = [], []
+    total_files = len(paths)
+    done_files = 0
+
+    def notify():
+        if on_progress:
+            try:
+                on_progress(done_files, total_files)
+            except Exception:
+                pass  # 관찰자 오류가 수집을 멈추면 안 된다
+
+    notify()
+
+    hana_paths, image_paths, table_paths = [], [], []
     for path in paths:
         ext = os.path.splitext(path)[1].lower()
-        if ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
+        if ext in IMAGE_MEDIA_TYPES:
+            image_paths.append(path)
+        elif ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
             hana_paths.append(path)
         else:
-            ai_paths.append(path)
+            table_paths.append(path)
 
     rows, errors = [], []
     if hana_paths:
         by_month = collect.normalize(hana_paths, default_month=month)
         rows += [r for month_rows in by_month.values() for r in month_rows]
+        done_files += len(hana_paths)
+        notify()
 
-    if ai_paths:
+    if table_paths:
+        batch_rows, batch_errors = process_table_batch(table_paths)
+        rows += batch_rows
+        errors += batch_errors
+        done_files += len(table_paths)
+        notify()
+
+    if image_paths:
         with ThreadPoolExecutor(max_workers=AI_WORKERS) as pool:
-            for file_rows, error in pool.map(process_file, ai_paths):
+            for file_rows, error in pool.map(process_image, image_paths):
                 rows += file_rows
                 if error:
                     errors.append(error)
+                done_files += 1
+                notify()
 
     assign_ids(rows, month)
     rows.sort(key=lambda r: (r["날짜"], r["transaction_id"]))
@@ -228,9 +283,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR):
         for r in rows:
             writer.writerow(r)
 
-    stats = {"card": len(hana_paths) + sum(1 for p in ai_paths
-                                           if os.path.splitext(p)[1].lower() not in IMAGE_MEDIA_TYPES),
-             "image": sum(1 for p in ai_paths if os.path.splitext(p)[1].lower() in IMAGE_MEDIA_TYPES)}
+    stats = {"card": len(hana_paths) + len(table_paths), "image": len(image_paths)}
     return {"out_path": out_path if rows else None, "rows": rows,
             "envelope": build_envelope(rows, stats, errors)}
 

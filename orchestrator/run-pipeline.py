@@ -14,6 +14,9 @@
 - 인증 폴백: .env에 ANTHROPIC_API_KEY가 없으면 같은 프롬프트를 claude CLI 헤드리스
   (claude -p, CLI 로그인 세션)로 실행한다. JSON-only 지시 + 코드 재검증으로 형식을 지킨다
 
+중간 확인 (웹 실행 한정): on_confirm 훅이 있으면 수집·가공 직후와 통합 직전에
+확인 필요·반려 행을 사용자에게 보여 수정·확인을 받아 반영한다 — run_confirmation 참고.
+
 실행 기록: logs/run_YYYYMMDD_HHMMSS/ — run.log + report-<단계>.json(재시도는 -retry)
 최종 결과 요약: orchestrator/result-summary.md (stub.md 형식) — 어떤 경우에도 작성
 
@@ -29,7 +32,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -40,11 +45,18 @@ AGENTS_DIR = os.path.join(REPO_ROOT, ".claude", "agents")
 LOGS_DIR = os.path.join(REPO_ROOT, "logs")
 SUMMARY_PATH = os.path.join(BASE_DIR, "result-summary.md")
 
-MODEL = "claude-sonnet-5"   # 판단형 단계(가공·검증) 공통 — effort high로 실행
+# 판단형 단계 모델 (단계 문서 "도구·코드" 확정) — 가공은 sonnet(effort medium),
+# 검증 1·2는 기준 대조 위주의 기계적 판정이라 haiku. Haiku 4.5는 effort 파라미터
+# 미지원이라 STAGE_EFFORT에 넣지 않는다 (넣으면 API가 400을 돌려준다)
+STAGE_MODELS = {"refine": "claude-sonnet-5",
+                "verify1": "claude-haiku-4-5", "verify2": "claude-haiku-4-5"}
+STAGE_EFFORT = {"refine": "medium"}
 MAX_TOKENS = 32000
 
 STAGE_LABELS = {"collect": "수집", "refine": "가공", "verify1": "검증 1",
-                "verify2": "검증 2", "merge": "통합", "summary": "최종 결과 요약"}
+                "verify2": "검증 2", "verify": "검증", "merge": "통합",
+                "summary": "최종 결과 요약", "archive": "보관"}
+ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — gitignore가 커밋 차단
 
 # 판단형 단계의 입력 산출물 (앞 단계 output 경로 — 거래 표는 CSV로 흐른다)
 LLM_STAGE_INPUTS = {
@@ -118,6 +130,10 @@ def load_module(name, path):
 
 CLI_TIMEOUT_SECONDS = 1800  # 판단형 단계 1회 호출 상한 — CLI가 매달린 채 파이프라인이 멎는 것 방지
 
+# CLI 폴백 작업 디렉터리 — repo 안에서 실행하면 프로젝트 지침 파일(CLAUDE.md·AGENTS*.md)이
+# 호출마다 통째로 주입되어 사용량을 낭비한다 (단계 문서 "도구·코드" 확정)
+CLI_WORKDIR = tempfile.gettempdir()
+
 
 def extract_json_text(text):
     """CLI 출력에서 JSON 본문만 추린다 — 코드펜스나 앞뒤 설명이 섞여도 복원한다."""
@@ -131,15 +147,91 @@ def extract_json_text(text):
     return text
 
 
-def call_claude_cli(system_prompt, user_message):
+def is_usage_limit_error(message):
+    """실패 사유가 사용량 한도 초과인지 — CLI/API의 한도 오류 문구로 판별한다."""
+    lowered = (message or "").lower()
+    return "hit your limit" in lowered or "usage limit" in lowered
+
+
+class CLIStreamUnsupported(RuntimeError):
+    """설치된 claude CLI가 스트리밍 출력 플래그를 지원하지 않을 때 — 일반 호출로 폴백한다."""
+
+
+def _call_claude_cli_stream(model, system_prompt, user_message, on_text):
+    """claude CLI 스트리밍 호출 — 텍스트 델타를 on_text로 흘려 진행률 계산에 쓴다.
+
+    stream-json 이벤트 중 text_delta만 진행 관찰에 쓰고, 최종 본문은 result 이벤트에서 받는다.
+    """
+    proc = subprocess.Popen(
+        ["claude", "-p", "--model", model, "--append-system-prompt", system_prompt,
+         "--output-format", "stream-json", "--include-partial-messages", "--verbose"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cwd=CLI_WORKDIR)
+
+    def feed():
+        try:
+            proc.stdin.write(user_message)
+            proc.stdin.close()
+        except Exception:
+            pass  # 프로세스가 먼저 죽은 경우 — 아래 종료 코드 처리에서 드러난다
+    threading.Thread(target=feed, daemon=True).start()
+
+    timed_out = []
+    watchdog = threading.Timer(CLI_TIMEOUT_SECONDS, lambda: (timed_out.append(True), proc.kill()))
+    watchdog.start()
+    final_text = None
+    partial = []
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "stream_event":
+                delta = (event.get("event") or {}).get("delta") or {}
+                if delta.get("type") == "text_delta":
+                    chunk = delta.get("text", "")
+                    partial.append(chunk)
+                    try:
+                        on_text(chunk)
+                    except Exception:
+                        pass  # 관찰자 오류가 호출을 멈추면 안 된다
+            elif event.get("type") == "result" and isinstance(event.get("result"), str):
+                final_text = event["result"]
+        returncode = proc.wait()
+    finally:
+        watchdog.cancel()
+    if timed_out:
+        raise RuntimeError(f"claude CLI 시간 초과 ({CLI_TIMEOUT_SECONDS}초)")
+    if returncode != 0:
+        detail = (proc.stderr.read() or "").strip()[:300]
+        if "output-format" in detail or "include-partial-messages" in detail \
+                or "unknown option" in detail.lower() or "unknown argument" in detail.lower():
+            raise CLIStreamUnsupported(detail)
+        raise RuntimeError(f"claude CLI 실행 실패 (exit {returncode}): {detail}")
+    return final_text if final_text is not None else "".join(partial)
+
+
+def call_claude_cli(model, system_prompt, user_message, on_text=None):
     """claude CLI 헤드리스 호출 — API 키 없이 CLI 로그인 세션으로 실행하는 인증 폴백.
 
     CLI에는 구조화 출력 강제가 없으므로 JSON-only 지시는 호출자가 메시지에 얹고,
     응답은 json 파싱 + validate_envelope로 재검증한다 (형식 위반은 재시도 1회 정책이 흡수).
+    on_text가 있으면 스트리밍 출력으로 실행해 진행 관찰을 지원한다
+    (설치된 CLI가 스트리밍 플래그를 모르면 일반 호출로 자동 폴백 — 진행 관찰만 없어진다).
     """
+    if on_text is not None:
+        try:
+            return _call_claude_cli_stream(model, system_prompt, user_message, on_text)
+        except CLIStreamUnsupported:
+            pass
     result = subprocess.run(
-        ["claude", "-p", "--model", MODEL, "--append-system-prompt", system_prompt],
-        input=user_message, capture_output=True, text=True, timeout=CLI_TIMEOUT_SECONDS)
+        ["claude", "-p", "--model", model, "--append-system-prompt", system_prompt],
+        input=user_message, capture_output=True, text=True, timeout=CLI_TIMEOUT_SECONDS,
+        cwd=CLI_WORKDIR)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()[:300]
         raise RuntimeError(f"claude CLI 실행 실패 (exit {result.returncode}): {detail}")
@@ -243,18 +335,42 @@ class Run:
                 except Exception:
                     pass  # 관찰자 오류가 파이프라인을 멈추면 안 된다
 
+    def progress(self, stage, done, total):
+        """진행 이벤트 — 관찰자(웹)에게만 흘린다. run.log에는 쓰지 않는다
+        (실행 로그 형식은 시작/완료/실패 확정 — 진행률은 휘발성 관찰 데이터)."""
+        if not self.on_event:
+            return
+        with self._lock:
+            self._seq += 1
+            event = {"seq": self._seq,
+                     "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                     "stage": stage, "stage_label": STAGE_LABELS.get(stage, stage),
+                     "state": "진행", "counts": None, "memo": "",
+                     "progress": {"done": done, "total": total}}
+            try:
+                self.on_event(event)
+            except Exception:
+                pass  # 관찰자 오류가 파이프라인을 멈추면 안 된다
+
     def archive(self, stage, envelope, retry=False):
         name = f"report-{stage}-retry.json" if retry else f"report-{stage}.json"
         with open(os.path.join(self.run_dir, name), "w", encoding="utf-8") as f:
             json.dump(envelope, f, ensure_ascii=False, indent=2)
 
     def call_stage(self, stage, fn):
-        """단계 1회 실행 + failed면 동일 입력 재호출 1회 (확정 정책). 확정 envelope를 돌려준다."""
+        """단계 1회 실행 + failed면 동일 입력 재호출 1회 (확정 정책). 확정 envelope를 돌려준다.
+
+        예외: 사용량 한도 초과 실패는 한도 리셋 전엔 재호출해도 같은 결과라 재시도 없이
+        바로 확정한다 (단계 문서 "판단 규칙" failed 처리 확정).
+        """
         self.log(stage, "시작")
         envelope = self._safe_call(stage, fn)
         self.archive(stage, envelope)
 
-        if envelope["status"] == "failed":
+        if envelope["status"] == "failed" and is_usage_limit_error(envelope["message"]):
+            self.warnings.append(f"{STAGE_LABELS[stage]} — 사용량 한도 초과로 재시도 생략, "
+                                 "한도 리셋 후 재실행 권고")
+        elif envelope["status"] == "failed":
             self.log(stage, "실패", envelope["counts"], envelope["message"])
             retry_env = self._safe_call(stage, fn)
             self.archive(stage, retry_env, retry=True)
@@ -281,28 +397,34 @@ class Run:
 
 # ---------- 단계 실행 함수 ----------
 
-def run_collect(month, upload_dir=None):
+def run_collect(month, upload_dir=None, on_progress=None):
     if upload_dir and any(e.is_file() for e in os.scandir(upload_dir)):
         mod = load_module("collect_uploads_stage",
                           os.path.join(REPO_ROOT, "collect", "collect_uploads.py"))
-        return mod.run(month, upload_dir)["envelope"]
+        return mod.run(month, upload_dir, on_progress=on_progress)["envelope"]
     mod = load_module("collect_stage", os.path.join(REPO_ROOT, "collect", "collect.py"))
     return mod.run(month)["envelope"]
 
 
-def run_merge():
+def run_merge(month=None):
     mod = load_module("merge_stage", os.path.join(REPO_ROOT, "merge", "build_result.py"))
-    return mod.run()["envelope"]
+    return mod.run(month)["envelope"]
 
 
-def make_llm_stage(client, stage, month):
-    """판단형 단계 실행 함수 — 단계 문서를 시스템 프롬프트로, 입력 CSV를 메시지로 보낸다."""
+def make_llm_stage(client, stage, month, on_progress=None):
+    """판단형 단계 실행 함수 — 단계 문서를 시스템 프롬프트로, 입력 CSV를 메시지로 보낸다.
+
+    on_progress(stage, done, total): 처리 건수 기반 진행 통지 (API 스트리밍 경로 한정 —
+    응답에 흘러드는 artifact_csv의 행 구분(이스케이프 \\n)을 세어 추정한다.
+    CLI 폴백은 스트림이 없어 진행 통지 없이 실행된다).
+    """
     def call():
         input_path = LLM_STAGE_INPUTS[stage]
         if not os.path.exists(input_path):
             return failed_envelope(stage, f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
         with open(input_path, encoding="utf-8-sig") as f:
             input_csv = f.read()
+        total_rows = max(0, len(list(csv.reader(io.StringIO(input_csv)))) - 1)
 
         references = ""
         for ref_path in LLM_STAGE_REFERENCES[stage]:
@@ -317,15 +439,29 @@ def make_llm_stage(client, stage, month):
             "입력 행을 지우거나 순서를 바꾸지 않은 것)을, report에는 단계 결과 보고를 담아라. "
             f"report.stage는 \"{stage}\", report.output은 \"{stage}/result.csv\"로 한다."
         )
+        output_config = {"format": {"type": "json_schema", "schema": LLM_RESPONSE_SCHEMA}}
+        if stage in STAGE_EFFORT:
+            output_config["effort"] = STAGE_EFFORT[stage]
         if client is not None:
             # max_tokens가 커서 스트리밍 필수 (SDK 장시간 요청 가드) — 최종 메시지만 받는다
             with client.messages.stream(
-                model=MODEL,
+                model=STAGE_MODELS[stage],
                 max_tokens=MAX_TOKENS,
                 system=load_stage_doc(stage),
                 messages=[{"role": "user", "content": user_message}],
-                output_config={"effort": "high", "format": {"type": "json_schema", "schema": LLM_RESPONSE_SCHEMA}},
+                output_config=output_config,
             ) as stream:
+                if on_progress and total_rows:
+                    # 응답 JSON은 artifact_csv부터 흐른다 — 문자열 안의 행 구분은 \n 두 글자로
+                    # 이스케이프되므로 그 수를 센다 (첫 행은 헤더, 상한은 입력 행수)
+                    on_progress(stage, 0, total_rows)
+                    newline_count, reported = 0, 0
+                    for delta in stream.text_stream:
+                        newline_count += delta.count("\\n")
+                        done = min(max(newline_count - 1, 0), total_rows)
+                        if done > reported:
+                            reported = done
+                            on_progress(stage, done, total_rows)
                 response = stream.get_final_message()
             text = next(b.text for b in response.content if b.type == "text")
         else:
@@ -336,7 +472,20 @@ def make_llm_stage(client, stage, month):
                 "단일 JSON 객체만 출력한다.\n"
                 f"{json.dumps(LLM_RESPONSE_SCHEMA, ensure_ascii=False)}"
             )
-            text = extract_json_text(call_claude_cli(load_stage_doc(stage), cli_message))
+            on_text = None
+            if on_progress and total_rows:
+                # API 경로와 같은 원리 — 응답 텍스트의 행 구분(이스케이프 \n)을 세어 진행 통지
+                on_progress(stage, 0, total_rows)
+                counted = {"newlines": 0, "reported": 0}
+
+                def on_text(chunk):
+                    counted["newlines"] += chunk.count("\\n")
+                    done = min(max(counted["newlines"] - 1, 0), total_rows)
+                    if done > counted["reported"]:
+                        counted["reported"] = done
+                        on_progress(stage, done, total_rows)
+            text = extract_json_text(call_claude_cli(STAGE_MODELS[stage], load_stage_doc(stage),
+                                                     cli_message, on_text=on_text))
         data = json.loads(text)
 
         artifact_path = os.path.join(REPO_ROOT, stage, "result.csv")
@@ -357,6 +506,286 @@ def make_llm_stage(client, stage, month):
             report["message"] = f"{report['message']} / {note}" if report.get("message") else note
         return report
     return call
+
+
+# ---------- 중간 확인 (사용자 입력 — 웹 실행 경로 한정, 단계 문서 "중간 확인" 확정) ----------
+
+# 확인 지점별 사용자 수정 허용 필드 — 그 시점 문제의 원인 필드만 연다
+CONFIRM_EDITABLE = {
+    "collect": ["날짜", "금액", "결제처", "결제구분", "구매항목"],
+    "refine": ["결제처", "카테고리"],
+    "verify": ["날짜", "금액", "카테고리"],
+}
+USER_CONFIRM_NOTE = "[사용자 확인]"
+
+
+def read_csv_rows(path):
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        return rows, reader.fieldnames or []
+
+
+def write_csv_rows(path, rows, fieldnames):
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _tag_user_confirmed(row):
+    memo = (row.get("비고") or "").strip()
+    if USER_CONFIRM_NOTE not in memo:
+        row["비고"] = f"{memo} {USER_CONFIRM_NOTE}".strip()
+
+
+def _tid(row):
+    return (row.get("transaction_id") or "").strip()
+
+
+def clean_resolutions(resolutions):
+    """관찰자(웹)가 보낸 사용자 입력을 방어적으로 거른다 — transaction_id + 문자열 필드만 통과."""
+    fixes = []
+    for item in resolutions or []:
+        if not isinstance(item, dict):
+            continue
+        tid = str(item.get("transaction_id") or "").strip()
+        if not tid:
+            continue
+        fields = item.get("fields")
+        if not isinstance(fields, dict):
+            fields = {}
+        fixes.append({"transaction_id": tid,
+                      "fields": {str(k): str(v).strip() for k, v in fields.items()}})
+    return fixes
+
+
+def build_stage_pending(stage, envelope):
+    """수집·가공 확인 지점 — 단계 보고 flags의 행 데이터를 그 칸 result.csv에서 읽어 만든다."""
+    path = os.path.join(REPO_ROOT, stage, "result.csv")
+    if not os.path.exists(path):
+        return []
+    rows, _ = read_csv_rows(path)
+    pending = []
+    for flag in envelope.get("flags", []):
+        idx = flag.get("row")
+        if not (isinstance(idx, int) and 1 <= idx <= len(rows)):
+            continue
+        row = rows[idx - 1]
+        if not _tid(row):
+            continue
+        pending.append({"transaction_id": _tid(row), "type": flag["type"],
+                        "reason": flag["reason"], "data": dict(row)})
+    return pending
+
+
+def apply_stage_fixes(stage, fixes):
+    """수집·가공 확인 반영 — 그 칸 result.csv를 사용자 입력으로 갱신한다 (이후 단계가 재처리).
+
+    수정 없이 확인만 한 행도 반영으로 친다 (수집은 collect_status를 확인됨으로).
+    반영된 transaction_id 집합을 돌려준다."""
+    path = os.path.join(REPO_ROOT, stage, "result.csv")
+    if not os.path.exists(path):
+        return set()
+    rows, fieldnames = read_csv_rows(path)
+    by_tid = {_tid(r): r for r in rows}
+    editable = CONFIRM_EDITABLE[stage]
+    applied = set()
+    for fix in fixes:
+        row = by_tid.get(fix["transaction_id"])
+        if row is None:
+            continue
+        for key, value in fix["fields"].items():
+            if key in editable and key in row:
+                row[key] = value
+        if stage == "collect" and "collect_status" in row:
+            row["collect_status"] = "확인됨"
+        _tag_user_confirmed(row)
+        applied.add(fix["transaction_id"])
+    if applied:
+        write_csv_rows(path, rows, fieldnames)
+    return applied
+
+
+def build_verify_pending():
+    """검증 확인 지점(통합 직전) — 두 검증 CSV의 반려 행을 transaction_id로 합쳐 만든다."""
+    refine_path = LLM_STAGE_INPUTS["verify1"]  # refine/result.csv — 장부 값의 정본
+    refine_by_tid = {}
+    if os.path.exists(refine_path):
+        refine_by_tid = {_tid(r): r for r in read_csv_rows(refine_path)[0]}
+    pending = {}
+    for stage in ("verify1", "verify2"):
+        path = os.path.join(REPO_ROOT, stage, "result.csv")
+        if not os.path.exists(path):
+            continue
+        for row in read_csv_rows(path)[0]:
+            if row.get(f"{stage}_result") != "반려" or not _tid(row):
+                continue
+            entry = pending.setdefault(_tid(row), {
+                "transaction_id": _tid(row), "type": "반려", "reasons": [],
+                "data": dict(refine_by_tid.get(_tid(row), row))})
+            entry["reasons"].append(
+                f"{STAGE_LABELS[stage]}: {row.get(f'{stage}_reason', '')}".strip(" :"))
+    result = []
+    for entry in pending.values():
+        entry["reason"] = " / ".join(entry.pop("reasons"))
+        result.append(entry)
+    return result
+
+
+def apply_verify_fixes(fixes):
+    """검증 확인 반영 — refine 값을 갱신하고, 반려했던 검증 판정을 통과(사용자 확인)로 갱신한다.
+
+    통합은 장부 값을 refine/result.csv에서 읽으므로 값 수정은 거기에 반영하고,
+    검증 CSV에는 같은 값 반영 + 판정 갱신으로 두 파일이 어긋나지 않게 한다."""
+    applied = set()
+    refine_path = LLM_STAGE_INPUTS["verify1"]
+    if not os.path.exists(refine_path):
+        return applied
+    rows, fieldnames = read_csv_rows(refine_path)
+    by_tid = {_tid(r): r for r in rows}
+    for fix in fixes:
+        row = by_tid.get(fix["transaction_id"])
+        if row is None:
+            continue
+        for key, value in fix["fields"].items():
+            if key in CONFIRM_EDITABLE["verify"] and key in row:
+                row[key] = value
+        _tag_user_confirmed(row)
+        applied.add(fix["transaction_id"])
+    if not applied:
+        return applied
+    write_csv_rows(refine_path, rows, fieldnames)
+
+    fixes_by_tid = {f["transaction_id"]: f for f in fixes}
+    for stage in ("verify1", "verify2"):
+        path = os.path.join(REPO_ROOT, stage, "result.csv")
+        if not os.path.exists(path):
+            continue
+        vrows, vfields = read_csv_rows(path)
+        changed = False
+        for row in vrows:
+            if _tid(row) not in applied:
+                continue
+            for key, value in fixes_by_tid[_tid(row)]["fields"].items():
+                if key in CONFIRM_EDITABLE["verify"] and key in row:
+                    row[key] = value
+            _tag_user_confirmed(row)
+            if row.get(f"{stage}_result") == "반려":
+                row[f"{stage}_result"] = "통과"
+                row[f"{stage}_reason"] = "사용자 확인"
+            changed = True
+        if changed:
+            write_csv_rows(path, vrows, vfields)
+    return applied
+
+
+def drop_resolved_flags(envelope, stage, resolved):
+    """반영된 행의 flags를 단계 보고에서 걷어내고 counts를 갱신한다 (요약의 확인 필요 목록 정합)."""
+    path = os.path.join(REPO_ROOT, stage, "result.csv")
+    if not resolved or not os.path.exists(path):
+        return
+    rows, _ = read_csv_rows(path)
+    tid_by_row = {i + 1: _tid(r) for i, r in enumerate(rows)}
+    kept = [f for f in envelope.get("flags", [])
+            if tid_by_row.get(f.get("row")) not in resolved]
+    removed = len(envelope.get("flags", [])) - len(kept)
+    if removed:
+        envelope["flags"] = kept
+        envelope["counts"]["flagged"] = max(0, envelope["counts"]["flagged"] - removed)
+        envelope["counts"]["ok"] += removed
+        if envelope["status"] == "partial" and not kept:
+            envelope["status"] = "ok"
+
+
+def run_confirmation(run, on_confirm, point):
+    """확인 지점 1곳 실행 — 대기(확인 대기) → 사용자 입력 반영(확인 반영) → 보고 갱신.
+
+    on_confirm(payload)는 관찰자(웹 서버)가 구현한다: 사용자 입력(resolutions 목록)을
+    돌려주거나, 응답이 없으면(대기 상한 초과 등) None을 돌려준다. CLI 실행은 훅이 없어 통과.
+    """
+    if on_confirm is None:
+        return
+    if point == "verify":
+        pending = build_verify_pending()
+    else:
+        envelope = run.envelopes.get(point)
+        if not envelope or envelope["status"] == "failed":
+            return
+        pending = build_stage_pending(point, envelope)
+    if not pending:
+        return
+
+    run.log(point, "확인 대기", memo=f"확인 필요 {len(pending)}건 — 사용자 입력 대기")
+    payload = {"stage": point, "editable": CONFIRM_EDITABLE[point],
+               "month": run.month, "rows": pending}
+    try:
+        resolutions = on_confirm(payload)
+    except Exception as e:
+        run.log(point, "확인 반영", memo=f"관찰자 오류 — 전부 그대로 진행: {e}")
+        run.notes.append(f"중간 확인({STAGE_LABELS[point]}) 관찰자 오류 — 확인 필요 {len(pending)}건 유지")
+        return
+    if resolutions is None:
+        run.log(point, "확인 반영", memo="응답 없음(대기 상한 초과) — 전부 그대로 진행")
+        run.notes.append(f"중간 확인({STAGE_LABELS[point]}) 응답 없음 — 확인 필요 {len(pending)}건 유지")
+        return
+
+    fixes = clean_resolutions(resolutions)
+    if point == "verify":
+        applied = apply_verify_fixes(fixes)
+        for stage in ("verify1", "verify2"):
+            env = run.envelopes.get(stage)
+            if env and env["status"] != "failed":
+                drop_resolved_flags(env, stage, applied)
+        counts = None
+    else:
+        applied = apply_stage_fixes(point, fixes)
+        drop_resolved_flags(run.envelopes[point], point, applied)
+        counts = run.envelopes[point]["counts"]
+    memo = f"사용자 확인 반영 {len(applied)}건 · 그대로 유지 {len(pending) - len(applied)}건"
+    run.log(point, "확인 반영", counts=counts, memo=memo)
+    run.notes.append(f"중간 확인({STAGE_LABELS[point]}): {memo}")
+
+
+# ---------- 월별 보관 ----------
+
+def archive_outputs(month):
+    """최종 산출물을 archive/<월>/에 보관한다 — 웹 보관함(months API)의 데이터 원천.
+
+    어떤 실행 경로(웹 서버·CLI·직접 호출)로 결산해도 정상 종료면 보관되도록 파이프라인이 맡는다.
+    실거래 정보라 archive/는 커밋이 차단되어 있다.
+    """
+    dest = os.path.join(ARCHIVE_DIR, month)
+    os.makedirs(dest, exist_ok=True)
+    for src, name in ((os.path.join(REPO_ROOT, "merge", "result.xlsx"), "result.xlsx"),
+                      (os.path.join(REPO_ROOT, "merge", "result.pdf"), "result.pdf"),
+                      (SUMMARY_PATH, "result-summary.md")):
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(dest, name))
+    # 보관함 화면용 집계 수치 — merge의 집계 함수를 읽기 전용으로 재사용한다
+    merge_mod = load_module("merge_stage_summary",
+                            os.path.join(REPO_ROOT, "merge", "build_result.py"))
+    transactions, incomplete = merge_mod.load_transactions()
+    ok_rows, flagged_rows = merge_mod.split_transactions(transactions)
+    summary = merge_mod.summarize(ok_rows)
+    data = {
+        "month": month,
+        "completed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "tx_count": len(transactions),
+        "ok_count": len(ok_rows),
+        "flagged_count": len(flagged_rows),
+        "total_expense": summary["total_expense"],
+        "total_income": summary["total_income"],
+        "net": summary["total_income"] - summary["total_expense"],
+        "by_category": summary["by_category"],
+        "by_payer": summary["by_payer"],
+        "flags": [{"row": r["row"], "결제처": r.get("결제처", ""),
+                   "reason": r.get("reason", "")} for r in flagged_rows],
+        "incomplete": incomplete,
+    }
+    with open(os.path.join(dest, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return os.path.relpath(dest, REPO_ROOT)
 
 
 # ---------- 최종 결과 요약 ----------
@@ -414,17 +843,19 @@ def write_summary(run):
 ENV_PROBLEM_KEYWORDS = ("없음", "없습니다", "찾을 수 없", "로드 실패", "누락", "권한", "열 수 없")
 
 
-def run_pipeline(month, on_event=None, upload_dir=None):
+def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None):
     """파이프라인 1회 실행 — CLI(main)와 웹 서버가 같은 본체를 쓴다. Run을 돌려준다.
 
     upload_dir가 주어지고 파일이 있으면 수집을 그 업로드 파일들로 실행한다
     (없으면 기존 sample_data 경로 — CLI·대시보드 하위 호환).
+    on_confirm이 있으면(웹 실행 경로) 확인 지점(수집·가공 직후, 통합 직전)에서
+    파이프라인을 일시정지하고 사용자 입력을 받아 반영한다 — run_confirmation 참고.
     예외로 중단돼도 요약(run.log·result-summary.md)은 남기고, on_event에는
     반드시 종결 이벤트(state: 종료/오류)가 마지막으로 흐른다.
     """
     run = Run(month, on_event=on_event)
     try:
-        _run_stages(run, month, upload_dir=upload_dir)
+        _run_stages(run, month, upload_dir=upload_dir, on_confirm=on_confirm)
         run.log("run", "종료", memo="정상 종결")
     except Exception as e:
         run.notes.append(f"실행기 오류로 중단: {e}")
@@ -437,7 +868,7 @@ def run_pipeline(month, on_event=None, upload_dir=None):
     return run
 
 
-def _run_stages(run, month, upload_dir=None):
+def _run_stages(run, month, upload_dir=None, on_confirm=None):
     run.notes.append(f"대상 월: {month}")
     if upload_dir:
         upload_count = sum(1 for e in os.scandir(upload_dir) if e.is_file())
@@ -457,8 +888,10 @@ def _run_stages(run, month, upload_dir=None):
         print(f"최종 결과 요약: {SUMMARY_PATH}")
         print(f"실행 기록: {run.run_dir}/")
 
-    # 1. 수집
-    collect_env = run.call_stage("collect", lambda: run_collect(month, upload_dir))
+    # 1. 수집 — 업로드 수집은 처리한 파일 수 기준으로 진행을 알린다
+    collect_env = run.call_stage("collect", lambda: run_collect(
+        month, upload_dir,
+        on_progress=lambda done, total: run.progress("collect", done, total)))
     if collect_env["status"] == "empty":
         run.notes.append("수집 empty — 특례로 이후 단계 호출 없이 종료 (결산 대상 없음)")
         finish()
@@ -467,6 +900,9 @@ def _run_stages(run, month, upload_dir=None):
         run.notes.append(f"수집 실패로 중단: {collect_env['message']}")
         finish()
         return
+
+    # 중간 확인 1 — 수집이 확인 필요로 남긴 행을 가공 전에 사용자에게 (웹 실행 한정)
+    run_confirmation(run, on_confirm, "collect")
 
     client = None
     client_error = None
@@ -485,7 +921,7 @@ def _run_stages(run, month, upload_dir=None):
         refine_env = run.call_stage("refine", lambda: failed_envelope(
             "refine", f"API 클라이언트 준비 실패: {client_error} (claude CLI 폴백도 불가 — CLI 미설치)"))
     else:
-        refine_env = run.call_stage("refine", make_llm_stage(client, "refine", month))
+        refine_env = run.call_stage("refine", make_llm_stage(client, "refine", month, on_progress=run.progress))
     if refine_env["status"] == "failed":
         run.notes.append(f"가공 실패로 중단: {refine_env['message']}")
         finish()
@@ -493,10 +929,13 @@ def _run_stages(run, month, upload_dir=None):
     if refine_env["counts"]["total"] != collect_env["counts"]["total"]:
         run.warnings.append(f"거래 행 유실 의심 — 수집 {collect_env['counts']['total']}건 → 가공 {refine_env['counts']['total']}건")
 
+    # 중간 확인 2 — 가공이 확인 필요로 남긴 행(분류 불가 등)을 검증 전에 사용자에게
+    run_confirmation(run, on_confirm, "refine")
+
     # 3. 검증 1·2 병렬
     with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(run.call_stage, "verify1", make_llm_stage(client, "verify1", month))
-        f2 = pool.submit(run.call_stage, "verify2", make_llm_stage(client, "verify2", month))
+        f1 = pool.submit(run.call_stage, "verify1", make_llm_stage(client, "verify1", month, on_progress=run.progress))
+        f2 = pool.submit(run.call_stage, "verify2", make_llm_stage(client, "verify2", month, on_progress=run.progress))
         v1_env, v2_env = f1.result(), f2.result()
 
     v_failed = [env for env in (v1_env, v2_env) if env["status"] == "failed"]
@@ -512,8 +951,11 @@ def _run_stages(run, month, upload_dir=None):
         if env["status"] != "failed" and env["counts"]["total"] != refine_env["counts"]["total"]:
             run.warnings.append(f"거래 행 유실 의심 — 가공 {refine_env['counts']['total']}건 → {STAGE_LABELS[env['stage']]} {env['counts']['total']}건")
 
+    # 중간 확인 3 — 검증 반려 행을 통합 직전에 사용자에게 (수정·확인하면 장부에 실린다)
+    run_confirmation(run, on_confirm, "verify")
+
     # 4. 통합
-    merge_env = run.call_stage("merge", run_merge)
+    merge_env = run.call_stage("merge", lambda: run_merge(month))
     if merge_env["status"] == "failed":
         run.notes.append(f"통합 실패 — 최종 산출물 없음: {merge_env['message']}")
     elif merge_env["counts"]["total"] != refine_env["counts"]["total"]:
@@ -528,6 +970,14 @@ def _run_stages(run, month, upload_dir=None):
 
     run.notes.append("전 단계 counts.total 대조 완료" + (" — 유실 의심 있음 (경고 참고)" if any("유실" in w for w in run.warnings) else " — 유실 없음"))
     finish()
+
+    # 5. 보관 — 정상 산출된 결산만 월별 보관함에 남긴다 (요약까지 쓴 뒤라 finish() 다음)
+    if merge_env["status"] in ("ok", "partial"):
+        try:
+            dest = archive_outputs(month)
+            run.log("archive", "완료", memo=f"월별 보관함에 저장 — {dest}/")
+        except Exception as e:
+            run.log("archive", "실패", memo=f"보관 실패: {e}")
 
 
 def main():

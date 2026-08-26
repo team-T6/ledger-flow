@@ -1,36 +1,21 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="ledger">
+<html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ledger Flow — 월말결산 비서</title>
-<meta name="description" content="카드사 엑셀과 영수증을 올리면 월말결산 비서가 분류하고 검증해 월 결산 리포트를 만들어 드립니다. (샘플 데이터 데모)">
+<title>렛저 — 월말결산 비서 (Ledger Flow)</title>
+<meta name="description" content="카드사 엑셀과 영수증을 올리면 월말결산 비서 렛저가 분류하고 검증해 월 결산 리포트를 만들어 드립니다. (샘플 데이터 데모)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&family=Noto+Sans+KR:wght@400;500;700&family=Do+Hyeon&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
-  /* ---------- 테마 토큰 — 색·모서리·서체는 여기서만 정의한다 ---------- */
-  :root, :root[data-theme="ledger"] {
+  /* ---------- 테마 토큰 — 색·모서리·서체는 여기서만 정의한다 (장부 에디토리얼 고정) ---------- */
+  :root {
     --bg: #FAF7F2; --ink: #1C1917; --muted: #7A7263;
     --line: #E6DFD2; --soft: #EFE9DD; --card: #F5F1E8;
     --accent: #1E5B45; --accent-contrast: #FAF7F2; --accent-soft: #C9D8CC;
     --red: #A63A2E; --radius: 4px;
     --font-display: "Noto Serif KR", serif; --display-weight: 900;
-  }
-  :root[data-theme="fintech"] {
-    --bg: #FFFFFF; --ink: #191F28; --muted: #8B95A1;
-    --line: #EDF0F3; --soft: #F2F4F6; --card: #F9FAFB;
-    --accent: #3182F6; --accent-contrast: #FFFFFF; --accent-soft: #B9D5FB;
-    --red: #F04452; --radius: 12px;
-    --font-display: "Noto Sans KR", sans-serif; --display-weight: 700;
-  }
-  :root[data-theme="green"] {
-    /* 딥 그린 다크 — 라이트 테마 둘과 확실히 갈리도록 바탕을 진초록으로 뒤집고 전용 서체를 쓴다 */
-    --bg: #172A20; --ink: #EFE9DA; --muted: #9DB0A0;
-    --line: #2C4334; --soft: #22382B; --card: #1D3327;
-    --accent: #6FBE8C; --accent-contrast: #14261C; --accent-soft: #3B5A48;
-    --red: #E08A7A; --radius: 6px;
-    --font-display: "Do Hyeon", "Noto Sans KR", sans-serif; --display-weight: 400;
   }
 
   * { box-sizing: border-box; }
@@ -41,7 +26,6 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
     line-height: 1.65; -webkit-font-smoothing: antialiased;
-    transition: background 0.25s ease, color 0.25s ease;
   }
   .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
   h1, h2 { font-family: var(--font-display); font-weight: var(--display-weight); text-wrap: balance; }
@@ -54,11 +38,15 @@
     font: inherit; font-size: 15px; font-weight: 700;
     padding: 13px 30px; border-radius: var(--radius);
     background: var(--accent); color: var(--accent-contrast);
+    text-decoration: none;
     transition: opacity 0.15s ease;
   }
   .btn:hover { opacity: 0.88; }
   .btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .btn-ghost { background: var(--soft); color: var(--ink); }
+  .btn-ghost:hover { opacity: 1; background: var(--line); }
+  .btn-quiet:hover { opacity: 1; background: var(--soft); color: var(--ink); }
+  .btn .btn-ico { width: 14px; height: 14px; flex: none; }
   .hint { font-size: 13px; color: var(--muted); margin-top: 12px; }
 
   /* ---------- 스크롤 스냅 페이지 ---------- */
@@ -73,26 +61,6 @@
   .page h2 { font-size: clamp(26px, 5vw, 38px); line-height: 1.35; letter-spacing: -0.015em; margin: 0 0 16px; }
   .page .lead { font-size: 16.5px; color: var(--muted); max-width: 52ch; margin: 0 0 8px; }
 
-  /* ---------- 테마 전환 ---------- */
-  .theme-picker {
-    position: fixed; top: 66px; right: 16px; z-index: 8;
-    display: flex; gap: 8px; padding: 7px 9px;
-    background: var(--bg); border: 1px solid var(--line); border-radius: 999px;
-    box-shadow: 0 4px 16px rgba(20, 18, 12, 0.10);
-  }
-  .theme-dot {
-    width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
-    border: 2px solid transparent; position: relative;
-  }
-  .theme-dot::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; }
-  .theme-dot[data-set="ledger"]  { background: #FAF7F2; border-color: #E6DFD2; }
-  .theme-dot[data-set="ledger"]::after  { background: #1E5B45; }
-  .theme-dot[data-set="fintech"] { background: #FFFFFF; border-color: #EDF0F3; }
-  .theme-dot[data-set="fintech"]::after { background: #3182F6; }
-  .theme-dot[data-set="green"]   { background: #1B4332; border-color: #1B4332; }
-  .theme-dot[data-set="green"]::after   { background: #F6F1E3; }
-  .theme-dot.on { border-color: var(--ink); }
-
   /* ---------- 고정 헤더 ---------- */
   .site-header {
     position: fixed; top: 0; left: 0; right: 0; z-index: 9;
@@ -101,6 +69,7 @@
     background: var(--bg); border-bottom: 1px solid var(--line);
     transition: background 0.25s ease;
   }
+  .header-left { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   .home-link { display: flex; align-items: baseline; gap: 12px; color: inherit; text-decoration: none; cursor: pointer; }
   .brand { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 21px; line-height: 1.2; }
   .brand-sub { font-size: 14px; color: var(--muted); }
@@ -117,8 +86,8 @@
   /* ---------- 히어로 ---------- */
   .hero h1 { font-size: clamp(32px, 6.5vw, 50px); line-height: 1.3; letter-spacing: -0.015em; margin: 0 0 18px; }
   .demo-badge {
-    display: inline-block; font-size: 12px; font-weight: 700;
-    padding: 4px 12px; border-radius: 999px; margin-bottom: 20px;
+    display: inline-block; font-size: 11.5px; font-weight: 700;
+    padding: 3px 11px; border-radius: 999px; white-space: nowrap;
     background: var(--soft); color: var(--muted);
   }
   .scroll-cue { margin-top: 56px; font-size: 13px; color: var(--muted); }
@@ -173,7 +142,25 @@
   }
   .mini-row:last-child { border-bottom: none; }
 
-  /* ---------- 초대코드 ---------- */
+  /* ---------- 초대코드 모달 ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    background: rgba(28, 25, 23, 0.4); backdrop-filter: blur(3px);
+  }
+  .modal {
+    width: 100%; max-width: 440px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 30px 30px 26px; position: relative;
+  }
+  .modal h2 { font-size: 22px; line-height: 1.4; margin: 0 0 8px; }
+  .modal .lead { font-size: 14.5px; margin: 0; }
+  .modal-close {
+    position: absolute; top: 12px; right: 12px;
+    background: none; border: none; cursor: pointer; padding: 6px;
+    font-size: 18px; line-height: 1; color: var(--muted);
+  }
+  .modal-close:hover { color: var(--ink); }
   .invite-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
   .invite-form input {
     flex: 1; min-width: 200px; font: inherit; font-size: 15px;
@@ -183,21 +170,210 @@
   .invite-error { display: none; margin-top: 12px; font-size: 13.5px; color: var(--red); }
   .invite-error.show { display: block; }
 
-  /* ---------- 월 선택 ---------- */
-  .months { display: flex; flex-wrap: wrap; gap: 18px 14px; margin-top: 32px; }
-  .month { text-align: center; width: 64px; background: none; border: none; padding: 0; font: inherit; color: inherit; }
-  .month .circle {
-    width: 56px; height: 56px; border-radius: 50%; margin: 0 auto;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700;
-    background: var(--soft); color: var(--muted);
-    border: 2px solid transparent;
+  /* ---------- 월별 보관함 ---------- */
+  .vault { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 32px; }
+  @media (max-width: 560px) { .vault { grid-template-columns: repeat(2, 1fr); } }
+  .m-card {
+    font: inherit; text-align: left; color: var(--muted); cursor: pointer;
+    padding: 12px 13px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--card); font-size: 12px; min-height: 86px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
+    transition: border-color 0.15s ease, transform 0.15s ease;
   }
-  .month.done .circle { background: var(--accent); color: var(--accent-contrast); }
-  .month.now { cursor: pointer; }
-  .month.now .circle { background: transparent; border-color: var(--accent); color: var(--accent); }
-  .month.now:hover .circle { background: var(--soft); }
-  .month .amt { font-size: 11px; color: var(--muted); margin-top: 7px; line-height: 1.3; }
+  .m-card .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .m-card .mm { font-size: 14px; font-weight: 700; color: var(--ink); }
+  /* 총지출이 카드의 주인공 — 월 번호보다 강조한다 (월은 그리드 위치로도 읽힌다) */
+  .m-card .amt { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .m-card.archived:hover, .m-card.current:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .m-card.archived .mm { color: var(--accent); }
+  /* 확인 필요 — 라벨은 낮추고 건수 숫자만 경고색으로 */
+  .m-card .flagged { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+  .m-card .flagged b { font-weight: 700; color: var(--red); }
+  .m-card.current { border: 2px dashed var(--accent); background: var(--bg); }
+  .m-card.current .go { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .m-card.empty { opacity: 0.5; cursor: default; }
+
+  /* 보관된 월 상세 */
+  .month-detail {
+    margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--card); padding: 18px 20px;
+  }
+  .month-detail .dh { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .month-detail .dh b { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 16px; }
+  .month-detail .dh .when { font-size: 11.5px; color: var(--muted); }
+  .d-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  @media (max-width: 560px) { .d-stats { grid-template-columns: 1fr; } }
+  .d-stat { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+  .d-stat .k { font-size: 11px; color: var(--muted); }
+  .d-stat .v { font-size: 15px; font-weight: 600; margin-top: 1px; }
+  .d-stat .v.minus { color: var(--red); }
+  .d-stat .delta { font-size: 10.5px; margin-top: 3px; color: var(--muted); }
+  .d-stat .delta.up { color: var(--red); }
+  .d-stat .delta.down { color: var(--accent); }
+  .trend {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 14px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px 10px; margin-bottom: 14px;
+  }
+  .trend .tt { font-size: 11px; color: var(--muted); align-self: flex-start; line-height: 1.5; }
+  .trend .tt b { display: block; color: var(--ink); font-size: 12px; }
+  .t-bars { display: flex; align-items: flex-end; gap: 12px; }
+  .t-col { text-align: center; font-size: 10px; color: var(--muted); }
+  .t-col i { display: block; width: 26px; margin: 0 auto 4px; background: var(--accent-soft); border-radius: 3px 3px 0 0; }
+  .t-col .ta { display: block; margin-top: 1px; }
+  .t-col.cur i { background: var(--accent); }
+  .t-col.cur { color: var(--accent); font-weight: 700; }
+  .d-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .d-actions .btn { font-size: 12.5px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  .btn-quiet { background: transparent; color: var(--muted); }
+
+  /* ---------- 결산 화면(#app) — 스크롤 없이 화면 전환 (결산 서고 → 대시보드) ---------- */
+  /* 앱 모드에서는 랜딩용 스냅·푸터를 끈다 — 결산 화면은 화면 전환으로만 움직인다 */
+  html.app-mode { scroll-snap-type: none; }
+  html.app-mode footer { display: none; }
+
+  .year-nav { display: flex; align-items: center; gap: 4px; }
+  .year-nav b { font-size: 14px; min-width: 56px; text-align: center; }
+  .year-nav button {
+    font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+    width: 26px; height: 26px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .year-nav button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .year-nav button:disabled { opacity: 0.3; cursor: default; }
+  .year-nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 결산 서고 — 진입 화면 (연도 전환 + 월 그리드) */
+  .app-shelf { padding: 110px 24px 72px; }
+  .app-shelf .wrap { max-width: 720px; margin: 0 auto; }
+  .app-shelf h2 { font-size: clamp(26px, 5vw, 38px); line-height: 1.35; letter-spacing: -0.015em; margin: 0 0 16px; }
+  .app-shelf .lead { font-size: 16.5px; color: var(--muted); max-width: 52ch; margin: 0 0 8px; }
+  .vault-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .vault-head .year-nav { margin-bottom: 20px; }
+
+  /* 대시보드 — 사이드바(월 목록) + 본문(상세/자료/진행/결과) */
+  .dash {
+    display: grid; grid-template-columns: 248px 1fr;
+    height: 100vh; padding-top: 65px; box-sizing: border-box;
+  }
+  @media (max-width: 720px) { .dash { grid-template-columns: 184px 1fr; } }
+  .dash-side {
+    border-right: 1px solid var(--line); background: var(--card);
+    padding: 18px 12px 14px; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .side-back {
+    font: inherit; font-size: 15px; font-weight: 700; color: var(--accent);
+    background: none; border: none; cursor: pointer; padding: 0 8px 8px; text-align: left;
+  }
+  .side-back:hover { text-decoration: underline; }
+  .side-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .side-year { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 8px; }
+  .side-year .year-nav b { font-size: 13.5px; font-weight: 700; letter-spacing: 0.05em; color: var(--muted); min-width: 50px; }
+  .side-year .year-nav button { width: 24px; height: 24px; font-size: 14px; }
+  .mrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; font: inherit; font-size: 14px; text-align: left;
+    padding: 8px 10px; border: none; border-radius: var(--radius);
+    background: none; color: var(--muted); cursor: pointer;
+  }
+  .mrow:hover { background: var(--soft); }
+  .mrow .mm { font-weight: 700; color: var(--ink); }
+  .mrow .amt { font-size: 12.5px; }
+  .mrow.archived .mm { color: var(--accent); }
+  .mrow.sel { background: var(--accent); }
+  .mrow.sel .mm, .mrow.sel .amt { color: var(--accent-contrast); }
+  .mrow.empty { opacity: 0.45; }
+  .mrow .live {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+    padding: 1px 7px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .mrow.sel .live { background: var(--accent-contrast); }
+
+  .dash-main { display: flex; flex-direction: column; overflow: hidden; }
+  .dash-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 18px 28px 14px; border-bottom: 1px solid var(--line);
+  }
+  .dash-top h2 { font-size: 21px; line-height: 1.35; margin: 0; }
+  .chip {
+    font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 999px;
+    background: var(--soft); color: var(--muted); white-space: nowrap;
+  }
+  .chip.run { background: var(--accent-soft); color: var(--accent); }
+  .chip.ok { background: var(--accent); color: var(--accent-contrast); }
+  /* 결산 단계 스텝 — 대시보드 상단, 도달한 스텝은 탭처럼 눌러 오간다 */
+  .dash-steps {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 10px 28px 0;
+  }
+  .dstep {
+    display: flex; align-items: center; gap: 7px;
+    font: inherit; font-size: 12.5px; font-weight: 700; color: var(--muted);
+    background: none; border: none; padding: 5px 8px; border-radius: var(--radius); cursor: default;
+  }
+  .dstep .n {
+    width: 20px; height: 20px; border-radius: 50%; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--soft); color: var(--muted);
+  }
+  .dstep.cur { color: var(--accent); }
+  .dstep.cur .n { background: var(--accent); color: var(--accent-contrast); }
+  .dstep.open { color: var(--ink); cursor: pointer; }
+  .dstep.open .n { background: var(--accent-soft); color: var(--accent); }
+  .dstep.open:hover { background: var(--soft); }
+  .dstep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dstep:disabled { opacity: 0.5; }
+  .step-sep { color: var(--muted); font-size: 13px; }
+  .pane-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; }
+  .pane-nav .btn { font-size: 13px; padding: 9px 18px; }
+
+  /* 결과 머리줄 — 제목 왼쪽, 다운로드 버튼 오른쪽 */
+  .result-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .result-head h2 { margin: 0; }
+  .result-head .downloads { margin-top: 0; }
+  .result-head .downloads .btn { font-size: 13px; padding: 9px 18px; display: inline-flex; align-items: center; gap: 7px; }
+
+  /* 보관 확인 — 결산 결과를 서고에 넣을지 묻는다 */
+  .save-bar {
+    margin: 18px 0 6px; padding: 16px 20px;
+    background: var(--card); border: 1px solid var(--accent); border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  }
+  .save-bar b { font-size: 14.5px; }
+  .save-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .save-actions .btn { font-size: 13px; padding: 9px 18px; }
+
+  .dash-body { flex: 1; overflow-y: auto; padding: 24px 28px 40px; }
+  .dash-body .wrap { max-width: 720px; margin: 0 auto; }
+  .dash-pane { display: none; }
+  .dash-pane.on { display: block; animation: pane-in 0.3s ease; }
+  @keyframes pane-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* 결과 탭 — 개요는 상시, 나머지는 탭으로 접는다 */
+  .tabs { display: flex; gap: 2px; margin-top: 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tabs button {
+    font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
+    padding: 10px 16px; border: none; background: none; color: var(--muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tab-pane { display: none; padding: 20px 2px 0; }
+  .tab-pane.on { display: block; }
+  .stat .delta { font-size: 10.5px; margin-top: 3px; color: var(--muted); }
+  .stat .delta.up { color: var(--red); }
+  .stat .delta.down { color: var(--accent); }
+  .cmp { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: stretch; }
+  @media (max-width: 640px) { .cmp { grid-template-columns: 1fr; } }
+  .cmp-notes { display: grid; gap: 7px; align-content: start; font-size: 13px; }
+  .cmp-notes .row { display: flex; justify-content: space-between; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .cmp-notes .row:last-child { border-bottom: none; }
+  .cmp-notes .k { color: var(--muted); }
+  .cmp-notes .up { color: var(--red); }
+  .cmp-notes .down { color: var(--accent); }
 
   /* ---------- 자료 넣기 ---------- */
   .dropzone {
@@ -214,27 +390,92 @@
     background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   }
   .file-list .ok { color: var(--accent); font-weight: 700; }
-  .run-cta { margin-top: 28px; text-align: center; }
-
-  /* ---------- 결산 진행 ---------- */
-  .hidden { display: none; }
-  .steps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
-  .step {
-    font-size: 13.5px; font-weight: 500; padding: 9px 18px; border-radius: 999px;
-    background: var(--soft); color: var(--muted);
-    display: flex; align-items: center; gap: 7px;
+  .file-list .del {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font: inherit; font-size: 13px; color: var(--muted);
   }
-  .step.active { background: var(--soft); color: var(--accent); font-weight: 700; }
-  .step.done { background: var(--accent); color: var(--accent-contrast); }
-  .step .tick { display: none; font-weight: 700; }
-  .step.done .tick { display: inline; }
+  .file-list .del:hover { color: var(--red); }
+  .run-cta { margin-top: 28px; text-align: center; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ---------- 결산 진행 — 단계별 실시간 진행률 ---------- */
+  .hidden { display: none; }
+  .overall { margin-top: 32px; }
+  .overall .oh {
+    display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap;
+    gap: 6px; font-size: 12.5px; color: var(--muted); margin-bottom: 7px;
+  }
+  .overall .oh b { color: var(--ink); font-size: 14px; }
+  .track { height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+  .track .fill { height: 100%; border-radius: 4px; background: var(--accent); width: 0; transition: width 0.5s ease; }
+  .stages { display: grid; gap: 9px; margin-top: 16px; }
+  .stage {
+    display: grid; grid-template-columns: 100px 1fr 112px; gap: 12px; align-items: center;
+    padding: 12px 15px; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px;
+  }
+  @media (max-width: 560px) { .stage { grid-template-columns: 84px 1fr; } .stage .meta { display: none; } }
+  .stage .sn { font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .stage .tick { display: none; color: var(--accent); font-weight: 700; }
+  .stage.done .tick { display: inline; }
+  .stage .track { height: 7px; }
+  .stage .meta { text-align: right; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .stage.running { border-color: var(--accent); }
+  .stage.running .sn { color: var(--accent); }
+  .stage.fail { border-color: var(--red); }
+  .stage.fail .sn { color: var(--red); }
+  .stage:not(.running):not(.done):not(.fail) { opacity: 0.55; }
+  /* 진행률을 알 수 없는 구간(수집·통합, CLI 폴백) — 부정형으로 살아 있음만 보인다 */
+  .stage.indet .fill { width: 30%; animation: indet 1.6s ease-in-out infinite; }
+  @keyframes indet { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
+  /* 검증 행 — 병렬 검증 둘(분류·금액)의 미니 막대 */
+  .v-tracks { display: grid; gap: 6px; }
+  .v-sub { display: grid; grid-template-columns: 30px 1fr 56px; gap: 8px; align-items: center; }
+  .v-sub .v-name { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+  .v-sub .track { height: 6px; }
+  .v-sub .v-meta { font-size: 10.5px; color: var(--muted); text-align: right; white-space: nowrap; }
+  .now-doing {
+    grid-column: 1 / -1; font-size: 11.5px; color: var(--muted);
+    padding-top: 8px; border-top: 1px dashed var(--line);
+  }
+  .now-doing .pulse {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); margin-right: 7px; vertical-align: 1px;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .runlog-more { margin-top: 16px; }
   .runlog {
-    margin-top: 24px; padding: 18px 20px; min-height: 120px;
-    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 4px 0 2px; min-height: 60px;
     font-size: 12.5px; color: var(--muted);
   }
   .runlog div { padding: 2px 0; }
-  .runlog .stage { color: var(--ink); font-weight: 600; }
+  .runlog .stage-name { color: var(--ink); font-weight: 600; }
+
+  /* ---------- 중간 확인 — 파이프라인 일시정지 중 사용자 입력 ---------- */
+  .confirm-panel {
+    margin-top: 18px; padding: 20px 22px; background: var(--card);
+    border: 1px solid var(--accent); border-radius: var(--radius);
+  }
+  .confirm-panel .cp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .confirm-panel .cp-head b { font-size: 16px; }
+  .confirm-panel .cp-sub { font-size: 13px; color: var(--muted); }
+  .cp-scroll { overflow-x: auto; margin: 12px 0; }
+  .cp-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  .cp-table th, .cp-table td {
+    padding: 8px 10px; border-bottom: 1px solid var(--line);
+    text-align: left; white-space: nowrap; vertical-align: middle;
+  }
+  .cp-table th { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .cp-table td.reason { white-space: normal; min-width: 180px; color: var(--red); font-size: 12.5px; }
+  .cp-table input[type="text"] {
+    font: inherit; font-size: 13.5px; padding: 6px 8px; width: 120px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--bg); color: var(--ink);
+  }
+  .cp-table input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  .cp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .cp-actions .hint { font-size: 12.5px; color: var(--muted); }
 
   /* ---------- 결과 — PDF 리포트 목차 구성을 따른다 ---------- */
   .report-block { margin-top: 40px; }
@@ -276,7 +517,33 @@
   }
   .memo strong { font-weight: 700; }
   .flags { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
-  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
+
+  /* ---------- 더보기 접이식 블록 (결산 요약 전문 · PDF 미리보기) ---------- */
+  .more {
+    margin-top: 14px; background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .more summary {
+    cursor: pointer; padding: 14px 18px; font-size: 14px; font-weight: 700;
+    list-style: none; display: flex; align-items: center; gap: 9px;
+  }
+  .more summary::-webkit-details-marker { display: none; }
+  .more summary::before {
+    content: "\25B8"; color: var(--accent); transition: transform 0.15s ease;
+  }
+  .more[open] summary::before { transform: rotate(90deg); }
+  .more summary .sub { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+  .more .more-body { padding: 0 18px 18px; }
+  .summary-pre {
+    margin: 0; white-space: pre-wrap; word-break: break-all;
+    font-size: 12px; line-height: 1.8; color: var(--muted);
+  }
+  .summary-pre .h { color: var(--ink); font-weight: 600; }
+  .pdf-frame {
+    width: 100%; height: 480px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: #FFFFFF;
+  }
+  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
 
   /* ---------- 푸터 ---------- */
   /* 푸터가 짧아 바닥이 마지막 화면 스냅 지점으로 되돌아가지 않도록, 바닥 자체를 스냅 지점으로 둔다 */
@@ -301,31 +568,30 @@
     .reveal { opacity: 1; transform: none; transition: none; }
     .cat .bar { transition: none; }
     .scroll-cue .arrow { animation: none; }
+    .stage.indet .fill { animation: none; width: 8%; }
+    .now-doing .pulse { animation: none; }
+    .track .fill { transition: none; }
   }
 </style>
 </head>
 <body>
 
 <div class="site-header">
-  <a class="home-link" href="#" id="home-link"><span class="brand">Ledger Flow</span><span class="brand-sub">월말결산 비서</span></a>
+  <div class="header-left">
+    <a class="home-link" href="#" id="home-link"><span class="brand">렛저 Ledger Flow</span><span class="brand-sub">월말결산 비서</span></a>
+    <span class="demo-badge">데모 버전</span>
+  </div>
   <div class="header-right">
     <nav><a class="nav-link" id="nav-app" href="#app">결산하기</a></nav>
   </div>
-</div>
-
-<div class="theme-picker" role="group" aria-label="테마 선택">
-  <button class="theme-dot on" data-set="ledger" title="장부 에디토리얼" aria-label="장부 에디토리얼 테마"></button>
-  <button class="theme-dot" data-set="fintech" title="클린 핀테크" aria-label="클린 핀테크 테마"></button>
-  <button class="theme-dot" data-set="green" title="회계 그린" aria-label="회계 그린 테마"></button>
 </div>
 
 <div id="view-landing">
 <!-- 1. 히어로 -->
 <header class="page hero">
   <div class="wrap">
-    <div class="demo-badge">샘플 데이터 데모</div>
     <h1>흩어진 카드 내역이,<br>한 권의 장부가 됩니다</h1>
-    <p class="lead">개인·법인 카드 여러 장의 한 달 지출을 월말결산 비서가 모아서 정리하고, 검증까지 마친 결산 리포트로 돌려드립니다.</p>
+    <p class="lead">개인·법인 카드 여러 장의 한 달 지출을 월말결산 비서 렛저가 모아서 정리하고, 검증까지 마친 결산 리포트로 돌려드립니다.</p>
     <div class="scroll-cue">스크롤을 내려 보세요 <span class="arrow">↓</span></div>
   </div>
 </header>
@@ -347,7 +613,7 @@
 <!-- 3. 제공 가치 -->
 <section class="page">
   <div class="wrap reveal">
-    <div class="eyebrow">Ledger Flow가 대신합니다</div>
+    <div class="eyebrow">렛저가 대신합니다</div>
     <h2>올리는 것까지가<br>사람의 일입니다</h2>
     <div class="cards">
       <div class="card"><span class="badge">통합</span><div><h3>형식이 달라도 그대로 올리세요</h3><p>카드사 엑셀·CSV, 영수증 사진, 결제 문자 캡처 — 전부 하나의 거래 표로 합쳐집니다.</p></div></div>
@@ -386,7 +652,7 @@
 <!-- 5. 진행 방식 — AI가 하는 일 -->
 <section class="page">
   <div class="wrap reveal">
-    <div class="eyebrow">Ledger Flow는 이런 일을 합니다</div>
+    <div class="eyebrow">렛저는 이런 일을 합니다</div>
     <h2>수집 → 가공 → 검증 → 통합,<br>네 단계로 결산합니다</h2>
     <div class="cards">
       <div class="card"><span class="badge">수집</span><div><h3>흩어진 원천을 하나의 표로</h3><p>카드사마다 다른 엑셀 형식을 하나의 거래 표로 합치고, 영수증·결제 문자 캡처는 글자를 읽어(OCR) 거래 내역으로 만듭니다.</p></div></div>
@@ -403,95 +669,191 @@
     <h2>이번 달부터<br>맡겨 보세요</h2>
     <p class="lead" style="margin:0 auto 32px;">약 5분이면 한 달 결산이 끝납니다.</p>
     <button class="btn" id="start">시작하기</button>
-    <div class="hint">초대코드가 있어야 이용할 수 있습니다</div>
+    <div class="hint" id="invite-gate-hint">초대코드가 있어야 이용할 수 있습니다</div>
   </div>
 </section>
 </div>
 
 <div id="view-app" class="hidden">
-<!-- 7. 초대코드 -->
-<section id="invite-sec" class="page">
+<!-- 8. 결산 서고 — 진입 화면 (연도 전환 + 월 그리드), 진입 시 초대코드 모달이 위를 덮는다 -->
+<section id="shelf-sec" class="app-shelf">
   <div class="wrap">
-    <div class="eyebrow">초대코드 확인</div>
-    <h2>초대코드를 입력해 주세요</h2>
-    <p class="lead">지금은 초대받은 분만 이용할 수 있습니다.</p>
-    <div class="invite-form">
-      <input id="invite-input" type="text" placeholder="초대코드" autocomplete="off" aria-label="초대코드">
-      <button class="btn" id="invite-btn">확인</button>
+    <div class="vault-head">
+      <div>
+        <div class="eyebrow">결산 서고</div>
+        <h2 id="shelf-title">2026년 결산 서고</h2>
+      </div>
+      <div class="year-nav">
+        <button id="shelf-yprev" type="button" aria-label="이전 연도">‹</button>
+        <b id="shelf-ylabel" class="mono">2026</b>
+        <button id="shelf-ynext" type="button" aria-label="다음 연도">›</button>
+      </div>
     </div>
-    <p class="invite-error" id="invite-error">초대코드가 맞지 않습니다. 다시 확인해 주세요.</p>
-    <div class="hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
+    <p class="lead">결산이 끝난 달은 장부가 꽂혀 있습니다 — 달을 누르면 그 달의 작업 화면으로 들어갑니다.</p>
+    <div class="vault" id="months"></div>
   </div>
 </section>
 
-<!-- 8. 월 선택 -->
-<section id="months-sec" class="page hidden">
-  <div class="wrap">
-    <div class="eyebrow">결산할 월 선택</div>
-    <h2>2026년, 어느 달을 결산할까요?</h2>
-    <div class="months" id="months"></div>
-  </div>
-</section>
+<!-- 9. 대시보드 — 사이드바(월 목록) + 본문(보관 상세 / 자료 넣기 → 결산 진행 → 결과) -->
+<section id="dash-sec" class="dash hidden">
+  <aside class="dash-side">
+    <button class="side-back" id="shelf-back" type="button">‹ 결산 서고</button>
+    <div class="side-year">
+      <div class="year-nav">
+        <button id="side-yprev" type="button" aria-label="이전 연도">‹</button>
+        <b id="side-ylabel" class="mono">2026</b>
+        <button id="side-ynext" type="button" aria-label="다음 연도">›</button>
+      </div>
+    </div>
+    <div id="side-months"></div>
+  </aside>
+  <div class="dash-main">
+    <div class="dash-top">
+      <h2 id="dash-title">결산 서고</h2>
+      <span class="chip hidden" id="dash-chip"></span>
+    </div>
+    <div class="dash-steps hidden" id="dash-steps">
+      <button type="button" class="dstep" data-pane="upload-sec"><span class="n">1</span>자료 넣기</button>
+      <span class="step-sep">›</span>
+      <button type="button" class="dstep" data-pane="run-sec"><span class="n">2</span>결산 진행</button>
+      <span class="step-sep">›</span>
+      <button type="button" class="dstep" data-pane="result-sec"><span class="n">3</span>결산 결과</button>
+    </div>
+    <div class="dash-body">
 
-<!-- 9. 자료 넣기 -->
-<section id="upload-sec" class="page hidden">
+<!-- 9-1. 보관월 상세 -->
+<div class="dash-pane" id="month-sec">
   <div class="wrap">
-    <div class="eyebrow">1 · 자료 넣기</div>
-    <h2>8월에 쓴 카드 자료를 올려 주세요</h2>
-    <div class="dropzone">
+    <div class="month-detail" id="month-detail"></div>
+  </div>
+</div>
+
+<!-- 9-2. 자료 넣기 -->
+<div class="dash-pane" id="upload-sec">
+  <div class="wrap">
+    <div class="eyebrow">자료 넣기</div>
+    <h2 id="upload-title">8월에 쓴 카드 자료를 올려 주세요</h2>
+    <div class="dropzone" id="dropzone">
       <strong>파일을 끌어다 놓으세요</strong><br>
       카드사 엑셀·CSV, 영수증·결제 문자 캡처 이미지
       <div class="src-buttons">
-        <button class="btn btn-ghost inert">파일 선택</button>
-        <button class="btn btn-ghost inert">Google Drive 연결</button>
+        <button class="btn btn-ghost inert" id="pick-files">파일 선택</button>
+        <button class="btn btn-ghost inert" id="drive-btn">Google Drive 연결</button>
       </div>
     </div>
-    <ul class="file-list">
+    <ul class="file-list" id="file-list">
       <li><span>국민카드_202608_이용내역.xlsx</span><span class="ok">준비됨</span></li>
       <li><span>신한카드_202608.csv</span><span class="ok">준비됨</span></li>
       <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
     </ul>
     <div class="run-cta">
-      <button class="btn" id="run-btn">이 자료로 결산 시작하기</button>
-      <div class="hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
+      <button class="btn" id="run-btn">결산 시작</button>
+      <div class="hint" id="upload-hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
     </div>
   </div>
-</section>
+</div>
 
-<!-- 10. 결산 진행 -->
-<section id="run-sec" class="page hidden">
+<!-- 9-3. 결산 진행 -->
+<div class="dash-pane" id="run-sec">
   <div class="wrap">
-    <div class="eyebrow">2 · 결산 진행</div>
-    <h2>월말결산 비서가 결산하고 있습니다</h2>
-    <div class="steps">
-      <span class="step" data-stage="수집"><span class="tick">✓</span>수집</span>
-      <span class="step" data-stage="가공"><span class="tick">✓</span>가공</span>
-      <span class="step" data-stage="검증"><span class="tick">✓</span>검증</span>
-      <span class="step" data-stage="통합"><span class="tick">✓</span>통합</span>
+    <div class="eyebrow">결산 진행</div>
+    <h2>렛저가 결산하고 있습니다</h2>
+
+    <div class="overall">
+      <div class="oh"><b>전체 <span class="mono" id="o-pct">0%</span></b><span class="mono" id="o-time"></span></div>
+      <div class="track"><div class="fill" id="o-fill"></div></div>
     </div>
-    <div class="runlog mono" id="runlog" aria-live="polite"></div>
-  </div>
-</section>
 
-<!-- 11. 결산 결과 — PDF 리포트 목차(개요·카테고리·결제구분·주요 지출·확인 필요) 구성 -->
-<section id="result-sec" class="page hidden">
+    <div class="stages" id="stages">
+      <div class="stage" data-stage="수집">
+        <span class="sn"><span class="tick">✓</span>수집</span>
+        <div class="track"><div class="fill"></div></div>
+        <span class="meta">대기</span>
+        <div class="now-doing hidden"><span class="pulse"></span><span class="nd"></span></div>
+      </div>
+      <div class="stage" data-stage="가공">
+        <span class="sn"><span class="tick">✓</span>가공</span>
+        <div class="track"><div class="fill"></div></div>
+        <span class="meta">대기</span>
+        <div class="now-doing hidden"><span class="pulse"></span><span class="nd"></span></div>
+      </div>
+      <div class="stage" data-stage="검증">
+        <span class="sn"><span class="tick">✓</span>검증</span>
+        <div class="v-tracks">
+          <div class="v-sub"><span class="v-name">분류</span><div class="track"><div class="fill" data-v="verify1"></div></div><span class="v-meta mono" data-vm="verify1"></span></div>
+          <div class="v-sub"><span class="v-name">금액</span><div class="track"><div class="fill" data-v="verify2"></div></div><span class="v-meta mono" data-vm="verify2"></span></div>
+        </div>
+        <span class="meta">대기</span>
+        <div class="now-doing hidden"><span class="pulse"></span><span class="nd"></span></div>
+      </div>
+      <div class="stage" data-stage="통합">
+        <span class="sn"><span class="tick">✓</span>통합</span>
+        <div class="track"><div class="fill"></div></div>
+        <span class="meta">대기</span>
+        <div class="now-doing hidden"><span class="pulse"></span><span class="nd"></span></div>
+      </div>
+    </div>
+
+    <div class="confirm-panel hidden" id="confirm-panel">
+      <div class="cp-head"><b id="confirm-title">확인이 필요한 거래가 있습니다</b><span class="cp-sub" id="confirm-sub"></span></div>
+      <div class="cp-scroll"><table class="cp-table" id="confirm-table"></table></div>
+      <div class="cp-actions">
+        <button class="btn" id="confirm-apply">반영하고 계속</button>
+        <button class="btn btn-ghost" id="confirm-skip">그대로 계속</button>
+        <span class="hint">체크한 행만 확인 완료로 반영됩니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
+      </div>
+    </div>
+
+    <details class="more runlog-more">
+      <summary>자세한 기록 <span class="sub">단계별 이벤트 로그</span></summary>
+      <div class="more-body"><div class="runlog mono" id="runlog" aria-live="polite"></div></div>
+    </details>
+    <div class="pane-nav">
+      <button class="btn btn-quiet" id="nav-run-prev" type="button">‹ 자료 넣기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 9-4. 결산 결과 — 개요는 상시, 나머지는 PDF 리포트 목차 순서의 탭 -->
+<div class="dash-pane" id="result-sec">
   <div class="wrap">
-    <div class="eyebrow">3 · 결산 결과</div>
-    <h2>2026년 8월 결산이 끝났습니다</h2>
+    <div class="eyebrow">결산 결과</div>
+    <div class="result-head">
+      <h2 id="r-title">2026년 8월 결산이 끝났습니다</h2>
+      <div class="downloads" id="downloads">
+        <a class="btn btn-ghost" href="demo/result.pdf" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>분석 리포트</a>
+        <a class="btn btn-ghost" href="demo/result.xlsx" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>회계장부</a>
+      </div>
+    </div>
+
+    <div class="save-bar hidden" id="save-bar">
+      <div><b>결산 서고에 저장되었습니다</b><div class="hint">서고에서 언제든 다시 열 수 있습니다</div></div>
+      <div class="save-actions">
+        <button class="btn btn-ghost" id="r-rerun" type="button">다시 결산하기</button>
+      </div>
+    </div>
 
     <div class="report-block">
       <h3>결산 개요</h3>
       <div class="stats">
-        <div class="stat"><div class="k">총지출</div><div class="v minus mono">-3,481,200</div></div>
-        <div class="stat"><div class="k">총수익</div><div class="v mono">+5,214,000</div></div>
-        <div class="stat"><div class="k">순액</div><div class="v mono">+1,732,800</div></div>
+        <div class="stat"><div class="k">총지출</div><div class="v minus mono" id="r-expense">-3,481,200</div><div class="delta" id="r-expense-delta"></div></div>
+        <div class="stat"><div class="k">총수익</div><div class="v mono" id="r-income">+5,214,000</div></div>
+        <div class="stat"><div class="k">순액</div><div class="v mono" id="r-net">+1,732,800</div></div>
       </div>
-      <div class="hint">거래 42건 · 카드 3장 통합</div>
+      <div class="hint" id="r-count">거래 42건 · 카드 3장 통합</div>
     </div>
 
-    <div class="report-block">
-      <h3>카테고리별 지출</h3>
-      <div class="cats">
+    <div class="tabs" id="r-tabs" role="tablist">
+      <button type="button" class="on" data-tab="r-tab-cats">카테고리</button>
+      <button type="button" data-tab="r-tab-compare">전월 비교</button>
+      <button type="button" data-tab="r-tab-split">결제구분</button>
+      <button type="button" data-tab="r-tab-top5">주요 지출</button>
+      <button type="button" data-tab="r-tab-memo">비고</button>
+      <button type="button" data-tab="r-tab-more">자세히</button>
+    </div>
+
+    <div class="tab-pane on" id="r-tab-cats">
+      <div class="cats" id="r-cats">
         <div class="cat"><span>사용료</span><div class="bar-track"><div class="bar" data-w="100%"></div></div><span class="num mono">-1,200,000</span><span class="pct mono">34%</span></div>
         <div class="cat"><span>식대</span><div class="bar-track"><div class="bar" data-w="70%"></div></div><span class="num mono">-842,300</span><span class="pct mono">24%</span></div>
         <div class="cat"><span>그 외 5개</span><div class="bar-track"><div class="bar" data-w="54%"></div></div><span class="num mono">-649,000</span><span class="pct mono">19%</span></div>
@@ -501,21 +863,23 @@
       </div>
     </div>
 
-    <div class="report-block">
-      <h3>결제구분별 합계</h3>
-      <div class="split-bar">
+    <div class="tab-pane" id="r-tab-compare">
+      <div id="r-compare"><div class="hint">전월 보관본이 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div></div>
+    </div>
+
+    <div class="tab-pane" id="r-tab-split">
+      <div class="split-bar" id="r-split">
         <div class="seg-b" style="width:40%"></div>
         <div class="seg-a" style="width:60%"></div>
       </div>
-      <div class="split-legend">
+      <div class="split-legend" id="r-split-legend">
         <span><i class="dot-b"></i>개인결제 <span class="amt mono">-1,392,500 (40%)</span></span>
         <span><i class="dot-a"></i>법인결제 <span class="amt mono">-2,088,700 (60%)</span></span>
       </div>
     </div>
 
-    <div class="report-block">
-      <h3>주요 지출 Top 5</h3>
-      <table class="top5">
+    <div class="tab-pane" id="r-tab-top5">
+      <table class="top5" id="r-top5">
         <tr><td class="d mono">08-05</td><td>스튜디오밝음</td><td class="c">사용료</td><td class="n mono">-1,200,000</td></tr>
         <tr><td class="d mono">08-21</td><td>코스트코 광명점</td><td class="c">식대</td><td class="n mono">-286,400</td></tr>
         <tr><td class="d mono">08-03</td><td>SK텔레콤</td><td class="c">통신비</td><td class="n mono">-159,000</td></tr>
@@ -524,9 +888,8 @@
       </table>
     </div>
 
-    <div class="report-block">
-      <h3>결산 비고</h3>
-      <div class="memo">
+    <div class="tab-pane" id="r-tab-memo">
+      <div class="memo" id="r-memo">
         <strong>확인 필요 2건</strong>
         <ul class="flags">
           <li>7행 · 해외결제 1건 — 원화 환산 금액 확인이 필요합니다</li>
@@ -535,9 +898,51 @@
       </div>
     </div>
 
-    <div class="downloads">
-      <button class="btn inert">PDF 리포트 받기</button>
-      <button class="btn btn-ghost inert">결제내역 장부 받기 (엑셀)</button>
+    <div class="tab-pane" id="r-tab-more">
+      <details class="more" id="pdf-more" style="margin-top:0;">
+        <summary>분석 리포트(PDF) 미리보기 <span class="sub">결산 리포트를 내려받기 전에 훑어봅니다</span></summary>
+        <div class="more-body" id="pdf-preview">
+          <iframe class="pdf-frame" src="demo/result.pdf" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>
+          <div class="hint">샘플 데이터로 만든 리포트입니다 — 실제 결산 리포트는 로컬 실행 모드에서 생성됩니다.</div>
+        </div>
+      </details>
+
+      <details class="more" id="summary-more">
+        <summary>결산 요약 전문 <span class="sub">단계별 진행·확인 필요 목록·실행 기록</span></summary>
+        <div class="more-body">
+          <pre class="summary-pre" id="summary-body"># 최종 결과 요약 (2026-08 결산)
+
+## 1. 단계별 진행 현황
+
+| 단계 | 상태 | 처리 건수 (전체/정상/확인필요) | 산출물 |
+| 수집 | ok | 42 / 42 / 0 | collect/result.csv |
+| 가공 | partial | 42 / 40 / 2 | refine/result.csv |
+| 검증 1 | partial | 42 / 41 / 1 | verify1/result.csv |
+| 검증 2 | partial | 42 / 41 / 1 | verify2/result.csv |
+| 통합 | partial | 42 / 40 / 2 | merge/result.xlsx, merge/result.pdf |
+
+## 2. 확인 필요 목록
+
+| 행 번호 | 단계 | 유형 | 사유 |
+| 7 | 검증 2 | 확인 필요 | 해외결제 1건 — 원화 환산 금액 확인 필요 |
+| 23 | 가공 | 확인 필요 | 결제대행사 결제 — 실제 가맹점명 미확인 |
+
+## 3. 산출물 위치
+
+- 엑셀 회계장부: merge/result.xlsx
+- PDF 결산 리포트: merge/result.pdf
+
+## 4. 메모
+
+전 단계 counts.total(42건) 대조 결과 유실 없음.
+실행 기록: logs/run_20260901_090000/ (진행 로그 + 단계별 보고 아카이브)</pre>
+        </div>
+      </details>
+    </div>
+
+  </div>
+</div>
+
     </div>
   </div>
 </section>
@@ -545,10 +950,26 @@
 
 <footer>
   <div class="wrap">
-    이 페이지는 샘플 데이터로 구성된 데모입니다. 실제 결산 실행·파일 업로드·다운로드는 정식 버전에서 제공됩니다.<br>
-    Ledger Flow — 월말결산 비서 · <a href="https://github.com/team-T6/ledger-flow" target="_blank" rel="noopener">GitHub</a>
+    <span id="footer-note">이 페이지는 샘플 데이터로 구성된 데모입니다. 실제 결산 실행·파일 업로드·다운로드는 정식 버전에서 제공됩니다.</span><br>
+    렛저 (Ledger Flow) — 월말결산 비서 · <a href="https://github.com/team-T6/ledger-flow" target="_blank" rel="noopener">GitHub</a>
   </div>
 </footer>
+
+<!-- 초대코드 모달 — 결산하기 진입 시 확인 전까지 화면을 덮는다 -->
+<div class="modal-overlay hidden" id="invite-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+    <button class="modal-close" id="invite-close" type="button" aria-label="닫기">✕</button>
+    <div class="eyebrow">초대코드 확인</div>
+    <h2 id="invite-title">초대코드를 입력해 주세요</h2>
+    <p class="lead">지금은 초대받은 분만 이용할 수 있습니다.</p>
+    <div class="invite-form">
+      <input id="invite-input" type="text" placeholder="초대코드" autocomplete="off" aria-label="초대코드">
+      <button class="btn" id="invite-btn">확인</button>
+    </div>
+    <p class="invite-error" id="invite-error">초대코드가 맞지 않습니다. 다시 확인해 주세요.</p>
+    <div class="hint" id="invite-hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
+  </div>
+</div>
 
 <div class="toast" id="toast" role="status"></div>
 
@@ -556,21 +977,31 @@
 (function () {
   "use strict";
 
-  /* 테마 전환 — data-theme 토큰 교체, 선택은 localStorage에 유지 */
-  var THEME_KEY = "lf-theme";
-  var dots = document.querySelectorAll(".theme-dot");
-  function setTheme(name) {
-    document.documentElement.dataset.theme = name;
-    dots.forEach(function (d) { d.classList.toggle("on", d.dataset.set === name); });
-    try { localStorage.setItem(THEME_KEY, name); } catch (e) { /* 저장 불가 환경은 무시 */ }
+  /* ==================== 기능 스위치 ====================
+     초대코드 게이트 on/off — false면 초대코드 입력 없이 바로 이용할 수 있다.
+     (.env가 아니라 이 파일에 두는 커밋 대상 설정 — 데모·실제 모드 공통 적용) */
+  var INVITE_CODE_ENABLED = false;
+
+  /* ==================== 모드별 문구 ====================
+     HTML 기본값 = 데모 문구(SSOT). 실제 모드로 바뀔 때 덮어쓸 문구만 여기 둔다.
+     데모 전용 토스트처럼 여러 곳에서 쓰는 문구도 여기서만 수정한다. */
+  var COPY = {
+    toastInert: "데모에서는 동작하지 않습니다 — 정식 버전에서 제공됩니다",
+    toastMonthLimit: "데모에서는 8월 결산만 진행할 수 있습니다",
+    real: {
+      "invite-hint": ".env의 INVITE_CODE에 설정한 초대코드를 입력하세요",
+      "upload-hint": "",
+      "footer-note": ""
+    }
+  };
+  function applyRealCopy() {
+    Object.keys(COPY.real).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = COPY.real[id];
+    });
+    // 배지는 실제 모드에서 아예 숨긴다 (데모 표식이므로)
+    document.querySelector(".demo-badge").classList.add("hidden");
   }
-  dots.forEach(function (d) {
-    d.addEventListener("click", function () { setTheme(d.dataset.set); });
-  });
-  try {
-    var saved = localStorage.getItem(THEME_KEY);
-    if (saved === "ledger" || saved === "fintech" || saved === "green") setTheme(saved);
-  } catch (e) { /* 무시 */ }
 
   /* 토스트 */
   var toastEl = document.getElementById("toast");
@@ -583,17 +1014,64 @@
   }
   document.querySelectorAll(".inert").forEach(function (b) {
     b.addEventListener("click", function () {
-      showToast("데모에서는 동작하지 않습니다 — 정식 버전에서 제공됩니다");
+      showToast(COPY.toastInert);
     });
   });
 
-  /* 진행형 공개 — 숨겨진 섹션을 열고 그 화면으로 스냅 이동.
-     공개 직후 같은 프레임에 스크롤하면 스냅 재계산에 밀려 제자리로 돌아오므로
-     레이아웃이 잡힌 다음 틱에 스크롤한다 */
-  function openSection(id) {
-    var el = document.getElementById(id);
-    el.classList.remove("hidden");
-    setTimeout(function () { el.scrollIntoView({ behavior: "instant", block: "start" }); }, 60);
+  /* ---------- 결산 화면 전환 — 스크롤 없이 서고 ↔ 대시보드, 대시보드 안은 패널 교체 ---------- */
+  var shelfSec = document.getElementById("shelf-sec");
+  var dashSec = document.getElementById("dash-sec");
+  function showShelf() {
+    dashSec.classList.add("hidden");
+    shelfSec.classList.remove("hidden");
+    window.scrollTo(0, 0);
+  }
+  /* 사용자가 서고로 나갈 때만 달 해시를 지운다 — 새로고침 복원(route)과 구분 */
+  function backToShelf() {
+    if (/^#app\//.test(location.hash)) history.replaceState(null, "", "#app");
+    renderShelf();
+    showShelf();
+  }
+  function showPane(id) {
+    shelfSec.classList.add("hidden");
+    dashSec.classList.remove("hidden");
+    document.querySelectorAll("#dash-sec .dash-pane").forEach(function (p) {
+      p.classList.toggle("on", p.id === id);
+    });
+    document.querySelector("#dash-sec .dash-body").scrollTop = 0;
+    renderSteps(id);
+  }
+
+  /* ---------- 결산 단계 스텝 — 자료 넣기 → 결산 진행 → 결산 결과 ----------
+     도달한 스텝은 탭처럼 눌러 오간다. 결산 진행/결과는 실제로 그 단계에 이르러야 열린다 */
+  var STEP_PANES = ["upload-sec", "run-sec", "result-sec"];
+  function stepReachable(paneId) {
+    if (!jobPhase) return false;
+    if (paneId === "upload-sec") return true;
+    if (paneId === "run-sec") return jobPhase === "run" || jobPhase === "result";
+    return jobPhase === "result";
+  }
+  function goStep(paneId) {
+    if (stepReachable(paneId)) showPane(paneId);
+  }
+  function renderSteps(activePane) {
+    var bar = document.getElementById("dash-steps");
+    var show = STEP_PANES.indexOf(activePane) >= 0 && !!jobPhase && viewKey === selectedMonth;
+    bar.classList.toggle("hidden", !show);
+    if (show) {
+      bar.querySelectorAll(".dstep").forEach(function (b) {
+        var open = stepReachable(b.dataset.pane);
+        b.classList.toggle("cur", b.dataset.pane === activePane);
+        b.classList.toggle("open", open && b.dataset.pane !== activePane);
+        b.disabled = !open;
+      });
+    }
+  }
+  function setDashTop(title, chipText, chipCls) {
+    document.getElementById("dash-title").textContent = title;
+    var chip = document.getElementById("dash-chip");
+    chip.textContent = chipText || "";
+    chip.className = "chip" + (chipCls ? " " + chipCls : "") + (chipText ? "" : " hidden");
   }
 
   /* 뷰 전환 — 랜딩 ↔ 월말결산하기 (해시 라우팅: #app) */
@@ -605,10 +1083,51 @@
     viewLanding.classList.toggle("hidden", isApp);
     viewApp.classList.toggle("hidden", !isApp);
     navApp.classList.toggle("active", isApp);
+    // 앱 모드에서는 랜딩용 스냅·푸터를 끈다 — 해시에 달이 있으면 그 달로, 없으면 결산 서고로
+    document.documentElement.classList.toggle("app-mode", isApp);
+    if (isApp) {
+      var mk = appHashMonth();
+      // 열 수 있는 달: 보관본이 있거나, 진행 중인 결산이거나, 새로 결산할 수 있는 달(데모는 이번 달만)
+      var canOpen = mk && (findArchived(mk) || (mk === selectedMonth && jobPhase) ||
+                           (vaultReal ? mk <= CUR_KEY : mk === CUR_KEY));
+      if (canOpen) openMonth(mk);
+      else showShelf();
+    }
     window.scrollTo(0, 0);
-    if (isApp) document.getElementById("invite-input").focus({ preventScroll: true });
+    if (isApp && INVITE_CODE_ENABLED && !invited) openInviteModal();
+    else closeInviteModal();
   }
-  function route() { showView(location.hash === "#app" ? "app" : "landing"); }
+
+  /* 초대코드 모달 — 결산하기 진입 시 확인 전까지 보관함 위를 덮는다 */
+  var invited = false;
+  if (!INVITE_CODE_ENABLED) document.getElementById("invite-gate-hint").classList.add("hidden");
+  var inviteModal = document.getElementById("invite-modal");
+  function openInviteModal() {
+    inviteModal.classList.remove("hidden");
+    document.getElementById("invite-input").focus({ preventScroll: true });
+  }
+  function closeInviteModal() { inviteModal.classList.add("hidden"); }
+  function acceptInvite() {
+    invited = true;
+    closeInviteModal();
+  }
+  function cancelInvite() {
+    // 확인 전 닫기 — 랜딩으로 되돌린다
+    closeInviteModal();
+    if (location.hash) history.pushState(null, "", location.pathname);
+    showView("landing");
+  }
+  document.getElementById("invite-close").addEventListener("click", cancelInvite);
+  inviteModal.addEventListener("click", function (e) { if (e.target === inviteModal) cancelInvite(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !invited && !inviteModal.classList.contains("hidden")) cancelInvite();
+  });
+  /* 해시에서 달 키를 읽는다 — #app/2026-07 → "2026-07", 아니면 null */
+  function appHashMonth() {
+    var m = location.hash.match(/^#app\/(\d{4}-\d{2})$/);
+    return m ? m[1] : null;
+  }
+  function route() { showView(location.hash.indexOf("#app") === 0 ? "app" : "landing"); }
   window.addEventListener("hashchange", route);
 
   /* 헤더 브랜드 클릭 → 랜딩 맨 위로 */
@@ -620,18 +1139,48 @@
 
   /* 시작하기 → 월말결산하기 메뉴로 이동 */
   document.getElementById("start").addEventListener("click", function () {
-    if (location.hash === "#app") showView("app");
+    if (location.hash.indexOf("#app") === 0) showView("app");
     else location.hash = "app";
   });
 
-  /* 초대코드 확인 — 데모는 고정 코드, 정식 버전은 서버에서 검증한다 */
+  /* 버튼용 인라인 아이콘 — 다운로드 / 새 탭 열기 */
+  var DL_ICO =
+    '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+  var OPEN_ICO =
+    '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+
+  /* 초대코드 확인 — 데모는 고정 코드, 실제 모드는 서버(.env의 INVITE_CODE)에서 검증한다 */
   var DEMO_CODE = "LEDGER";
   function checkInvite() {
     var input = document.getElementById("invite-input");
     var error = document.getElementById("invite-error");
+    if (REAL) {
+      fetch("auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: input.value.trim() })
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (res.ok && res.data.ok) {
+            error.classList.remove("show");
+            acceptInvite();
+          } else {
+            error.textContent = res.data.error || "초대코드가 맞지 않습니다. 다시 확인해 주세요.";
+            error.classList.add("show");
+            input.focus({ preventScroll: true });
+          }
+        })
+        .catch(function () {
+          error.textContent = "서버에 연결하지 못했습니다 — orchestrator/server.py가 실행 중인지 확인하세요.";
+          error.classList.add("show");
+        });
+      return;
+    }
     if (input.value.trim().toUpperCase() === DEMO_CODE) {
       error.classList.remove("show");
-      openSection("months-sec");
+      acceptInvite();
     } else {
       error.classList.add("show");
       input.focus({ preventScroll: true });
@@ -642,66 +1191,549 @@
     if (e.key === "Enter") checkInvite();
   });
 
-  /* 월 동그라미 — 5·6·7월 완료, 8월 진행 가능 */
-  var DONE = { 5: "-291만", 6: "-312만", 7: "-348만" };
+  /* ---------- 결산 서고 — 데모·실제 공용 렌더 ----------
+     결산이 끝난 달은 보관본(요약 수치 + 산출물)이 꽂혀 있고, 달을 누르면 대시보드로 들어간다.
+     전월 대비·추이는 보관된 월들의 summary 수치만으로 계산한다 */
   var monthsEl = document.getElementById("months");
-  for (var m = 1; m <= 12; m++) {
-    var btn = document.createElement("button");
-    btn.className = "month" + (DONE[m] ? " done" : m === 8 ? " now" : "");
-    btn.type = "button";
-    btn.innerHTML = '<span class="circle">' + m + '월</span>' +
-      (DONE[m] ? '<span class="amt mono">' + DONE[m] + '</span>' :
-       m === 8 ? '<span class="amt">진행 가능</span>' : "");
-    if (m === 8) {
-      btn.addEventListener("click", function () { openSection("upload-sec"); });
-    } else {
-      btn.addEventListener("click", function () {
-        showToast("데모에서는 8월 결산만 진행할 수 있습니다");
-      });
-    }
-    monthsEl.appendChild(btn);
+  var sideMonthsEl = document.getElementById("side-months");
+  var monthDetailEl = document.getElementById("month-detail");
+  var DEMO_MONTHS = [
+    { month: "2025-11", total_expense: 2870000, tx_count: 39, flagged_count: 2, completed_at: "2025-12-01 09:08" },
+    { month: "2025-12", total_expense: 3340000, tx_count: 44, flagged_count: 2, completed_at: "2026-01-02 09:15" },
+    { month: "2026-05", total_expense: 2910000, tx_count: 38, flagged_count: 2, completed_at: "2026-06-01 09:03" },
+    { month: "2026-06", total_expense: 3120000, tx_count: 42, flagged_count: 2, completed_at: "2026-07-01 09:11" },
+    { month: "2026-07", total_expense: 3482100, tx_count: 45, flagged_count: 1, completed_at: "2026-08-01 09:12" }
+  ];
+  var CUR_KEY = "2026-08";  // "이번 달" — 실제 모드에서는 오늘 날짜로 대체된다
+  var archivedList = [];    // 마지막으로 렌더한 보관 목록 (전월 비교·추이 계산용)
+  var vaultReal = false;    // 마지막 렌더가 실제 모드였는지 (연도 전환 재렌더용)
+  var shelfYear = 2026, sideYear = 2026;
+  var jobPhase = null;      // 진행 중인 결산 상태: null | "upload" | "run" | "result"
+  var viewKey = null;       // 대시보드가 지금 보여주는 달
+  var lastResult = null;    // 마지막 결산 결과 요약 — 보관 확인(서고에 넣기/삭제)에 쓴다
+
+  function fmtShortMan(n) { return "-" + Math.round(n / 10000).toLocaleString("ko-KR") + "만"; }
+  function monthNum(key) { return parseInt(key.slice(5), 10); }
+  function monthYear(key) { return parseInt(key.slice(0, 4), 10); }
+  function monthKeyOf(y, m) { return y + "-" + ("0" + m).slice(-2); }
+  function prevMonthKey(key) {
+    var y = monthYear(key), m = monthNum(key) - 1;
+    if (m === 0) { m = 12; y -= 1; }
+    return monthKeyOf(y, m);
+  }
+  function findArchived(key) {
+    var found = null;
+    archivedList.forEach(function (e) { if (e.month === key) found = e; });
+    return found;
+  }
+  function monthLabel(key) {
+    return (monthYear(key) === monthYear(CUR_KEY) ? "" : monthYear(key) + "년 ") + monthNum(key) + "월";
+  }
+  /* 제목용 — 연도를 항상 붙인다 (예: "2026년 7월") */
+  function monthTitle(key) { return monthYear(key) + "년 " + monthNum(key) + "월"; }
+  function availableYears() {
+    // 지난해까지는 보관 여부와 무관하게 이동 가능(지난달·지난해 결산 재실행용),
+    // 더 오래된 해는 보관본이 있을 때만 열린다. 사이 연도는 빈 해라도 건너뛰지 않는다.
+    var minY = monthYear(CUR_KEY) - 1;
+    var maxY = monthYear(CUR_KEY);
+    archivedList.forEach(function (e) {
+      var y = monthYear(e.month);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    });
+    var ys = [];
+    for (var y = minY; y <= maxY; y++) ys.push(y);
+    return ys;
+  }
+  function stepYear(cur, dir) {
+    var ys = availableYears();
+    var i = ys.indexOf(cur) + dir;
+    return (i < 0 || i >= ys.length) ? cur : ys[i];
+  }
+  function syncYearNav(prefix, year) {
+    var ys = availableYears();
+    document.getElementById(prefix + "-ylabel").textContent = year;
+    document.getElementById(prefix + "-yprev").disabled = ys.indexOf(year) <= 0;
+    document.getElementById(prefix + "-ynext").disabled = ys.indexOf(year) >= ys.length - 1;
   }
 
-  /* 결산 진행 연출 — 실제 파이프라인의 이벤트 로그 형식을 그대로 따른다 */
+  function selectRunMonth(key) {
+    if (!REAL && key !== CUR_KEY) {
+      showToast(COPY.toastMonthLimit);
+      return;
+    }
+    if (REAL && key > CUR_KEY) {
+      showToast("아직 오지 않은 달입니다 — 오늘이 포함된 달까지 결산할 수 있습니다");
+      return;
+    }
+    selectedMonth = key;
+    jobPhase = "upload";
+    viewKey = key;
+    lastResult = null;
+    history.replaceState(null, "", "#app/" + key); // 새로고침해도 이 달 화면이 유지되게
+
+    document.getElementById("save-bar").classList.add("hidden");
+    document.getElementById("upload-title").textContent = monthTitle(key) + "에 쓴 카드 자료를 올려 주세요";
+    if (REAL) {
+      // 새 결산 준비 — 이전 결산 때 올린 파일이 이번 자료로 섞이지 않게 업로드함을 비운다
+      apiJson("uploads/clear", { method: "POST" })
+        .then(function (res) { renderFileList((res.data && res.data.files) || []); })
+        .catch(function () { renderFileList([]); });
+    }
+    setDashTop(monthTitle(key) + " 결산", "자료 대기", "");
+    sideYear = monthYear(key);
+    renderSideMonths();
+    showPane("upload-sec");
+  }
+
+  /* 대시보드에서 달을 여는 단일 진입점 — 진행 중인 결산이면 그 단계로, 보관본이면 상세로 */
+  function openMonth(key) {
+    if (key === selectedMonth && jobPhase) {
+      viewKey = key;
+      history.replaceState(null, "", "#app/" + key);
+      sideYear = monthYear(key);
+      renderSideMonths();
+      if (jobPhase === "run") { setDashTop(monthTitle(key) + " 결산", "결산 중", "run"); showPane("run-sec"); }
+      else if (jobPhase === "result") { setDashTop(monthTitle(key) + " 결산", "결산 완료", "ok"); showPane("result-sec"); }
+      else { setDashTop(monthTitle(key) + " 결산", "자료 대기", ""); showPane("upload-sec"); }
+      return;
+    }
+    var entry = findArchived(key);
+    if (entry) { showMonthDetail(entry, archivedList); return; }
+    selectRunMonth(key);
+  }
+
+  function showMonthDetail(entry, archived) {
+    var prev = null;
+    var prevKey = prevMonthKey(entry.month);
+    archived.forEach(function (e) { if (e.month === prevKey) prev = e; });
+
+    monthDetailEl.innerHTML = "";
+    viewKey = entry.month;
+    history.replaceState(null, "", "#app/" + entry.month);
+    sideYear = monthYear(entry.month);
+    renderSideMonths();
+    setDashTop(monthTitle(entry.month) + " 결산 — 보관됨",
+               entry.completed_at ? entry.completed_at + " 완료" : "보관됨", "ok");
+
+    var stats = document.createElement("div");
+    stats.className = "d-stats";
+    function addStat(k, v, minus, deltaText, deltaClass) {
+      var box = document.createElement("div");
+      box.className = "d-stat";
+      box.innerHTML = '<div class="k"></div><div class="v mono"></div>';
+      box.children[0].textContent = k;
+      box.children[1].textContent = v;
+      if (minus) box.children[1].classList.add("minus");
+      if (deltaText) {
+        var d = document.createElement("div");
+        d.className = "delta mono" + (deltaClass ? " " + deltaClass : "");
+        d.textContent = deltaText;
+        box.appendChild(d);
+      }
+      stats.appendChild(box);
+    }
+    var expDelta = "", expClass = "";
+    if (prev && prev.total_expense) {
+      var diff = (entry.total_expense || 0) - prev.total_expense;
+      var pct = Math.round(diff / prev.total_expense * 1000) / 10;
+      if (diff > 0) { expDelta = "▲ " + fmt(diff) + " (전월 대비 +" + pct + "%)"; expClass = "up"; }
+      else if (diff < 0) { expDelta = "▼ " + fmt(diff) + " (전월 대비 " + pct + "%)"; expClass = "down"; }
+      else expDelta = "전월과 동일";
+    }
+    addStat("총지출", "-" + fmt(entry.total_expense || 0), true, expDelta, expClass);
+    addStat("거래", (entry.tx_count || 0) + "건", false, prev ? "전월 " + (prev.tx_count || 0) + "건" : "", "");
+    var fDelta = "", fClass = "";
+    if (prev && typeof prev.flagged_count === "number") {
+      var fd = (entry.flagged_count || 0) - prev.flagged_count;
+      if (fd > 0) { fDelta = "▲ " + fd + "건 (전월 " + prev.flagged_count + "건)"; fClass = "up"; }
+      else if (fd < 0) { fDelta = "▼ " + (-fd) + "건 (전월 " + prev.flagged_count + "건)"; fClass = "down"; }
+      else fDelta = "전월과 같음 (" + prev.flagged_count + "건)";
+    }
+    addStat("확인 필요", (entry.flagged_count || 0) + "건", false, fDelta, fClass);
+    monthDetailEl.appendChild(stats);
+
+    // 지출 추이 — 이 달까지 보관된 최근 3개월 (2개월 이상일 때만)
+    var upto = archived.filter(function (e) { return e.month <= entry.month && e.total_expense; }).slice(-3);
+    if (upto.length >= 2) {
+      var maxV = Math.max.apply(null, upto.map(function (e) { return e.total_expense; }));
+      var trend = document.createElement("div");
+      trend.className = "trend";
+      trend.innerHTML = '<div class="tt"><b>지출 추이</b>보관된 월 기준</div><div class="t-bars"></div>';
+      var bars = trend.querySelector(".t-bars");
+      upto.forEach(function (e) {
+        var col = document.createElement("div");
+        col.className = "t-col" + (e.month === entry.month ? " cur" : "");
+        var bar = document.createElement("i");
+        bar.style.height = Math.round(18 + 26 * e.total_expense / maxV) + "px";
+        col.appendChild(bar);
+        col.appendChild(document.createTextNode(monthLabel(e.month)));
+        var ta = document.createElement("span");
+        ta.className = "ta mono";
+        ta.textContent = fmtShortMan(e.total_expense);
+        col.appendChild(ta);
+        bars.appendChild(col);
+      });
+      monthDetailEl.appendChild(trend);
+    }
+
+    var actions = document.createElement("div");
+    actions.className = "d-actions";
+    if (REAL) {
+      if (!entry.files || entry.files.pdf) {
+        var pdf = document.createElement("a");
+        pdf.className = "btn";
+        pdf.innerHTML = OPEN_ICO + "분석 리포트";
+        pdf.href = "artifacts/result.pdf?month=" + entry.month + "&inline=1";
+        pdf.target = "_blank";
+        pdf.rel = "noopener";
+        actions.appendChild(pdf);
+      }
+      if (!entry.files || entry.files.xlsx) {
+        var xlsx = document.createElement("a");
+        xlsx.className = "btn btn-ghost";
+        xlsx.innerHTML = DL_ICO + "회계장부";
+        xlsx.href = "artifacts/result.xlsx?month=" + entry.month;
+        actions.appendChild(xlsx);
+      }
+    } else {
+      // 데모 — 샘플 산출물(web/demo/)을 열고 내려받는다
+      var demoPdf = document.createElement("a");
+      demoPdf.className = "btn";
+      demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
+      demoPdf.href = "demo/result.pdf";
+      demoPdf.target = "_blank";
+      demoPdf.rel = "noopener";
+      actions.appendChild(demoPdf);
+      var demoXlsx = document.createElement("a");
+      demoXlsx.className = "btn btn-ghost";
+      demoXlsx.innerHTML = DL_ICO + "회계장부";
+      demoXlsx.href = "demo/result.xlsx";
+      demoXlsx.setAttribute("download", "");
+      actions.appendChild(demoXlsx);
+    }
+    var rerun = document.createElement("button");
+    rerun.className = "btn btn-quiet";
+    rerun.type = "button";
+    rerun.textContent = "다시 결산하기";
+    rerun.addEventListener("click", function () { selectRunMonth(entry.month); });
+    actions.appendChild(rerun);
+    monthDetailEl.appendChild(actions);
+    showPane("month-sec");
+  }
+
+  /* 서고 그리드 — shelfYear 기준 12개월 */
+  function renderShelf() {
+    syncYearNav("shelf", shelfYear);
+    document.getElementById("shelf-title").textContent = shelfYear + "년 결산 서고";
+    monthsEl.innerHTML = "";
+    for (var m = 1; m <= 12; m++) {
+      (function (key, mm) {
+        var entry = findArchived(key);
+        var btn = document.createElement("button");
+        btn.type = "button";
+        if (entry) {
+          btn.className = "m-card archived";
+          btn.innerHTML = '<div class="mh"><span class="mm"></span><span class="amt mono"></span></div><div class="flagged"></div>';
+          btn.querySelector(".mm").textContent = mm + "월";
+          btn.querySelector(".amt").textContent = entry.total_expense ? fmtShortMan(entry.total_expense) : "";
+          // 확인 필요 건수만 표시 — 0건이면 아무것도 붙이지 않아 깨끗한 달이 한눈에 구분된다
+          if (entry.flagged_count) {
+            var fl = btn.querySelector(".flagged");
+            fl.textContent = "확인 필요 ";
+            var cnt = document.createElement("b");
+            cnt.textContent = entry.flagged_count + "건";
+            fl.appendChild(cnt);
+          }
+          btn.addEventListener("click", function () { openMonth(key); });
+        } else if ((vaultReal && key <= CUR_KEY) || key === CUR_KEY) {
+          btn.className = "m-card current";
+          btn.innerHTML = '<div class="mh"><span class="mm"></span></div><span class="go"></span>';
+          btn.querySelector(".mm").textContent = mm + "월";
+          btn.querySelector(".go").textContent =
+            (key === selectedMonth && jobPhase === "result") ? "결과 보기 →" :
+            (key === selectedMonth && jobPhase === "run") ? "결산 중 →" : "새로 결산하기 →";
+          btn.addEventListener("click", function () { openMonth(key); });
+        } else {
+          btn.className = "m-card empty";
+          btn.innerHTML = '<div class="mh"><span class="mm"></span></div><span>자료 없음</span>';
+          btn.querySelector(".mm").textContent = mm + "월";
+          btn.addEventListener("click", function () {
+            showToast(vaultReal ? "아직 오지 않은 달입니다 — 오늘이 포함된 달까지 결산할 수 있습니다"
+                                : COPY.toastMonthLimit);
+          });
+        }
+        monthsEl.appendChild(btn);
+      })(monthKeyOf(shelfYear, m), m);
+    }
+  }
+
+  /* 사이드바 월 목록 — sideYear 기준 12개월, 보고 있는 달을 강조 */
+  function renderSideMonths() {
+    syncYearNav("side", sideYear);
+    sideMonthsEl.innerHTML = "";
+    for (var m = 1; m <= 12; m++) {
+      (function (key, mm) {
+        var entry = findArchived(key);
+        var row = document.createElement("button");
+        row.type = "button";
+        var cls = "mrow";
+        if (entry) cls += " archived";
+        else if ((!vaultReal && key !== CUR_KEY) || (vaultReal && key > CUR_KEY)) cls += " empty";
+        if (key === viewKey) cls += " sel";
+        row.className = cls;
+        var right = entry && entry.total_expense
+          ? '<span class="amt mono">' + fmtShortMan(entry.total_expense) + "</span>"
+          : key === CUR_KEY ? '<span class="live">이번 달</span>'
+          : key === selectedMonth && jobPhase ? '<span class="live">결산 중</span>' : "";
+        row.innerHTML = '<span class="mm">' + mm + "월</span>" + right;
+        row.addEventListener("click", function () { openMonth(key); });
+        sideMonthsEl.appendChild(row);
+      })(monthKeyOf(sideYear, m), m);
+    }
+  }
+
+  function renderVault(archived, real) {
+    vaultReal = real;
+    archivedList = archived.slice().sort(function (a, b) { return a.month < b.month ? -1 : 1; });
+    var years = availableYears();
+    if (years.indexOf(shelfYear) < 0) shelfYear = years[years.length - 1];
+    if (years.indexOf(sideYear) < 0) sideYear = years[years.length - 1];
+    renderShelf();
+    renderSideMonths();
+  }
+
+  document.getElementById("shelf-yprev").addEventListener("click", function () { shelfYear = stepYear(shelfYear, -1); renderShelf(); });
+  document.getElementById("shelf-ynext").addEventListener("click", function () { shelfYear = stepYear(shelfYear, 1); renderShelf(); });
+  document.getElementById("side-yprev").addEventListener("click", function () { sideYear = stepYear(sideYear, -1); renderSideMonths(); });
+  document.getElementById("side-ynext").addEventListener("click", function () { sideYear = stepYear(sideYear, 1); renderSideMonths(); });
+  document.getElementById("shelf-back").addEventListener("click", backToShelf);
+  renderVault(DEMO_MONTHS, false);
+
+  /* ---------- 결산 진행 화면 렌더러 (데모·실제 공용) ----------
+     단계별 처리 건수 진행 막대 + 전체 진행률(단계 가중 합산)·경과·예상 남은 시간.
+     진행 건수를 모르는 구간(수집·통합, CLI 폴백)은 부정형 막대로 살아 있음만 보인다 */
   var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var progressUI = (function () {
+    var WEIGHTS = { "수집": 10, "가공": 45, "검증": 35, "통합": 10 };
+    var frac = {}, startedAt = {}, runStart = 0, timer = null;
+    function row(name) { return document.querySelector('#stages .stage[data-stage="' + name + '"]'); }
+    function fmtDur(ms) {
+      var s = Math.max(0, Math.round(ms / 1000));
+      var m = Math.floor(s / 60);
+      return m ? m + "분 " + ("0" + (s % 60)).slice(-2) + "초" : (s % 60) + "초";
+    }
+    function overallFrac() {
+      var sum = 0, total = 0;
+      Object.keys(WEIGHTS).forEach(function (name) {
+        total += WEIGHTS[name];
+        sum += WEIGHTS[name] * (frac[name] || 0);
+      });
+      return total ? sum / total : 0;
+    }
+    function renderOverall() {
+      var f = overallFrac();
+      document.getElementById("o-pct").textContent = Math.round(f * 100) + "%";
+      document.getElementById("o-fill").style.width = (f * 100) + "%";
+    }
+    function renderTime() {
+      var elapsed = Date.now() - runStart;
+      var f = overallFrac();
+      var txt = "경과 " + fmtDur(elapsed);
+      if (f > 0.08 && f < 1) txt += " · 예상 남은 시간 약 " + fmtDur(elapsed / f - elapsed);
+      document.getElementById("o-time").textContent = txt;
+    }
+    function doing(name, text) {
+      var r = row(name);
+      if (!r) return;
+      var nd = r.querySelector(".now-doing");
+      if (!text) { nd.classList.add("hidden"); return; }
+      nd.classList.remove("hidden");
+      nd.querySelector(".nd").textContent = text;
+    }
+    function reset() {
+      frac = { "수집": 0, "가공": 0, "검증": 0, "통합": 0 };
+      vf = { verify1: 0, verify2: 0 };
+      startedAt = {};
+      runStart = Date.now();
+      document.querySelectorAll("#stages .stage").forEach(function (r) {
+        r.classList.remove("running", "done", "fail", "indet");
+        // 인라인 폭 제거 — indet 애니메이션이 클래스 폭을 쓴다
+        r.querySelectorAll(".fill").forEach(function (f) { f.style.width = ""; });
+        r.querySelectorAll(".v-meta").forEach(function (m) { m.textContent = ""; });
+        r.querySelector(".meta").textContent = "대기";
+        r.querySelector(".now-doing").classList.add("hidden");
+      });
+      renderOverall();
+      clearInterval(timer);
+      timer = setInterval(renderTime, 1000);
+      renderTime();
+    }
+    function start(name, note) {
+      var r = row(name);
+      if (!r) return;
+      if (!startedAt[name]) startedAt[name] = Date.now();
+      r.classList.add("running");
+      r.classList.remove("done", "fail");
+      if (!frac[name]) {
+        r.classList.add("indet");
+        r.querySelector(".fill").style.width = "";
+        r.querySelector(".meta").textContent = "진행 중";
+      }
+      if (note) doing(name, note);
+    }
+    function progress(name, done, total) {
+      var r = row(name);
+      if (!r || !total) return;
+      if (!startedAt[name]) startedAt[name] = Date.now();
+      r.classList.add("running");
+      if (!done) {
+        // 총량은 알지만 아직 첫 건 전 — 분석 준비 구간을 부정형 막대로 표시한다
+        r.classList.add("indet");
+        r.querySelector(".fill").style.width = "";
+        r.querySelector(".meta").textContent = total + "건 분석 준비 중";
+        return;
+      }
+      r.classList.remove("indet");
+      var pct = Math.round(done / total * 100);
+      r.querySelector(".fill").style.width = pct + "%";
+      r.querySelector(".meta").textContent = done + "/" + total + "건 · " + pct + "%";
+      frac[name] = Math.max(frac[name] || 0, Math.min(done / total, 1));
+      renderOverall();
+    }
+    var vf = { verify1: 0, verify2: 0 };
+    function progressVerify(sub, done, total) {
+      // 병렬 검증(분류=verify1·금액=verify2)은 각자 미니 막대로 — 행 진행률은 두 축의 평균
+      var r = row("검증");
+      if (!r || !total) return;
+      if (!startedAt["검증"]) startedAt["검증"] = Date.now();
+      r.classList.add("running");
+      r.classList.remove("indet");
+      var fill = r.querySelector('.fill[data-v="' + sub + '"]');
+      var meta = r.querySelector('.v-meta[data-vm="' + sub + '"]');
+      if (!done) {
+        meta.textContent = total + "건 준비 중";
+      } else {
+        var pct = Math.round(done / total * 100);
+        fill.style.width = pct + "%";
+        meta.textContent = done + "/" + total + " · " + pct + "%";
+        vf[sub] = Math.max(vf[sub], Math.min(done / total, 1));
+      }
+      frac["검증"] = (vf.verify1 + vf.verify2) / 2;
+      r.querySelector(".meta").textContent = Math.round(frac["검증"] * 100) + "%";
+      renderOverall();
+    }
+    function finish(name, failed, metaText) {
+      var r = row(name);
+      if (!r) return;
+      r.classList.remove("running", "indet");
+      r.classList.add(failed ? "fail" : "done");
+      r.querySelectorAll(".fill").forEach(function (f) { f.style.width = "100%"; });
+      var meta = failed ? "실패" : (metaText || "완료");
+      if (!failed && startedAt[name]) meta += " · " + fmtDur(Date.now() - startedAt[name]);
+      r.querySelector(".meta").textContent = meta;
+      doing(name, "");
+      if (!failed) frac[name] = 1;
+      renderOverall();
+    }
+    function stop() {
+      clearInterval(timer);
+      document.getElementById("o-time").textContent = "총 " + fmtDur(Date.now() - runStart);
+    }
+    return { reset: reset, start: start, progress: progress, progressVerify: progressVerify,
+             doing: doing, finish: finish, stop: stop };
+  })();
+
+  function logLine(logEl, head, rest, isError) {
+    var line = document.createElement("div");
+    var stage = document.createElement("span");
+    stage.className = "stage-name";
+    stage.textContent = head;
+    line.appendChild(stage);
+    line.appendChild(document.createTextNode(" | " + rest));
+    if (isError) line.style.color = "var(--red)";
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  /* 결산 진행 연출(데모) — 실제 파이프라인의 이벤트 흐름을 처리 건수 진행까지 흉내 낸다 */
   var SCRIPTED = [
-    ["수집", "active", "수집 | 시작 | 카드사 파일 3건, 캡처 3장 읽는 중"],
-    ["수집", "done",   "수집 | 완료 | 거래 42건 정리 (전부 정상)"],
-    ["가공", "active", "가공 | 시작 | 실제 가맹점 찾기·카테고리 분류 중"],
-    ["가공", "done",   "가공 | 완료 | 42건 중 40건 분류, 2건은 확인 필요"],
-    // 검증 둘은 병렬 실행 — 칩은 "검증" 하나로 묶고(둘 다 끝나야 done), 로그에서 분류/금액을 나눠 보여준다
-    ["검증", "active", "분류 검증 | 시작 | 카테고리가 분류 기준에 맞는지 확인 중 (금액 검증과 동시 진행)", 120],
-    ["검증", "active", "금액 검증 | 시작 | 대상 월·금액 부호·해외결제 환산 확인 중 (분류 검증과 동시 진행)", 1100],
-    ["검증", "active", "분류 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요", 150],
-    ["검증", "done", "금액 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요"],
-    ["통합", "active", "통합 | 시작 | 장부·리포트 만드는 중"],
-    ["통합", "done",   "통합 | 완료 | 결산 리포트(PDF)·결제내역 장부(엑셀) 생성"]
+    { s: "수집", ev: "start", log: "수집 | 시작 | 카드사 파일 3건, 캡처 3장 읽는 중", wait: 350 },
+    { s: "수집", ev: "prog", d: 2, t: 6, wait: 350 },
+    { s: "수집", ev: "prog", d: 5, t: 6, wait: 350 },
+    { s: "수집", ev: "prog", d: 6, t: 6, wait: 250 },
+    { s: "수집", ev: "done", meta: "42건", log: "수집 | 완료 | 거래 42건 정리 (전부 정상)" },
+    { s: "가공", ev: "start", log: "가공 | 시작 | 실제 가맹점 찾기·카테고리 분류 중" },
+    { s: "가공", ev: "prog", d: 0, t: 42, note: "분류 기준 문서를 읽고 판단을 준비하는 중", wait: 900 },
+    { s: "가공", ev: "prog", d: 8, t: 42, note: '"(주)케이지이니시스" 실제 가맹점 확인 중', wait: 600 },
+    { s: "가공", ev: "prog", d: 17, t: 42, note: '"스타벅스 역삼대로점" 카테고리 분류 중', wait: 600 },
+    { s: "가공", ev: "prog", d: 26, t: 42, note: '"NICEPAY" 결제대행 내역 원가맹점 조회 중', wait: 600 },
+    { s: "가공", ev: "prog", d: 35, t: 42, note: '"Notion Labs" 해외결제 표기 정리 중', wait: 600 },
+    { s: "가공", ev: "prog", d: 42, t: 42, wait: 350 },
+    { s: "가공", ev: "done", meta: "42건", log: "가공 | 완료 | 42건 중 40건 분류, 2건은 확인 필요" },
+    // 검증 둘은 병렬 실행 — 행 하나로 묶고(둘 다 끝나야 완료), 로그에서 분류/금액을 나눠 보여준다
+    { s: "검증", ev: "start", log: "분류 검증 | 시작 | 카테고리가 분류 기준에 맞는지 확인 중 (금액 검증과 동시 진행)", wait: 120 },
+    { s: "검증", ev: "vprog", v: "verify1", d: 0, t: 42, wait: 100 },
+    { s: "검증", ev: "log", log: "금액 검증 | 시작 | 대상 월·금액 부호·해외결제 환산 확인 중 (분류 검증과 동시 진행)", note: "분류·금액 두 검증이 같은 표를 나란히 보는 중" },
+    { s: "검증", ev: "vprog", v: "verify2", d: 0, t: 42, wait: 750 },
+    { s: "검증", ev: "vprog", v: "verify1", d: 13, t: 42, wait: 300 },
+    { s: "검증", ev: "vprog", v: "verify2", d: 8, t: 42, wait: 350 },
+    { s: "검증", ev: "vprog", v: "verify1", d: 27, t: 42, wait: 300 },
+    { s: "검증", ev: "vprog", v: "verify2", d: 21, t: 42, wait: 350 },
+    { s: "검증", ev: "vprog", v: "verify1", d: 42, t: 42, wait: 250 },
+    { s: "검증", ev: "vprog", v: "verify2", d: 33, t: 42, wait: 300 },
+    { s: "검증", ev: "log", log: "분류 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요", wait: 200 },
+    { s: "검증", ev: "vprog", v: "verify2", d: 42, t: 42, wait: 250 },
+    { s: "검증", ev: "done", meta: "42건 ×2", log: "금액 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요" },
+    { s: "통합", ev: "start", log: "통합 | 시작 | 장부·리포트 만드는 중", wait: 700 },
+    { s: "통합", ev: "done", meta: "42건", log: "통합 | 완료 | 결산 리포트(PDF)·결제내역 장부(엑셀) 생성" }
   ];
   var running = false;
   document.getElementById("run-btn").addEventListener("click", function () {
     if (running) return;
+    if (REAL) { runReal(); return; }
     running = true;
-    var runSec = document.getElementById("run-sec");
     var log = document.getElementById("runlog");
-    openSection("run-sec");
+    log.innerHTML = "";
+    progressUI.reset();
+    jobPhase = "run";
+    setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
+    renderSideMonths();
+    showPane("run-sec");
     var i = 0;
-    var stepEls = {};
-    runSec.querySelectorAll(".step").forEach(function (s) { stepEls[s.dataset.stage] = s; });
     function tick() {
-      if (i >= SCRIPTED.length) { finish(); return; }
+      if (i >= SCRIPTED.length) {
+        running = false;
+        progressUI.stop();
+        finishDemo();
+        return;
+      }
       var ev = SCRIPTED[i++];
-      var el = stepEls[ev[0]];
-      el.classList.remove("active", "done");
-      el.classList.add(ev[1]);
-      var line = document.createElement("div");
-      line.innerHTML = '<span class="stage">' + ev[2].split(" | ")[0] + "</span> | " +
-        ev[2].split(" | ").slice(1).join(" | ");
-      log.appendChild(line);
-      setTimeout(tick, REDUCED ? 0 : (ev[3] || 550)); // ev[3] = 이 이벤트 뒤 대기 시간(ms, 기본 550)
+      if (ev.ev === "start") progressUI.start(ev.s, ev.note);
+      else if (ev.ev === "prog") {
+        progressUI.progress(ev.s, ev.d, ev.t);
+        if (ev.note) progressUI.doing(ev.s, ev.note);
+      } else if (ev.ev === "vprog") {
+        progressUI.progressVerify(ev.v, ev.d, ev.t);
+        if (ev.note) progressUI.doing(ev.s, ev.note);
+      } else if (ev.ev === "done") progressUI.finish(ev.s, false, ev.meta);
+      else if (ev.ev === "log" && ev.note) progressUI.doing(ev.s, ev.note);
+      if (ev.log) {
+        var parts = ev.log.split(" | ");
+        logLine(log, parts[0], parts.slice(1).join(" | "), false);
+      }
+      setTimeout(tick, REDUCED ? 0 : (ev.wait || 550));
     }
-    function finish() {
+    function finishDemo() {
+      jobPhase = "result";
+      var key = selectedMonth || CUR_KEY;
+      setDashTop(monthTitle(key) + " 결산", "결산 완료", "ok");
+      renderCompare(key, { total_expense: 3481200, tx_count: 42, flagged_count: 2 });
+      lastResult = { month: key, total_expense: 3481200, tx_count: 42, flagged_count: 2 };
+      autoArchive(key);
+      document.getElementById("save-bar").classList.remove("hidden");
       setTimeout(function () {
-        openSection("result-sec");
+        showPane("result-sec");
         document.querySelectorAll("#result-sec .bar").forEach(function (bar) {
           void bar.offsetWidth; // 강제 리플로우 — 0폭에서 transition이 시작되게 (백그라운드 탭에서도 동작)
           bar.style.width = bar.dataset.w;
@@ -710,6 +1742,614 @@
     }
     tick();
   });
+
+  /* ==================== 실제 모드 (로컬 서버) ====================
+     같은 파일이 orchestrator 서버(python3 orchestrator/server.py, localhost:8788)에서
+     서빙되면 실제 파이프라인으로 동작한다. 감지는 GET /health 프로브 — 실패하면
+     위의 데모 연출이 그대로 남는다 (데모가 기본값, 실제 모드는 opt-in). */
+  var REAL = false;
+  var selectedMonth = null;
+  var uploadCount = 0;
+
+  function apiJson(path, opts) {
+    return fetch(path, opts).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; });
+    });
+  }
+
+  function probeServer() {
+    if (location.protocol !== "http:" && location.protocol !== "https:") return Promise.resolve(false);
+    return fetch("health", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { return !!(d && d.service === "ledger-flow"); })
+      .catch(function () { return false; });
+  }
+
+  function fmt(n) { return Math.abs(n).toLocaleString("ko-KR"); }
+
+  /* ---- 업로드 ---- */
+  var fileListEl = document.getElementById("file-list");
+  var runBtn = document.getElementById("run-btn");
+
+  function renderFileList(files) {
+    uploadCount = files.length;
+    fileListEl.innerHTML = "";
+    files.forEach(function (f) {
+      var li = document.createElement("li");
+      var name = document.createElement("span");
+      name.textContent = f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + "KB)";
+      var del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.textContent = "삭제";
+      del.addEventListener("click", function () {
+        apiJson("uploads/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: f.name })
+        }).then(function (res) { renderFileList(res.data.files || []); });
+      });
+      li.appendChild(name);
+      li.appendChild(del);
+      fileListEl.appendChild(li);
+    });
+    if (!files.length) {
+      var empty = document.createElement("li");
+      empty.innerHTML = "<span>아직 올린 파일이 없습니다</span>";
+      fileListEl.appendChild(empty);
+    }
+    runBtn.disabled = !files.length;
+  }
+
+  function uploadFiles(fileArray) {
+    var files = Array.prototype.slice.call(fileArray);
+    if (!files.length) return;
+    Promise.all(files.map(function (file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          resolve({ name: file.name, data_base64: String(reader.result).split(",")[1] || "" });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    })).then(function (payload) {
+      return apiJson("uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: payload })
+      });
+    }).then(function (res) {
+      if (!res.ok) { showToast(res.data.error || "업로드에 실패했습니다"); return; }
+      renderFileList(res.data.files || []);
+    }).catch(function () { showToast("업로드 중 오류가 났습니다"); });
+  }
+
+  /* ---- 실행 + 폴링 ---- */
+  var POLL_MS = 1500;
+  var STAGE_CHIP = { collect: "수집", refine: "가공", verify1: "검증", verify2: "검증", merge: "통합" };
+  // 실제 모드에서 단계 아래에 보여줄 "지금 하는 일" 설명 — 파이프라인 이벤트에는
+  // 건수만 실려 오므로, 단계가 하는 일을 고정 문구로 알린다 (데모의 상세 연출과 대응)
+  var STAGE_DOING = {
+    "수집": "카드사 파일·영수증 캡처를 하나의 거래 표로 정리하는 중",
+    "가공": "실제 가맹점을 찾고 카테고리를 분류하는 중",
+    "검증": "분류·금액 두 검증이 같은 표를 나란히 확인하는 중",
+    "통합": "검증 통과분으로 장부·리포트를 만드는 중"
+  };
+
+  function loadVault() {
+    apiJson("months").then(function (res) {
+      renderVault((res.data && res.data.months) || [], true);
+      // 보관월 상세가 열려 있으면 서버 목록 기준으로 다시 그린다 (새로고침 직후 데모 데이터 보정)
+      var mk = appHashMonth();
+      if (viewKey && document.getElementById("month-sec").classList.contains("on")) {
+        var entry = findArchived(viewKey);
+        if (entry) showMonthDetail(entry, archivedList);
+        else backToShelf();
+      } else if (mk && !shelfSec.classList.contains("hidden") && mk <= CUR_KEY) {
+        // 새로고침 복원 — 데모 목록엔 없어 서고로 떨어졌던 달이 실제 기준으론 열 수 있는 경우
+        openMonth(mk);
+      }
+    }).catch(function () { renderVault([], true); });
+  }
+
+  function runReal() {
+    if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
+    running = true;
+    apiJson("runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: selectedMonth, source: "uploads" })
+    }).then(function (res) {
+      if (!res.ok) {
+        running = false;
+        showToast(res.data.error || "실행 요청에 실패했습니다");
+        return;
+      }
+      startPolling();
+    }).catch(function () {
+      running = false;
+      showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+    });
+  }
+
+  function startPolling() {
+    var log = document.getElementById("runlog");
+    log.innerHTML = "";
+    progressUI.reset();
+    jobPhase = "run";
+    setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
+    renderSideMonths();
+    showPane("run-sec");
+
+    var lastSeq = 0;
+    var pollFails = 0;
+    var mergeDone = false;
+    var verifyFinal = { verify1: null, verify2: null }; // null=진행 전/중, "완료"/"실패"=확정
+    var currentConfirm = null; // 화면에 떠 있는 중간 확인 요청 (seq로 중복 렌더 방지)
+
+    function addLine(head, rest, isError) {
+      logLine(log, head, rest, isError);
+    }
+
+    /* ---- 중간 확인 — 파이프라인이 일시정지하고 사용자 입력을 기다리는 구간 ---- */
+    var CONFIRM_DESC = {
+      collect: "원본에서 정확히 읽지 못한 거래입니다 — 값을 바로잡거나 그대로 둘 수 있습니다",
+      refine: "가맹점·카테고리를 확정하지 못한 거래입니다",
+      verify: "검증에서 반려된 거래입니다 — 수정해 확인하면 장부에 실립니다"
+    };
+    var CONFIRM_LABEL = { collect: "수집", refine: "가공", verify: "검증" };
+    var confirmPanel = document.getElementById("confirm-panel");
+
+    function hideConfirm() {
+      currentConfirm = null;
+      confirmPanel.classList.add("hidden");
+    }
+
+    function renderConfirm(confirm) {
+      currentConfirm = confirm;
+      document.getElementById("confirm-title").textContent =
+        (CONFIRM_LABEL[confirm.stage] || confirm.stage) + " 단계에서 확인이 필요한 거래 " +
+        confirm.rows.length + "건";
+      document.getElementById("confirm-sub").textContent = CONFIRM_DESC[confirm.stage] || "";
+      var editable = confirm.editable || [];
+      var table = document.getElementById("confirm-table");
+      table.innerHTML = "";
+      var head = document.createElement("tr");
+      ["반영", "거래"].concat(editable).concat(["사유"]).forEach(function (h) {
+        var th = document.createElement("th");
+        th.textContent = h;
+        head.appendChild(th);
+      });
+      table.appendChild(head);
+      confirm.rows.forEach(function (row) {
+        var d = row.data || {};
+        var tr = document.createElement("tr");
+        tr.dataset.tid = row.transaction_id;
+        var tdCheck = document.createElement("td");
+        var check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "cp-check";
+        tdCheck.appendChild(check);
+        tr.appendChild(tdCheck);
+        var info = document.createElement("td");
+        info.textContent = [d.결제처 || row.transaction_id, d.날짜, d.금액]
+          .filter(function (v) { return v; }).join(" · ");
+        tr.appendChild(info);
+        editable.forEach(function (field) {
+          var td = document.createElement("td");
+          var input = document.createElement("input");
+          input.type = "text";
+          input.dataset.field = field;
+          input.placeholder = field;
+          input.value = d[field] || "";
+          input.addEventListener("input", function () { check.checked = true; });
+          td.appendChild(input);
+          tr.appendChild(td);
+        });
+        var reason = document.createElement("td");
+        reason.className = "reason";
+        reason.textContent = row.reason || "";
+        tr.appendChild(reason);
+        table.appendChild(tr);
+      });
+      confirmPanel.classList.remove("hidden");
+      confirmPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function sendConfirm(stage, resolutions, note) {
+      apiJson("runs/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: stage, resolutions: resolutions })
+      }).then(function (res) {
+        if (!res.ok) { showToast(res.data.error || "확인 응답 전송에 실패했습니다"); return; }
+        hideConfirm();
+        addLine("확인", note);
+      }).catch(function () { showToast("서버에 연결하지 못했습니다"); });
+    }
+
+    document.getElementById("confirm-apply").onclick = function () {
+      if (!currentConfirm) return;
+      var resolutions = [];
+      document.querySelectorAll("#confirm-table tr[data-tid]").forEach(function (tr) {
+        if (!tr.querySelector(".cp-check").checked) return;
+        var fields = {};
+        tr.querySelectorAll("input[data-field]").forEach(function (inp) {
+          fields[inp.dataset.field] = inp.value;
+        });
+        resolutions.push({ transaction_id: tr.dataset.tid, fields: fields });
+      });
+      sendConfirm(currentConfirm.stage, resolutions,
+                  "사용자 확인 " + resolutions.length + "건 전송 — 파이프라인 계속");
+    };
+    document.getElementById("confirm-skip").onclick = function () {
+      if (!currentConfirm) return;
+      sendConfirm(currentConfirm.stage, [], "모두 그대로 두고 계속 진행");
+    };
+
+    function applyEvent(ev) {
+      lastSeq = Math.max(lastSeq, ev.seq);
+      var chipName = STAGE_CHIP[ev.stage];
+
+      // 중간 확인 이벤트 — 기록만 남긴다 (패널 표시는 폴링 응답의 confirm 필드가 담당)
+      if (ev.state === "확인 대기" || ev.state === "확인 반영") {
+        addLine(ev.stage_label, ev.state + (ev.memo ? " | " + ev.memo : ""), false);
+        return;
+      }
+
+      // 진행 이벤트 — 막대만 갱신하고 로그에는 싣지 않는다 (기록은 시작/완료/실패만)
+      if (ev.state === "진행") {
+        if (!ev.progress || !chipName) return;
+        if (ev.stage === "verify1" || ev.stage === "verify2") {
+          progressUI.progressVerify(ev.stage, ev.progress.done, ev.progress.total);
+        } else {
+          progressUI.progress(chipName, ev.progress.done, ev.progress.total);
+        }
+        return;
+      }
+
+      var rest = ev.state;
+      if (ev.counts) {
+        rest += " | " + ev.counts.total + "건 중 정상 " + ev.counts.ok + "건, 확인 필요 " + ev.counts.flagged + "건";
+      }
+      if (ev.memo) rest += " | " + ev.memo;
+      addLine(ev.stage_label, rest, ev.state === "실패" || ev.state === "오류");
+
+      if (ev.stage === "merge" && ev.state === "완료") mergeDone = true;
+      if (!chipName) return;
+
+      if (chipName === "검증") {
+        // 검증 1·2는 병렬 — 행 하나로 묶고, 둘 다 확정돼야 done/fail로 굳힌다
+        if (ev.state === "시작") { progressUI.start("검증", STAGE_DOING["검증"]); return; }
+        if (ev.state === "완료" || ev.state === "실패") verifyFinal[ev.stage] = ev.state;
+        var states = [verifyFinal.verify1, verifyFinal.verify2];
+        if (states.every(function (s) { return s !== null; })) {
+          var per = ev.counts ? ev.counts.total : 0;
+          progressUI.finish("검증", states.indexOf("실패") >= 0, per ? per + "건 ×2" : "");
+        }
+        return;
+      }
+      if (ev.state === "시작") progressUI.start(chipName, ev.memo || STAGE_DOING[chipName] || "");
+      else progressUI.finish(chipName, ev.state === "실패",
+                             ev.counts && ev.counts.total ? ev.counts.total + "건" : "");
+    }
+
+    function poll() {
+      fetch("runs/current?since=" + lastSeq, { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          pollFails = 0;
+          (data.events || []).forEach(applyEvent);
+          if (data.confirm) {
+            if (!currentConfirm || currentConfirm.seq !== data.confirm.seq) renderConfirm(data.confirm);
+          } else if (currentConfirm) {
+            hideConfirm(); // 서버 쪽 대기 종료(다른 창 응답·대기 상한 초과) — 화면도 닫는다
+          }
+          if (data.running) {
+            setTimeout(poll, POLL_MS);
+            return;
+          }
+          running = false;
+          hideConfirm();
+          progressUI.stop();
+          if (data.error) {
+            addLine("실행기", "오류 | " + data.error, true);
+            return;
+          }
+          if (mergeDone) {
+            apiJson("result-data").then(function (res) {
+              if (res.ok) renderResult(res.data);
+              else addLine("결과", "집계 실패 | " + (res.data.error || ""), true);
+            });
+          } else {
+            addLine("안내", "최종 산출물 없이 종료됐습니다 — 위 로그를 확인해 주세요", true);
+          }
+        })
+        .catch(function () {
+          pollFails += 1;
+          if (pollFails === 5) addLine("안내", "서버 연결이 끊겼습니다 — orchestrator/server.py 확인", true);
+          if (pollFails < 40) setTimeout(poll, POLL_MS); // 서버가 다시 살아나면 다음 폴링에서 회복
+          else running = false;
+        });
+    }
+    poll();
+  }
+
+  /* ---- 결과 렌더 ---- */
+  function renderResult(data) {
+    var month = data.month || selectedMonth || "";
+    if (/^\d{4}-\d{2}$/.test(month)) {
+      document.getElementById("r-title").textContent =
+        month.slice(0, 4) + "년 " + parseInt(month.slice(5), 10) + "월 결산이 끝났습니다";
+    }
+    var exp = document.getElementById("r-expense");
+    exp.textContent = data.total_expense ? "-" + fmt(data.total_expense) : "0";
+    document.getElementById("r-income").textContent = data.total_income ? "+" + fmt(data.total_income) : "0";
+    var netEl = document.getElementById("r-net");
+    netEl.textContent = (data.net > 0 ? "+" : data.net < 0 ? "-" : "") + fmt(data.net);
+    netEl.classList.toggle("minus", data.net < 0);
+    document.getElementById("r-count").textContent =
+      "거래 " + data.tx_count + "건 · 업로드 파일 " + (data.upload_count || 0) + "건" +
+      (data.flagged_count ? " · 확인 필요 " + data.flagged_count + "건" : "");
+
+    // 카테고리별 지출 — 상위 5개 + 나머지 합산, 막대는 최대값 대비 폭
+    var cats = (data.by_category || []).filter(function (kv) { return kv[1] > 0; });
+    var top = cats.slice(0, 5);
+    var restSum = cats.slice(5).reduce(function (acc, kv) { return acc + kv[1]; }, 0);
+    if (restSum > 0) top.push(["그 외 " + (cats.length - 5) + "개", restSum]);
+    top.sort(function (a, b) { return b[1] - a[1]; });
+    var maxAmt = top.length ? top[0][1] : 1;
+    var catsEl = document.getElementById("r-cats");
+    catsEl.innerHTML = "";
+    top.forEach(function (kv) {
+      var row = document.createElement("div");
+      row.className = "cat";
+      var pct = data.total_expense ? Math.round(kv[1] / data.total_expense * 100) : 0;
+      row.innerHTML = "<span></span>" +
+        '<div class="bar-track"><div class="bar" data-w="' + Math.round(kv[1] / maxAmt * 100) + '%"></div></div>' +
+        '<span class="num mono">-' + fmt(kv[1]) + "</span>" +
+        '<span class="pct mono">' + pct + "%</span>";
+      row.firstChild.textContent = kv[0] || "미분류";
+      catsEl.appendChild(row);
+    });
+
+    // 결제구분 비율 — 개인/법인 두 축
+    var payer = { "개인결제": 0, "법인결제": 0 };
+    (data.by_payer || []).forEach(function (kv) {
+      if (kv[0] in payer) payer[kv[0]] += kv[1];
+      else payer["개인결제"] += kv[1]; // 구분 미상은 개인 축으로 합산
+    });
+    var payerTotal = payer["개인결제"] + payer["법인결제"];
+    var pctA = payerTotal ? Math.round(payer["법인결제"] / payerTotal * 100) : 0;
+    document.getElementById("r-split").innerHTML =
+      '<div class="seg-b" style="width:' + (100 - pctA) + '%"></div>' +
+      '<div class="seg-a" style="width:' + pctA + '%"></div>';
+    document.getElementById("r-split-legend").innerHTML =
+      '<span><i class="dot-b"></i>개인결제 <span class="amt mono">-' + fmt(payer["개인결제"]) + " (" + (100 - pctA) + '%)</span></span>' +
+      '<span><i class="dot-a"></i>법인결제 <span class="amt mono">-' + fmt(payer["법인결제"]) + " (" + pctA + '%)</span></span>';
+
+    // 주요 지출 Top 5
+    var topEl = document.getElementById("r-top5");
+    topEl.innerHTML = "";
+    (data.top_spenders || []).slice(0, 5).forEach(function (t) {
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td class="d mono"></td><td></td><td class="c"></td><td class="n mono"></td>';
+      tr.children[0].textContent = (t["날짜"] || "").slice(5);
+      tr.children[1].textContent = t["결제처"] || "";
+      tr.children[2].textContent = t["카테고리"] || "";
+      tr.children[3].textContent = "-" + fmt(t["지출"] || 0);
+      topEl.appendChild(tr);
+    });
+
+    // 결산 비고 — 확인 필요 + 미완 사유
+    var memoEl = document.getElementById("r-memo");
+    var items = (data.flags || []).map(function (f) {
+      return f.row + "행 · " + (f["결제처"] || "") + " — " + f.reason;
+    }).concat(data.incomplete || []);
+    memoEl.innerHTML = "";
+    var strong = document.createElement("strong");
+    strong.textContent = items.length ? "확인 필요 " + items.length + "건" : "확인 필요 없음";
+    memoEl.appendChild(strong);
+    if (items.length) {
+      var ul = document.createElement("ul");
+      ul.className = "flags";
+      items.forEach(function (txt) {
+        var li = document.createElement("li");
+        li.textContent = txt;
+        ul.appendChild(li);
+      });
+      memoEl.appendChild(ul);
+    }
+
+    // 자세히 보기 — PDF 미리보기(인라인 서빙)와 결산 요약 전문(orchestrator/result-summary.md)
+    document.getElementById("pdf-preview").innerHTML =
+      '<iframe class="pdf-frame" src="artifacts/result.pdf?inline=1" title="분석 리포트 PDF 미리보기"></iframe>';
+    var summaryBody = document.getElementById("summary-body");
+    summaryBody.textContent = "요약을 불러오는 중…";
+    fetch("summary", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+      .then(function (text) { summaryBody.textContent = text; })
+      .catch(function () { summaryBody.textContent = "요약을 불러오지 못했습니다 (orchestrator/result-summary.md 확인)"; });
+
+    jobPhase = "result";
+    setDashTop(monthTitle(month) + " 결산", "결산 완료", "ok");
+    renderCompare(month, data);
+    showPane("result-sec");
+    setTimeout(function () {
+      document.querySelectorAll("#result-sec .bar").forEach(function (bar) {
+        void bar.offsetWidth; // 강제 리플로우 — 0폭에서 transition 시작 (데모 finish()와 동일 트릭)
+        bar.style.width = bar.dataset.w;
+      });
+    }, REDUCED ? 0 : 200);
+    // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
+    lastResult = { month: month, total_expense: data.total_expense || 0,
+                   tx_count: data.tx_count || 0, flagged_count: data.flagged_count || 0 };
+    autoArchive(month);
+    document.getElementById("save-bar").classList.remove("hidden");
+  }
+
+  /* ---- 전월 비교 — 개요 증감 + "전월 비교" 탭(추이·건수) ---- */
+  function renderCompare(monthKey, cur) {
+    var deltaEl = document.getElementById("r-expense-delta");
+    var host = document.getElementById("r-compare");
+    var prev = findArchived(prevMonthKey(monthKey));
+    deltaEl.textContent = "";
+    deltaEl.className = "delta";
+    if (!prev || !prev.total_expense) {
+      host.innerHTML = '<div class="hint">전월 보관본이 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div>';
+      return;
+    }
+    var diff = (cur.total_expense || 0) - prev.total_expense;
+    var pct = Math.abs(diff / prev.total_expense * 100);
+    if (pct < 0.5) {
+      deltaEl.textContent = "전월과 비슷한 수준";
+    } else {
+      deltaEl.classList.add("mono", diff > 0 ? "up" : "down");
+      deltaEl.textContent = (diff > 0 ? "▲ " : "▼ ") + fmt(diff) +
+        " (전월 대비 " + (diff > 0 ? "+" : "-") + (Math.round(pct * 10) / 10) + "%)";
+    }
+    // 추이 — 이 달 직전의 연속 보관 구간(최대 3개월) + 이번 결산
+    var rows = [];
+    var k = monthKey;
+    while (rows.length < 3) {
+      k = prevMonthKey(k);
+      var e = findArchived(k);
+      if (!e || !e.total_expense) break;
+      rows.unshift({ key: k, total: e.total_expense });
+    }
+    rows.push({ key: monthKey, total: cur.total_expense || 0, cur: true });
+    var maxV = Math.max.apply(null, rows.map(function (r) { return r.total; })) || 1;
+    var bars = rows.map(function (r) {
+      return '<div class="t-col' + (r.cur ? " cur" : "") + '"><i style="height:' +
+        Math.round(18 + 26 * r.total / maxV) + 'px"></i>' + monthLabel(r.key) + "<br>" +
+        '<span class="mono">' + fmtShortMan(r.total) + "</span></div>";
+    }).join("");
+    function noteRow(label, value, cls) {
+      return '<div class="row"><span class="k">' + label + '</span><span class="mono' +
+        (cls ? " " + cls : "") + '">' + value + "</span></div>";
+    }
+    var fd = (cur.flagged_count || 0) - (prev.flagged_count || 0);
+    host.innerHTML =
+      '<div class="cmp">' +
+        '<div class="trend"><div class="tt"><b>지출 추이</b>보관된 월 기준</div><div class="t-bars">' + bars + "</div></div>" +
+        '<div class="cmp-notes">' +
+          noteRow("총지출", pct < 0.5 ? "전월(" + fmtShortMan(prev.total_expense) + ")과 비슷"
+                  : (diff > 0 ? "▲ " : "▼ ") + fmt(diff),
+                  pct < 0.5 ? "" : diff > 0 ? "up" : "down") +
+          noteRow("거래 건수", (cur.tx_count || 0) + "건 (전월 " + (prev.tx_count || 0) + "건)", "") +
+          noteRow("확인 필요", (cur.flagged_count || 0) + "건 (전월 " + (prev.flagged_count || 0) + "건)",
+                  fd > 0 ? "up" : fd < 0 ? "down" : "") +
+          noteRow("비교 대상", monthLabel(prevMonthKey(monthKey)) + " 보관본", "") +
+        "</div>" +
+      "</div>";
+  }
+
+  /* 결과 탭 전환 + 다시 결산하기 */
+  document.querySelectorAll("#r-tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#r-tabs button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll("#result-sec .tab-pane").forEach(function (p) {
+        p.classList.toggle("on", p.id === b.dataset.tab);
+      });
+    });
+  });
+  document.getElementById("r-rerun").addEventListener("click", function () {
+    if (selectedMonth) selectRunMonth(selectedMonth);
+  });
+
+  /* 결산 단계 스텝·이전/다음 이동 */
+  document.querySelectorAll("#dash-steps .dstep").forEach(function (b) {
+    b.addEventListener("click", function () { goStep(b.dataset.pane); });
+  });
+  document.getElementById("nav-run-prev").addEventListener("click", function () { goStep("upload-sec"); });
+
+  /* 자동 저장 — 결산이 끝나면 결과를 결산 서고에 바로 반영한다 */
+  function nowStamp() {
+    var d = new Date();
+    function pad(n) { return ("0" + n).slice(-2); }
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+           " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function autoArchive(key) {
+    if (!lastResult) return;
+    if (REAL) {
+      // 보관본은 파이프라인이 이미 만들어 뒀다 — 목록만 새로 읽어 서고에 노출한다
+      loadVault();
+      return;
+    }
+    var entry = findArchived(key);
+    if (!entry) {
+      entry = { month: key };
+      archivedList.push(entry);
+    }
+    entry.total_expense = lastResult.total_expense;
+    entry.tx_count = lastResult.tx_count;
+    entry.flagged_count = lastResult.flagged_count;
+    entry.completed_at = nowStamp();
+    renderVault(archivedList, vaultReal);
+  }
+
+  /* ---- 실제 모드 켜기 ---- */
+  function enableRealMode() {
+    REAL = true;
+
+    // "이번 달" 기준을 오늘 날짜로 — 결산 서고 연도도 그 해로 맞춘다
+    var now = new Date();
+    CUR_KEY = now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2);
+    shelfYear = sideYear = now.getFullYear();
+
+    // 표식 교체 — 실제 모드 문구는 상단 COPY.real에서만 관리한다
+    applyRealCopy();
+
+    // 월별 보관함 — 서버 보관 목록(archive/<월>/summary.json)으로 다시 그린다.
+    // 보관 없는 달도 자유 선택 가능 (수집은 "대상 월 위주로 모으되 거르지 않는다"가 확정 규칙)
+    loadVault();
+
+    // 업로드 UI — inert 버튼을 실동작으로 교체 (clone으로 기존 토스트 리스너 제거)
+    var input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = ".csv,.txt,.png,.jpg,.jpeg,.xlsx";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", function () {
+      uploadFiles(input.files);
+      input.value = "";
+    });
+
+    var pick = document.getElementById("pick-files");
+    var pickReal = pick.cloneNode(true);
+    pickReal.classList.remove("inert");
+    pick.parentNode.replaceChild(pickReal, pick);
+    pickReal.addEventListener("click", function () { input.click(); });
+
+    var drive = document.getElementById("drive-btn");
+    var driveReal = drive.cloneNode(true);
+    driveReal.classList.remove("inert");
+    drive.parentNode.replaceChild(driveReal, drive);
+    driveReal.addEventListener("click", function () {
+      showToast("Google Drive 연동은 아직 지원하지 않습니다 — 파일을 직접 올려 주세요");
+    });
+
+    var dropzone = document.getElementById("dropzone");
+    dropzone.addEventListener("dragover", function (e) { e.preventDefault(); });
+    dropzone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      uploadFiles(e.dataTransfer.files);
+    });
+
+    // 다운로드 버튼 — 실제 산출물 링크로 교체
+    var downloads = document.getElementById("downloads");
+    downloads.innerHTML =
+      '<a class="btn btn-ghost" href="artifacts/result.pdf">' + DL_ICO + '분석 리포트</a>' +
+      '<a class="btn btn-ghost" href="artifacts/result.xlsx">' + DL_ICO + '회계장부</a>';
+
+    // 업로드 목록은 빈 상태로 시작 — 월 선택 시 서버 업로드함도 비워서 표시와 실제를 맞춘다
+    renderFileList([]);
+  }
+
+  probeServer().then(function (ok) { if (ok) enableRealMode(); });
 
   /* 스크롤 등장 */
   if (!REDUCED && "IntersectionObserver" in window) {

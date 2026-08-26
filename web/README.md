@@ -15,7 +15,7 @@
 
 ## 실제 모드로 쓰기 (로컬)
 
-1. 리포 루트 `.env`에 `ANTHROPIC_API_KEY=...`와 `INVITE_CODE=...`(초대코드, 자유 값)를 둔다
+1. 리포 루트 `.env`에 `INVITE_CODE=...`(초대코드, 자유 값)를 둔다. 인증은 둘 중 하나 — `.env`에 `ANTHROPIC_API_KEY=...`를 넣거나, **claude CLI에 로그인**되어 있으면 키 없이도 CLI 세션으로 자동 실행된다
 2. `python3 orchestrator/server.py` 실행 → http://localhost:8788 접속
 3. 초대코드 입력(서버가 `.env`와 대조) → 월 선택 → 카드사 CSV·영수증 이미지 업로드 → 결산 시작
 4. 진행 로그가 실시간으로 흐르고, 끝나면 결과 화면에서 PDF·엑셀을 받는다

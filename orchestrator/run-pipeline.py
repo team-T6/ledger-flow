@@ -11,6 +11,8 @@
   응답을 구조화 출력(JSON 스키마)으로 강제해 산출물 CSV(artifact_csv)와 결과 보고
   (report)를 함께 받고, 산출물은 지휘가 그 칸의 result.csv로 써 준다 — 형식 위반은
   호출 실패 (임시 — 담당자 실행 코드가 생기면 직접 호출로 대체)
+- 인증 폴백: .env에 ANTHROPIC_API_KEY가 없으면 같은 프롬프트를 claude CLI 헤드리스
+  (claude -p, CLI 로그인 세션)로 실행한다. JSON-only 지시 + 코드 재검증으로 형식을 지킨다
 
 실행 기록: logs/run_YYYYMMDD_HHMMSS/ — run.log + report-<단계>.json(재시도는 -retry)
 최종 결과 요약: orchestrator/result-summary.md (stub.md 형식) — 어떤 경우에도 작성
@@ -24,6 +26,8 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -108,6 +112,38 @@ def load_module(name, path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+# ---------- claude CLI 폴백 (인증 폴백 — 단계 문서 "도구·코드" 확정) ----------
+
+CLI_TIMEOUT_SECONDS = 1800  # 판단형 단계 1회 호출 상한 — CLI가 매달린 채 파이프라인이 멎는 것 방지
+
+
+def extract_json_text(text):
+    """CLI 출력에서 JSON 본문만 추린다 — 코드펜스나 앞뒤 설명이 섞여도 복원한다."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n", "", text)
+        text = re.sub(r"\n```$", "", text.strip())
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start:
+        return text[start:end + 1]
+    return text
+
+
+def call_claude_cli(system_prompt, user_message):
+    """claude CLI 헤드리스 호출 — API 키 없이 CLI 로그인 세션으로 실행하는 인증 폴백.
+
+    CLI에는 구조화 출력 강제가 없으므로 JSON-only 지시는 호출자가 메시지에 얹고,
+    응답은 json 파싱 + validate_envelope로 재검증한다 (형식 위반은 재시도 1회 정책이 흡수).
+    """
+    result = subprocess.run(
+        ["claude", "-p", "--model", MODEL, "--append-system-prompt", system_prompt],
+        input=user_message, capture_output=True, text=True, timeout=CLI_TIMEOUT_SECONDS)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()[:300]
+        raise RuntimeError(f"claude CLI 실행 실패 (exit {result.returncode}): {detail}")
+    return result.stdout
 
 
 def load_api_key():
@@ -281,16 +317,26 @@ def make_llm_stage(client, stage, month):
             "입력 행을 지우거나 순서를 바꾸지 않은 것)을, report에는 단계 결과 보고를 담아라. "
             f"report.stage는 \"{stage}\", report.output은 \"{stage}/result.csv\"로 한다."
         )
-        # max_tokens가 커서 스트리밍 필수 (SDK 장시간 요청 가드) — 최종 메시지만 받는다
-        with client.messages.stream(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=load_stage_doc(stage),
-            messages=[{"role": "user", "content": user_message}],
-            output_config={"effort": "high", "format": {"type": "json_schema", "schema": LLM_RESPONSE_SCHEMA}},
-        ) as stream:
-            response = stream.get_final_message()
-        text = next(b.text for b in response.content if b.type == "text")
+        if client is not None:
+            # max_tokens가 커서 스트리밍 필수 (SDK 장시간 요청 가드) — 최종 메시지만 받는다
+            with client.messages.stream(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=load_stage_doc(stage),
+                messages=[{"role": "user", "content": user_message}],
+                output_config={"effort": "high", "format": {"type": "json_schema", "schema": LLM_RESPONSE_SCHEMA}},
+            ) as stream:
+                response = stream.get_final_message()
+            text = next(b.text for b in response.content if b.type == "text")
+        else:
+            # 인증 폴백 — API 키 없이 claude CLI 로그인 세션으로 실행 (단계 문서 "도구·코드")
+            cli_message = (
+                f"{user_message}\n\n"
+                "출력 형식(반드시 지켜라): 설명·인사·코드펜스 없이, 아래 JSON 스키마를 따르는 "
+                "단일 JSON 객체만 출력한다.\n"
+                f"{json.dumps(LLM_RESPONSE_SCHEMA, ensure_ascii=False)}"
+            )
+            text = extract_json_text(call_claude_cli(load_stage_doc(stage), cli_message))
         data = json.loads(text)
 
         artifact_path = os.path.join(REPO_ROOT, stage, "result.csv")
@@ -422,16 +468,22 @@ def _run_stages(run, month, upload_dir=None):
         finish()
         return
 
+    client = None
     client_error = None
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=load_api_key())
     except Exception as e:
         client_error = str(e)
+    if client is None and shutil.which("claude"):
+        # 인증 폴백 — API 키가 없어도 claude CLI 로그인 세션으로 판단형 단계를 실행한다
+        run.notes.append(f"판단형 단계를 claude CLI(로그인 세션)로 실행 — API 클라이언트 없음: {client_error}")
+        client_error = None
 
     # 2. 가공
     if client_error:
-        refine_env = run.call_stage("refine", lambda: failed_envelope("refine", f"API 클라이언트 준비 실패: {client_error}"))
+        refine_env = run.call_stage("refine", lambda: failed_envelope(
+            "refine", f"API 클라이언트 준비 실패: {client_error} (claude CLI 폴백도 불가 — CLI 미설치)"))
     else:
         refine_env = run.call_stage("refine", make_llm_stage(client, "refine", month))
     if refine_env["status"] == "failed":

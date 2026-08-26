@@ -1,0 +1,53 @@
+# 실서비스(main)의 web/ 변경을 데모에 자동 반영한다.
+# 1) main의 web/ 스냅샷을 demo 브랜치에 커밋·push (브랜치 운용 규칙상 demo가 데모 정본)
+# 2) 같은 실행에서 GitHub Pages 배포까지 수행
+#    — GITHUB_TOKEN으로 push한 커밋은 다른 워크플로(deploy-pages.yml)를 트리거하지 않으므로
+#      배포를 이 워크플로가 직접 이어서 한다.
+name: Sync demo with main
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync web/ from main into demo branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout demo
+          git checkout origin/main -- web/
+          if git diff --cached --quiet && git diff --quiet -- web/; then
+            echo "demo already up to date"
+          else
+            git add web/
+            git commit -m "chore: main web/ 변경을 데모에 동기화"
+            git push origin demo
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4

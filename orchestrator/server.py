@@ -1,17 +1,32 @@
-"""orchestrator 화면(screen.html)을 여는 로컬 웹 서버 — 파이프라인 실행 + 담당자 호출.
+"""ledger-flow 로컬 웹 서버 — 사용자 페이지(web/index.html 실제 모드) + 파이프라인 실행.
 
 표준 라이브러리(http.server)만 쓴다 — 추가 설치 없이 동작.
+- GET  /                    : 사용자 페이지 (web/index.html — 이 서버에서 열리면 실제 모드로 동작)
+- GET  /screen.html         : 개발자용 지휘 대시보드 (기존 화면)
+- GET  /health              : 실제 모드 감지용 식별 응답 (프런트 프로브 전용)
+- POST /auth                : 초대코드 검증 (.env의 INVITE_CODE와 대조)
+- GET  /uploads             : 업로드된 파일 목록
+- POST /uploads             : 파일 업로드 (JSON base64) → uploads/inbox/ 저장
+- POST /uploads/delete      : 업로드 파일 1건 삭제 / POST /uploads/clear : 전체 삭제
 - POST /runs                : 파이프라인 실행 시작 (run-pipeline.py를 백그라운드 스레드로)
+                              body.source가 "uploads"면 업로드 파일로 수집한다
 - GET  /runs/current?since=N: 진행 이벤트 증분 조회 (화면이 1.5초 간격으로 폴링)
-- GET  /summary             : orchestrator/result-summary.md 원문
-- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기
+                              중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담는다
+- POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
+                              (대기 상한 10분 — 초과하면 파이프라인이 전부 유지로 진행)
+- GET  /summary             : orchestrator/result-summary.md 원문 (?month=YYYY-MM이면 보관본)
+- GET  /result-data         : 결산 결과 화면용 통계 JSON (merge 집계 함수 재사용, 읽기 전용)
+- GET  /months              : 월별 보관함 목록 (archive/<월>/summary.json 배열)
+- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기 (?month=YYYY-MM이면 보관본)
 - POST /call-agent          : (기존) 결과 보고 확인 — call-agent.py 호출
-실행 상태·이벤트는 메모리에만 둔다 (저장 안 함 원칙 — 영구 기록은 logs/run_*/ 규약뿐).
+실행 상태·이벤트는 메모리에만 둔다. 영구 기록은 logs/run_*/ 규약과, 결산 정상 종료 시
+파이프라인이 archive/<YYYY-MM>/에 남기는 월별 산출물 보관본(웹 보관함용 — gitignore 차단)뿐.
 API 키는 이 서버가 아니라 call-agent.py / run-pipeline.py 쪽에서 .env를 읽어 쓴다.
 
 사용법: python3 orchestrator/server.py  (그다음 http://localhost:8788 을 브라우저로 연다)
 """
 
+import base64
 import importlib.util
 import json
 import os
@@ -26,6 +41,14 @@ PIPELINE_PATH = os.path.join(BASE_DIR, "run-pipeline.py")
 SCREEN_PATH = os.path.join(BASE_DIR, "screen.html")
 SUMMARY_PATH = os.path.join(BASE_DIR, "result-summary.md")
 PORT = 8788  # merge/server.py(8787)와 동시에 띄울 수 있게 포트를 달리 둔다
+
+WEB_INDEX_PATH = os.path.join(REPO_ROOT, "web", "index.html")
+ENV_PATH = os.path.join(REPO_ROOT, ".env")
+UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")  # .gitignore가 uploads/를 차단한다
+ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — .gitignore가 archive/를 차단한다
+UPLOAD_EXTS = {".csv", ".txt", ".png", ".jpg", ".jpeg", ".xlsx"}
+UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 파일당 10MB
+UPLOAD_MAX_COUNT = 30
 
 ARTIFACTS = {  # 내려받기 허용 목록 — 경로 조작 방지를 위해 고정 매핑만 쓴다
     "/artifacts/result.xlsx": (os.path.join(REPO_ROOT, "merge", "result.xlsx"),
@@ -45,6 +68,93 @@ def _load_module(name, path):
 call_agent = _load_module("call_agent", CALL_AGENT_PATH)
 pipeline = _load_module("run_pipeline_module", PIPELINE_PATH)
 
+_merge_module = None
+
+
+def _get_merge_module():
+    """merge 집계 함수(load_transactions·split_transactions·summarize) 재사용용 지연 로드.
+
+    build_result.py가 openpyxl·reportlab을 import하므로, /result-data를 실제로 쓸 때만 로드한다.
+    """
+    global _merge_module
+    if _merge_module is None:
+        _merge_module = _load_module(
+            "merge_stage_readonly", os.path.join(REPO_ROOT, "merge", "build_result.py"))
+    return _merge_module
+
+
+def load_env_value(key):
+    """리포 루트 .env에서 key= 값을 읽는다 (없으면 None) — run-pipeline.py의 키 파서와 같은 관례."""
+    if not os.path.exists(ENV_PATH):
+        return None
+    with open(ENV_PATH, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith(f"{key}="):
+                value = line.split("=", 1)[1].strip()
+                return value or None
+    return None
+
+
+def list_uploads():
+    if not os.path.isdir(UPLOAD_DIR):
+        return []
+    return [{"name": e.name, "size": e.stat().st_size}
+            for e in sorted(os.scandir(UPLOAD_DIR), key=lambda e: e.name) if e.is_file()]
+
+
+def build_result_data(month=None):
+    """결산 결과 화면용 통계 — merge의 집계 함수를 읽기 전용으로 호출한다 (파일 재생성 없음)."""
+    refine_csv = os.path.join(REPO_ROOT, "refine", "result.csv")
+    if not os.path.exists(refine_csv):
+        return None
+    merge_mod = _get_merge_module()
+    transactions, incomplete = merge_mod.load_transactions()
+    ok_rows, flagged_rows = merge_mod.split_transactions(transactions)
+    summary = merge_mod.summarize(ok_rows)
+    return {
+        "month": month or run_state.month,
+        "tx_count": len(transactions),
+        "ok_count": len(ok_rows),
+        "flagged_count": len(flagged_rows),
+        "total_expense": summary["total_expense"],
+        "total_income": summary["total_income"],
+        "net": summary["total_income"] - summary["total_expense"],
+        "by_category": summary["by_category"],
+        "by_method": summary["by_method"],
+        "by_payer": summary["by_payer"],
+        "top_spenders": [{"날짜": r.get("날짜", ""), "결제처": r.get("결제처", ""),
+                          "카테고리": r.get("카테고리", ""), "지출": r.get("지출") or 0}
+                         for r in summary["top_spenders"]],
+        "flags": [{"row": r["row"], "날짜": r.get("날짜", ""), "결제처": r.get("결제처", ""),
+                   "reason": r.get("reason", "")} for r in flagged_rows],
+        "incomplete": incomplete,
+        "upload_count": len(list_uploads()),
+    }
+
+
+def list_months():
+    """월별 보관함 목록 — archive/<YYYY-MM>/summary.json을 모아 월 오름차순으로 돌려준다."""
+    months = []
+    if not os.path.isdir(ARCHIVE_DIR):
+        return months
+    for name in sorted(os.listdir(ARCHIVE_DIR)):
+        if not re.fullmatch(r"\d{4}-\d{2}", name):
+            continue
+        try:
+            with open(os.path.join(ARCHIVE_DIR, name, "summary.json"), encoding="utf-8") as f:
+                entry = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue  # summary 없는(깨진) 보관 폴더는 목록에서 제외
+        entry["month"] = name
+        entry["files"] = {"pdf": os.path.exists(os.path.join(ARCHIVE_DIR, name, "result.pdf")),
+                          "xlsx": os.path.exists(os.path.join(ARCHIVE_DIR, name, "result.xlsx"))}
+        months.append(entry)
+    return months
+
+
+CONFIRM_WAIT_SECONDS = 600  # 중간 확인 응답 대기 상한 10분 — 초과 시 전부 유지로 진행 (단계 문서 확정)
+
 
 class RunState:
     """실행 1회의 관찰 상태 — 메모리에만 유지한다 (서버 재시작 시 소멸)."""
@@ -55,8 +165,12 @@ class RunState:
         self.month = None
         self.events = []       # run-pipeline.py의 on_event가 쌓는 진행 이벤트
         self.error = None      # 실행기 자체가 예외로 죽은 경우의 사유
+        self.confirm = None    # 대기 중인 중간 확인 요청 (없으면 None)
+        self.confirm_result = None
+        self.confirm_seq = 0
+        self.confirm_ready = threading.Event()
 
-    def start(self, month):
+    def start(self, month, upload_dir=None):
         with self.lock:
             if self.running:
                 return False
@@ -64,23 +178,55 @@ class RunState:
             self.month = month
             self.events = []
             self.error = None
-        thread = threading.Thread(target=self._work, args=(month,), daemon=True)
+            self.confirm = None
+            self.confirm_result = None
+            self.confirm_ready.clear()
+        thread = threading.Thread(target=self._work, args=(month, upload_dir), daemon=True)
         thread.start()
         return True
 
-    def _work(self, month):
+    def _work(self, month, upload_dir):
+        # 월별 보관(archive/<월>/)은 파이프라인이 종료 직전에 직접 수행한다 — 실행 경로 무관
         try:
-            pipeline.run_pipeline(month, on_event=self.on_event)
+            pipeline.run_pipeline(month, on_event=self.on_event, upload_dir=upload_dir,
+                                  on_confirm=self.on_confirm)
         except Exception as e:
             with self.lock:
                 self.error = str(e)
         finally:
             with self.lock:
                 self.running = False
+                self.confirm = None
 
     def on_event(self, event):
         with self.lock:
             self.events.append(event)
+
+    def on_confirm(self, payload):
+        """파이프라인 스레드가 부르는 중간 확인 훅 — 화면 응답까지 블록한다.
+
+        반환: 사용자 입력(resolutions 목록, 빈 목록이면 전부 유지) / 대기 상한 초과면 None.
+        """
+        with self.lock:
+            self.confirm_seq += 1
+            self.confirm = dict(payload, seq=self.confirm_seq)
+            self.confirm_result = None
+            self.confirm_ready.clear()
+        answered = self.confirm_ready.wait(CONFIRM_WAIT_SECONDS)
+        with self.lock:
+            result = self.confirm_result if answered else None
+            self.confirm = None
+            self.confirm_result = None
+        return result
+
+    def resolve_confirm(self, stage, resolutions):
+        """POST /runs/confirm 처리 — 대기 중인 요청과 단계가 맞아야 반영한다."""
+        with self.lock:
+            if not self.confirm or self.confirm.get("stage") != stage:
+                return False
+            self.confirm_result = resolutions
+            self.confirm_ready.set()
+            return True
 
     def snapshot(self, since):
         with self.lock:
@@ -88,6 +234,7 @@ class RunState:
                 "running": self.running,
                 "month": self.month,
                 "error": self.error,
+                "confirm": self.confirm,
                 "events": [e for e in self.events if e["seq"] > since],
                 "summary_ready": (not self.running) and os.path.exists(SUMMARY_PATH),
             }
@@ -130,8 +277,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path, _, query = self.path.partition("?")
 
-        if path in ("/", "/screen.html"):
+        if path == "/":
+            self._send_file(WEB_INDEX_PATH, "text/html; charset=utf-8")
+            return
+
+        if path == "/screen.html":
             self._send_file(SCREEN_PATH, "text/html; charset=utf-8")
+            return
+
+        if path == "/health":
+            self._send_json(200, {"service": "ledger-flow", "role": "orchestrator", "version": 1})
+            return
+
+        if path == "/uploads":
+            self._send_json(200, {"files": list_uploads()})
+            return
+
+        if path == "/months":
+            self._send_json(200, {"months": list_months()})
+            return
+
+        if path == "/result-data":
+            try:
+                data = build_result_data()
+            except Exception as e:
+                self._send_json(500, {"error": f"결과 집계 실패: {e}"})
+                return
+            if data is None:
+                self._send_json(404, {"error": "결산 결과가 아직 없습니다 — 먼저 결산을 실행하세요"})
+            else:
+                self._send_json(200, data)
             return
 
         if path == "/runs/current":
@@ -142,13 +317,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, run_state.snapshot(since))
             return
 
+        # month=YYYY-MM — 보관본을 서빙한다 (형식 강제라 경로 조작 불가). 없으면 최신본
+        month_match = re.search(r"(?:^|&)month=(\d{4}-\d{2})(?:&|$)", query)
+
         if path == "/summary":
-            self._send_file(SUMMARY_PATH, "text/markdown; charset=utf-8")
+            summary_path = SUMMARY_PATH
+            if month_match:
+                summary_path = os.path.join(ARCHIVE_DIR, month_match.group(1), "result-summary.md")
+            self._send_file(summary_path, "text/markdown; charset=utf-8")
             return
 
         if path in ARTIFACTS:
             file_path, content_type = ARTIFACTS[path]
-            self._send_file(file_path, content_type, download_name=os.path.basename(file_path))
+            if month_match:
+                file_path = os.path.join(ARCHIVE_DIR, month_match.group(1),
+                                         os.path.basename(file_path))
+            # inline=1 — 브라우저 안에서 바로 보여준다 (화면 PDF 미리보기용). 없으면 내려받기
+            inline = re.search(r"(?:^|&)inline=1(?:&|$)", query) is not None
+            self._send_file(file_path, content_type,
+                            download_name=None if inline else os.path.basename(file_path))
             return
 
         self._send_json(404, {"error": "not found"})
@@ -159,16 +346,111 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/runs":
             try:
-                month = json.loads(raw).get("month", "") if raw else ""
+                body = json.loads(raw) if raw else {}
             except json.JSONDecodeError:
-                month = ""
+                body = {}
+            month = body.get("month", "")
+            source = body.get("source", "sample")  # 기존 대시보드(screen.html) 하위 호환 기본값
             if not re.fullmatch(r"\d{4}-\d{2}", month or ""):
                 self._send_json(400, {"error": "month는 YYYY-MM 형식이어야 합니다"})
                 return
-            if run_state.start(month):
-                self._send_json(200, {"started": True, "month": month})
+            if source not in ("sample", "uploads"):
+                self._send_json(400, {"error": f"source 어휘 위반: {source} (sample | uploads)"})
+                return
+            upload_dir = None
+            if source == "uploads":
+                if not list_uploads():
+                    self._send_json(400, {"error": "업로드된 파일이 없습니다 — 자료를 먼저 올려 주세요"})
+                    return
+                upload_dir = UPLOAD_DIR
+            if run_state.start(month, upload_dir=upload_dir):
+                self._send_json(200, {"started": True, "month": month, "source": source})
             else:
                 self._send_json(409, {"error": f"이미 실행 중입니다 (대상 월 {run_state.month})"})
+            return
+
+        if self.path == "/runs/confirm":
+            try:
+                body = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                body = {}
+            stage = str(body.get("stage") or "")
+            resolutions = body.get("resolutions")
+            if not isinstance(resolutions, list):
+                self._send_json(400, {"error": "resolutions는 배열이어야 합니다"})
+                return
+            # 형식 방어는 파이프라인의 clean_resolutions가 한 번 더 한다 — 여기선 목록만 강제
+            if run_state.resolve_confirm(stage, resolutions):
+                self._send_json(200, {"ok": True})
+            else:
+                self._send_json(409, {"error": "대기 중인 확인 요청이 없거나 단계가 다릅니다"})
+            return
+
+        if self.path == "/auth":
+            try:
+                code = (json.loads(raw).get("code", "") if raw else "").strip()
+            except json.JSONDecodeError:
+                code = ""
+            invite = load_env_value("INVITE_CODE")
+            if not invite:
+                self._send_json(500, {"error": ".env에 INVITE_CODE를 설정하세요 (예: INVITE_CODE=우리팀코드)"})
+            elif code == invite:
+                self._send_json(200, {"ok": True})
+            else:
+                self._send_json(403, {"error": "초대코드가 올바르지 않습니다"})
+            return
+
+        if self.path == "/uploads":
+            try:
+                files = json.loads(raw).get("files", []) if raw else []
+            except json.JSONDecodeError:
+                files = []
+            if not isinstance(files, list) or not files:
+                self._send_json(400, {"error": "올릴 파일이 없습니다"})
+                return
+            existing = {f["name"] for f in list_uploads()}
+            new_names = {os.path.basename(str(f.get("name", ""))) for f in files}
+            if len(existing | new_names) > UPLOAD_MAX_COUNT:
+                self._send_json(400, {"error": f"파일은 최대 {UPLOAD_MAX_COUNT}개까지 올릴 수 있습니다"})
+                return
+            saved = []
+            os.makedirs(UPLOAD_DIR, exist_ok=True)
+            for f in files:
+                name = os.path.basename(str(f.get("name", "")).strip())
+                ext = os.path.splitext(name)[1].lower()
+                if not name or ext not in UPLOAD_EXTS:
+                    self._send_json(400, {"error": f"허용되지 않는 파일 형식: {name or '(이름 없음)'} "
+                                                   f"(가능: {', '.join(sorted(UPLOAD_EXTS))})"})
+                    return
+                try:
+                    data = base64.b64decode(f.get("data_base64", ""), validate=True)
+                except Exception:
+                    self._send_json(400, {"error": f"파일 내용을 읽지 못했습니다: {name}"})
+                    return
+                if len(data) > UPLOAD_MAX_BYTES:
+                    self._send_json(400, {"error": f"파일이 너무 큽니다 (10MB 초과): {name}"})
+                    return
+                with open(os.path.join(UPLOAD_DIR, name), "wb") as out:
+                    out.write(data)
+                saved.append(name)
+            self._send_json(200, {"saved": saved, "files": list_uploads()})
+            return
+
+        if self.path == "/uploads/delete":
+            try:
+                name = os.path.basename(str(json.loads(raw).get("name", "")).strip()) if raw else ""
+            except json.JSONDecodeError:
+                name = ""
+            target = os.path.join(UPLOAD_DIR, name)
+            if name and os.path.isfile(target):
+                os.remove(target)
+            self._send_json(200, {"files": list_uploads()})
+            return
+
+        if self.path == "/uploads/clear":
+            for entry in list_uploads():
+                os.remove(os.path.join(UPLOAD_DIR, entry["name"]))
+            self._send_json(200, {"files": []})
             return
 
         if self.path == "/call-agent":

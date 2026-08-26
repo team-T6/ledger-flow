@@ -222,6 +222,7 @@ __marimo__/
 # Real card/transaction data — 개인·법인 카드 실데이터, 절대 커밋 금지 (sample_data/만 허용)
 data/
 uploads/
+archive/
 *.xlsx
 *.csv
 *.db

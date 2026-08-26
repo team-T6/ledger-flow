@@ -93,8 +93,49 @@
     margin-top: 12px;
   }
 
-  .downloads { display: flex; gap: 12px; }
+  .divider {
+    display: flex;
+    align-items: center;
+    margin: 32px 0 24px;
+    color: #999999;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #cccccc;
+  }
+  .divider span { padding: 0 14px; white-space: nowrap; }
+
+  .downloads { display: flex; gap: 14px; }
   .downloads button { margin-top: 0; }
+
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 26px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  }
+  .btn-download:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    opacity: 0.92;
+  }
+  .btn-download:active { transform: translateY(0); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+  .btn-download .icon { font-size: 18px; }
+
+  .btn-xlsx { background: linear-gradient(135deg, #21a366, #16794f); }
+  .btn-pdf { background: linear-gradient(135deg, #e5484d, #b3261e); }
 
   .report {
     border: 1px solid #999999;
@@ -141,9 +182,10 @@
   <p id="buildStatus" class="hidden">만드는 중…</p>
 
   <div id="buildResult" class="hidden">
+    <div class="divider"><span>결과물</span></div>
     <div class="downloads">
-      <button id="downloadXlsxBtn" type="button">엑셀 다운로드</button>
-      <button id="downloadPdfBtn" type="button">PDF 다운로드</button>
+      <button id="downloadXlsxBtn" class="btn-download btn-xlsx" type="button"><span class="icon">📊</span>엑셀 다운로드</button>
+      <button id="downloadPdfBtn" class="btn-download btn-pdf" type="button"><span class="icon">📄</span>PDF 다운로드</button>
     </div>
 
     <h2>엑셀 장부 미리보기</h2>

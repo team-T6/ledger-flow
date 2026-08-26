@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-demo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8090", "--directory", "web"],
+      "port": 8090
+    },
+    {
+      "name": "web-demo-alt",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8091", "--directory", "web"],
+      "port": 8091
+    },
+    {
+      "name": "web-demo-alt2",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8092", "--directory", "web"],
+      "port": 8092
+    },
+    {
+      "name": "web-demo-alt3",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8093", "--directory", "web"],
+      "port": 8093
+    },
+    {
+      "name": "orchestrator",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["orchestrator/server.py"],
+      "port": 8788
+    }
+  ]
+}

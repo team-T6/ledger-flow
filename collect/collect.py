@@ -24,6 +24,7 @@ import csv
 import glob
 import os
 import random
+import re
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -58,14 +59,18 @@ ITEM_POOL = {
 }
 
 
-def normalize(files):
+def normalize(files, default_month=None):
     id_registry = {}  # (이용일자, 이용가맹점, 이용금액, 할부기간) -> transaction_id
     day_seq = {}       # YYMMDD -> 다음 순번
     by_month = {}       # YYYYMM -> rows
 
     for path in files:
         fname = os.path.basename(path)
-        file_month = fname[:7].replace("-", "")  # YYYYMM
+        if re.match(r"^\d{4}-\d{2}", fname):
+            file_month = fname[:7].replace("-", "")  # YYYYMM
+        else:
+            # 파일명에 월이 없는 원본(웹 업로드 등) — 호출자가 준 대상 월로 할부 대체일을 합성한다
+            file_month = (default_month or "0000-00").replace("-", "")[:6]
         with open(path, encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:

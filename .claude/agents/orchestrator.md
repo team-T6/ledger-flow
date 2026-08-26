@@ -62,6 +62,7 @@ model: sonnet
 - **단계 실행 방식 (확정)** — 파이프라인 실행기는 `orchestrator/run-pipeline.py`:
   - 산출물을 자기 코드로 만드는 단계는 그 코드를 직접 호출한다 — 수집 `collect/collect.py` · 통합 `merge/build_result.py` (결과 보고도 그 코드가 만들어 반환)
   - 판단형 단계(가공·검증 1·검증 2)는 그 단계 문서를 시스템 프롬프트로 하는 API 단발 호출로 실행하되, 응답을 **구조화 출력(JSON 스키마)으로 강제**해 산출물 CSV와 결과 보고를 함께 받는다 — 형식 위반은 호출 실패. 산출물은 지휘가 그 칸의 `result.csv`로 써 준다 (임시 — 담당자 실행 코드가 생기면 그 코드 직접 호출로 대체)
+  - **인증 폴백**: `.env`에 `ANTHROPIC_API_KEY`가 없으면 같은 시스템 프롬프트·메시지를 `claude` CLI 헤드리스(`claude -p`, CLI 로그인 세션 인증)로 실행한다. CLI에는 구조화 출력 강제가 없으므로 JSON-only 지시를 메시지에 얹고, 응답은 코드로 재검증한다 — 형식 위반은 동일하게 호출 실패로 취급(재시도 1회 정책 적용). 키와 CLI 둘 다 없으면 판단형 단계는 failed
   - **웹 실행 경로 (확정)** — `orchestrator/server.py`(포트 8788)가 같은 실행기(`run-pipeline.py`의 `run_pipeline()`)를 백그라운드 스레드로 호출한다. 판단 규칙·로그 규약은 CLI 실행과 동일하다. 화면(`screen.html`)은 연동/가공 현황/리포트 3탭 대시보드 — 진행 이벤트는 `GET /runs/current?since=N` 증분 폴링으로 받고(`POST /runs`로 시작, 동시 실행 불가), 최종 요약은 `GET /summary`, 통합 산출물은 `GET /artifacts/result.xlsx`·`result.pdf`로 내려받는다. 실행 상태·이벤트는 서버 메모리에만 두고 영구 기록은 `logs/run_*/` 규약뿐이다 (계정·토큰류 서버 저장 금지)
   - 다른 칸의 화면·서버(`screen.html`·`server.py`)는 사람용 연습 도구로, 파이프라인 실행과는 무관하다
 

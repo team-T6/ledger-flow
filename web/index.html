@@ -352,22 +352,16 @@
   .dash-pane.on { display: block; animation: pane-in 0.3s ease; }
   @keyframes pane-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-  /* 결과 탭 — 개요는 상시, 나머지는 탭으로 접는다 */
-  .tabs { display: flex; gap: 2px; margin-top: 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  .tabs button {
-    font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
-    padding: 10px 16px; border: none; background: none; color: var(--muted);
-    border-bottom: 2px solid transparent; margin-bottom: -1px;
-  }
-  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
-  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .tab-pane { display: none; padding: 20px 2px 0; }
-  .tab-pane.on { display: block; }
+  /* 결과 그리드 — 개요 아래 인사이트 블록을 2열로 모두 펼친다 (탭 없음) */
+  .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 40px; margin-top: 40px; }
+  .report-grid .report-block { margin-top: 0; }
+  .report-grid .span2 { grid-column: 1 / -1; }
+  @media (max-width: 860px) { .report-grid { grid-template-columns: 1fr; gap: 32px; } }
   .stat .delta { font-size: 10.5px; margin-top: 3px; color: var(--muted); }
   .stat .delta.up { color: var(--red); }
   .stat .delta.down { color: var(--accent); }
-  .cmp { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: stretch; }
-  @media (max-width: 640px) { .cmp { grid-template-columns: 1fr; } }
+  /* 전월 비교 — 그리드 반폭 칸 안에 살므로 추이 위·수치 아래 세로 배치 */
+  .cmp { display: grid; grid-template-columns: 1fr; gap: 14px; }
   .cmp-notes { display: grid; gap: 7px; align-content: start; font-size: 13px; }
   .cmp-notes .row { display: flex; justify-content: space-between; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
   .cmp-notes .row:last-child { border-bottom: none; }
@@ -843,16 +837,10 @@
       <div class="hint" id="r-count">거래 42건 · 카드 3장 통합</div>
     </div>
 
-    <div class="tabs" id="r-tabs" role="tablist">
-      <button type="button" class="on" data-tab="r-tab-cats">카테고리</button>
-      <button type="button" data-tab="r-tab-compare">전월 비교</button>
-      <button type="button" data-tab="r-tab-split">결제구분</button>
-      <button type="button" data-tab="r-tab-top5">주요 지출</button>
-      <button type="button" data-tab="r-tab-memo">비고</button>
-      <button type="button" data-tab="r-tab-more">자세히</button>
-    </div>
+    <div class="report-grid">
 
-    <div class="tab-pane on" id="r-tab-cats">
+    <div class="report-block">
+      <h3>카테고리별 지출</h3>
       <div class="cats" id="r-cats">
         <div class="cat"><span>사용료</span><div class="bar-track"><div class="bar" data-w="100%"></div></div><span class="num mono">-1,200,000</span><span class="pct mono">34%</span></div>
         <div class="cat"><span>식대</span><div class="bar-track"><div class="bar" data-w="70%"></div></div><span class="num mono">-842,300</span><span class="pct mono">24%</span></div>
@@ -863,11 +851,24 @@
       </div>
     </div>
 
-    <div class="tab-pane" id="r-tab-compare">
+    <div class="report-block">
+      <h3>전월 비교</h3>
       <div id="r-compare"><div class="hint">전월 보관본이 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div></div>
     </div>
 
-    <div class="tab-pane" id="r-tab-split">
+    <div class="report-block">
+      <h3>주요 지출 Top 5</h3>
+      <table class="top5" id="r-top5">
+        <tr><td class="d mono">08-05</td><td>스튜디오밝음</td><td class="c">사용료</td><td class="n mono">-1,200,000</td></tr>
+        <tr><td class="d mono">08-21</td><td>코스트코 광명점</td><td class="c">식대</td><td class="n mono">-286,400</td></tr>
+        <tr><td class="d mono">08-03</td><td>SK텔레콤</td><td class="c">통신비</td><td class="n mono">-159,000</td></tr>
+        <tr><td class="d mono">08-15</td><td>Notion (USD 96.00)</td><td class="c">구독료</td><td class="n mono">-132,900</td></tr>
+        <tr><td class="d mono">08-09</td><td>역삼타워 관리사무소</td><td class="c">공과금</td><td class="n mono">-128,000</td></tr>
+      </table>
+    </div>
+
+    <div class="report-block">
+      <h3>결제구분별 합계</h3>
       <div class="split-bar" id="r-split">
         <div class="seg-b" style="width:40%"></div>
         <div class="seg-a" style="width:60%"></div>
@@ -878,17 +879,8 @@
       </div>
     </div>
 
-    <div class="tab-pane" id="r-tab-top5">
-      <table class="top5" id="r-top5">
-        <tr><td class="d mono">08-05</td><td>스튜디오밝음</td><td class="c">사용료</td><td class="n mono">-1,200,000</td></tr>
-        <tr><td class="d mono">08-21</td><td>코스트코 광명점</td><td class="c">식대</td><td class="n mono">-286,400</td></tr>
-        <tr><td class="d mono">08-03</td><td>SK텔레콤</td><td class="c">통신비</td><td class="n mono">-159,000</td></tr>
-        <tr><td class="d mono">08-15</td><td>Notion (USD 96.00)</td><td class="c">구독료</td><td class="n mono">-132,900</td></tr>
-        <tr><td class="d mono">08-09</td><td>역삼타워 관리사무소</td><td class="c">공과금</td><td class="n mono">-128,000</td></tr>
-      </table>
-    </div>
-
-    <div class="tab-pane" id="r-tab-memo">
+    <div class="report-block span2">
+      <h3>결산 비고</h3>
       <div class="memo" id="r-memo">
         <strong>확인 필요 2건</strong>
         <ul class="flags">
@@ -898,7 +890,8 @@
       </div>
     </div>
 
-    <div class="tab-pane" id="r-tab-more">
+    <div class="report-block span2">
+      <h3>자세히 보기</h3>
       <details class="more" id="pdf-more" style="margin-top:0;">
         <summary>분석 리포트(PDF) 미리보기 <span class="sub">결산 리포트를 내려받기 전에 훑어봅니다</span></summary>
         <div class="more-body" id="pdf-preview">
@@ -939,6 +932,8 @@
         </div>
       </details>
     </div>
+
+    </div><!-- /report-grid -->
 
   </div>
 </div>
@@ -1303,6 +1298,83 @@
     selectRunMonth(key);
   }
 
+  /* ---------- 보관월 상세 인사이트 블록 — 결과 화면과 같은 구성 ----------
+     summary.json 집계(by_category·by_payer·top_spenders·flags)로 그린다.
+     데이터가 문자열이라 escape를 거쳐 넣는다 */
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function catsListHtml(byCategory, totalExpense) {
+    var cats = (byCategory || []).filter(function (kv) { return kv[1] > 0; });
+    var top = cats.slice(0, 5);
+    var restSum = cats.slice(5).reduce(function (acc, kv) { return acc + kv[1]; }, 0);
+    if (restSum > 0) top.push(["그 외 " + (cats.length - 5) + "개", restSum]);
+    top.sort(function (a, b) { return b[1] - a[1]; });
+    var maxAmt = top.length ? top[0][1] : 1;
+    return top.map(function (kv) {
+      var pct = totalExpense ? Math.round(kv[1] / totalExpense * 100) : 0;
+      return '<div class="cat"><span>' + esc(kv[0] || "미분류") + "</span>" +
+        '<div class="bar-track"><div class="bar" style="width:' + Math.round(kv[1] / maxAmt * 100) + '%"></div></div>' +
+        '<span class="num mono">-' + fmt(kv[1]) + "</span>" +
+        '<span class="pct mono">' + pct + "%</span></div>";
+    }).join("");
+  }
+  function splitBlockHtml(byPayer) {
+    var payer = { "개인결제": 0, "법인결제": 0 };
+    (byPayer || []).forEach(function (kv) {
+      if (kv[0] in payer) payer[kv[0]] += kv[1];
+      else payer["개인결제"] += kv[1];
+    });
+    var total = payer["개인결제"] + payer["법인결제"];
+    if (!total) return "";
+    var pctA = Math.round(payer["법인결제"] / total * 100);
+    return '<div class="report-block"><h3>결제구분별 합계</h3>' +
+      '<div class="split-bar"><div class="seg-b" style="width:' + (100 - pctA) + '%"></div>' +
+      '<div class="seg-a" style="width:' + pctA + '%"></div></div>' +
+      '<div class="split-legend">' +
+      '<span><i class="dot-b"></i>개인결제 <span class="amt mono">-' + fmt(payer["개인결제"]) + " (" + (100 - pctA) + "%)</span></span>" +
+      '<span><i class="dot-a"></i>법인결제 <span class="amt mono">-' + fmt(payer["법인결제"]) + " (" + pctA + "%)</span></span>" +
+      "</div></div>";
+  }
+  function top5BlockHtml(rows) {
+    if (!rows || !rows.length) return "";
+    return '<div class="report-block"><h3>주요 지출 Top 5</h3><table class="top5">' +
+      rows.slice(0, 5).map(function (t) {
+        return '<tr><td class="d mono">' + esc((t["날짜"] || "").slice(5)) + "</td><td>" + esc(t["결제처"] || "") +
+          '</td><td class="c">' + esc(t["카테고리"] || "") + '</td><td class="n mono">-' + fmt(t["지출"] || 0) + "</td></tr>";
+      }).join("") + "</table></div>";
+  }
+  function memoBlockHtml(flags, incomplete, flaggedCount) {
+    var items = (flags || []).map(function (f) {
+      return f.row + "행 · " + (f["결제처"] || "") + " — " + (f.reason || "");
+    }).concat(incomplete || []);
+    var inner;
+    if (items.length) {
+      inner = "<strong>확인 필요 " + items.length + "건</strong><ul class=\"flags\">" +
+        items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>";
+    } else if (flaggedCount) {
+      inner = "<strong>확인 필요 " + flaggedCount + "건</strong><div class=\"hint\">상세 사유는 분석 리포트의 결산 비고에 있습니다</div>";
+    } else {
+      inner = "<strong>확인 필요 없음</strong>";
+    }
+    return '<div class="report-block span2"><h3>결산 비고</h3><div class="memo">' + inner + "</div></div>";
+  }
+  /* 데모 샘플 보관본에는 집계가 없어 총지출 비율로 근사 구성한다 (데모 연출 한정) */
+  function demoBreakdown(entry) {
+    var t = entry.total_expense || 0;
+    function share(r) { return Math.round(t * r); }
+    return {
+      by_category: [["사용료", share(0.34)], ["식대", share(0.24)], ["기타", share(0.19)],
+                    ["구독료", share(0.09)], ["교통비", share(0.08)], ["공과금", share(0.06)]],
+      by_payer: [["개인결제", share(0.4)], ["법인결제", t - share(0.4)]],
+      top_spenders: null,
+      flags: null,
+      incomplete: null
+    };
+  }
+
   function showMonthDetail(entry, archived) {
     var prev = null;
     var prevKey = prevMonthKey(entry.month);
@@ -1375,6 +1447,27 @@
         bars.appendChild(col);
       });
       monthDetailEl.appendChild(trend);
+    }
+
+    // 인사이트 블록 — 파일을 열지 않아도 카테고리·결제구분·주요 지출·비고가 바로 보인다.
+    // 실제 모드는 보관본 집계가 있는 항목만 그리고, 데모 샘플은 근사 구성으로 채운다
+    var detail = entry;
+    if (!REAL && (!detail.by_category || !detail.by_category.length)) {
+      detail = demoBreakdown(entry);
+    }
+    var gridHtml = "";
+    if (detail.by_category && detail.by_category.length) {
+      gridHtml += '<div class="report-block"><h3>카테고리별 지출</h3><div class="cats">' +
+        catsListHtml(detail.by_category, entry.total_expense) + "</div></div>";
+    }
+    gridHtml += splitBlockHtml(detail.by_payer);
+    gridHtml += top5BlockHtml(detail.top_spenders);
+    if (gridHtml) {
+      gridHtml += memoBlockHtml(detail.flags, detail.incomplete, entry.flagged_count);
+      var grid = document.createElement("div");
+      grid.className = "report-grid";
+      grid.innerHTML = gridHtml;
+      monthDetailEl.appendChild(grid);
     }
 
     var actions = document.createElement("div");
@@ -2245,15 +2338,7 @@
       "</div>";
   }
 
-  /* 결과 탭 전환 + 다시 결산하기 */
-  document.querySelectorAll("#r-tabs button").forEach(function (b) {
-    b.addEventListener("click", function () {
-      document.querySelectorAll("#r-tabs button").forEach(function (x) { x.classList.toggle("on", x === b); });
-      document.querySelectorAll("#result-sec .tab-pane").forEach(function (p) {
-        p.classList.toggle("on", p.id === b.dataset.tab);
-      });
-    });
-  });
+  /* 다시 결산하기 */
   document.getElementById("r-rerun").addEventListener("click", function () {
     if (selectedMonth) selectRunMonth(selectedMonth);
   });

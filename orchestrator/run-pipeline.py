@@ -779,6 +779,10 @@ def archive_outputs(month):
         "net": summary["total_income"] - summary["total_expense"],
         "by_category": summary["by_category"],
         "by_payer": summary["by_payer"],
+        # 보관월 상세 화면의 주요 지출 표 — 화면에 필요한 필드만 상위 5건
+        "top_spenders": [{"날짜": r.get("날짜", ""), "결제처": r.get("결제처", ""),
+                          "카테고리": r.get("카테고리", ""), "지출": r.get("지출", 0)}
+                         for r in summary["top_spenders"][:5]],
         "flags": [{"row": r["row"], "결제처": r.get("결제처", ""),
                    "reason": r.get("reason", "")} for r in flagged_rows],
         "incomplete": incomplete,

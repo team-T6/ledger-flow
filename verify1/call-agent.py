@@ -27,7 +27,7 @@ AGENT_SPEC_PATH = os.path.join(REPO_ROOT, ".claude", "agents", "verify1.md")
 CATEGORIES_PATH = os.path.join(REPO_ROOT, "docs", "categories.md")
 RESULT_PATH = os.path.join(BASE_DIR, "result.csv")
 
-MODEL = "claude-sonnet-5"
+MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 4096
 
 # refine이 넘기는 거래 표 스키마(docs/interface-spec.md 확정 v1) — 입력 자체가

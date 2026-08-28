@@ -46,7 +46,7 @@ WEB_INDEX_PATH = os.path.join(REPO_ROOT, "web", "index.html")
 ENV_PATH = os.path.join(REPO_ROOT, ".env")
 UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")  # .gitignore가 uploads/를 차단한다
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — .gitignore가 archive/를 차단한다
-UPLOAD_EXTS = {".csv", ".txt", ".png", ".jpg", ".jpeg", ".xlsx"}
+UPLOAD_EXTS = {".csv", ".txt", ".png", ".jpg", ".jpeg", ".xlsx", ".pdf", ".zip"}
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 파일당 10MB
 UPLOAD_MAX_COUNT = 30
 
@@ -130,6 +130,7 @@ def build_result_data(month=None):
                    "reason": r.get("reason", "")} for r in flagged_rows],
         "incomplete": incomplete,
         "upload_count": len(list_uploads()),
+        "rows": merge_mod.build_row_list(transactions, flagged_rows),
     }
 
 

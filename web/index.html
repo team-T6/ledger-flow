@@ -16,6 +16,7 @@
     --line: #E6DFD2; --soft: #EFE9DD; --card: #F5F1E8;
     --accent: #1E5B45; --accent-contrast: #FAF7F2; --accent-soft: #C9D8CC;
     --red: #A63A2E; --radius: 4px;
+    --shelf: #C9B694; --gilt: #CBA85C; /* 서고 — 선반 나무색 · 책등 금박 괘선 */
     --font-display: "Noto Serif KR", serif; --display-weight: 900;
   }
 
@@ -173,32 +174,111 @@
   .invite-error.show { display: block; }
 
   /* ---------- 월별 보관함 ---------- */
-  .vault { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 32px; }
+  .vault { display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 0; row-gap: 30px; margin-top: 36px; }
   @media (max-width: 560px) { .vault { grid-template-columns: repeat(2, 1fr); } }
+  /* 칸 하나가 선반 한 구획 — border-bottom이 옆 칸과 이어져 한 줄이 선반 하나로 읽힌다 */
   .m-card {
-    font: inherit; text-align: left; color: var(--muted); cursor: pointer;
-    padding: 12px 13px; border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--card); font-size: 12px; min-height: 86px;
-    display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    font: inherit; color: var(--muted); cursor: pointer;
+    background: none; border: none; padding: 0 8px;
+    height: 164px; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    border-bottom: 7px solid var(--shelf);
+    box-shadow: 0 12px 14px -12px rgba(74, 58, 30, 0.45);
   }
-  .m-card .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
-  .m-card .mm { font-size: 14px; font-weight: 700; color: var(--ink); }
-  /* 총지출이 카드의 주인공 — 월 번호보다 강조한다 (월은 그리드 위치로도 읽힌다) */
-  .m-card .amt { font-size: 13.5px; font-weight: 600; color: var(--ink); }
-  .m-card.archived:hover, .m-card.current:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .m-card.archived .mm { color: var(--accent); }
-  /* 확인 필요 — 라벨은 낮추고 건수 숫자만 경고색으로 */
-  .m-card .flagged { font-size: 10.5px; font-weight: 700; color: var(--muted); }
-  .m-card .flagged b { font-weight: 700; color: var(--red); }
-  .m-card.current { border: 2px dashed var(--accent); background: var(--bg); }
-  .m-card.current .go { font-size: 12px; font-weight: 700; color: var(--accent); }
-  .m-card.empty { opacity: 0.5; cursor: default; }
+  /* 책등 — 보관된 달의 장부. 높이는 달마다 조금씩 달라 실제 서가처럼 보인다 */
+  .spine {
+    width: 66%; max-width: 86px; height: var(--h, 122px);
+    background: var(--accent); color: var(--accent-contrast);
+    border-radius: 2px 5px 0 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 16px 6px 12px; position: relative;
+    box-shadow: inset -4px 0 6px rgba(0, 0, 0, 0.22), inset 3px 0 4px rgba(255, 255, 255, 0.1);
+    transition: transform 0.18s ease;
+  }
+  /* 금박 괘선 — 책등 위아래 가는 두 줄 */
+  .spine::before, .spine::after {
+    content: ""; position: absolute; left: 7px; right: 7px; height: 2px;
+    border-top: 1px solid var(--gilt); border-bottom: 1px solid var(--gilt);
+  }
+  .spine::before { top: 7px; }
+  .spine::after { bottom: 7px; }
+  .spine .mm { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 15px; line-height: 1.2; }
+  .spine .amt { font-size: 11px; opacity: 0.9; }
+  .m-card.archived:hover .spine, .m-card.current:hover .spine { transform: translateY(-5px); }
+  /* 책갈피 탭 — 확인 필요 건수. 책등 위로 삐져나온 리본 */
+  .flag-tab {
+    position: absolute; top: -11px; right: 13px; z-index: 1;
+    min-width: 15px; height: 25px; padding: 3px 3px 7px;
+    background: var(--red); color: var(--accent-contrast);
+    font-style: normal; font-size: 10px; font-weight: 700; line-height: 1; text-align: center;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  }
+  /* 이번 달 — 아직 제본 전인 서류 묶음: 점선 표지 뒤로 낱장이 비쳐 보인다 */
+  .m-card.current .spine {
+    background: var(--bg); color: var(--accent);
+    border: 2px dashed var(--accent);
+    box-shadow: 4px -4px 0 -1px var(--bg), 4px -4px 0 0 var(--line),
+                8px -8px 0 -1px var(--bg), 8px -8px 0 0 var(--line);
+  }
+  .m-card.current .spine::before, .m-card.current .spine::after { display: none; }
+  .m-card.current .spine .go { font-size: 11.5px; font-weight: 700; line-height: 1.45; text-align: center; }
+  /* 빈 칸 — 장부가 꽂히지 않은 자리 */
+  .m-card.empty { cursor: default; }
+  .m-card.empty .slot-mm { font-size: 12px; opacity: 0.5; padding-bottom: 8px; }
+  /* 보관 직후 — 방금 만든 장부가 선반에 꽂히는 연출 (서고로 돌아온 첫 화면에서 한 번) */
+  @keyframes slot-in {
+    0% { transform: translateY(-34px) rotate(-6deg); opacity: 0; }
+    55% { transform: translateY(3px) rotate(0.5deg); opacity: 1; }
+    75% { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
+  }
+  .spine.slot-in { animation: slot-in 0.6s cubic-bezier(0.25, 0.6, 0.3, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .spine.slot-in { animation: none; }
+    .m-card.archived:hover .spine, .m-card.current:hover .spine { transform: none; }
+  }
 
-  /* 보관된 월 상세 */
+  /* 보관된 월 상세 — 펼친 장부: 왼쪽 안쪽에 제본선 음영을 준다 */
   .month-detail {
     margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--card); padding: 18px 20px;
+    background: var(--card); padding: 18px 20px 18px 26px;
+    box-shadow: inset 14px 0 16px -14px rgba(74, 58, 30, 0.4);
+    position: relative; perspective: 1600px;
+  }
+  /* 장 넘김 전환 — 낱장(flip-sheet)이 새 면 위에 얹혀 시작해, 축을 중심으로 들려 젖혀지며 걷힌다.
+     backface-visibility 덕에 90°를 지나는 순간 종이 뒷면이 사라져 실제 책장이 넘어가듯 보인다 */
+  #month-sec .wrap { perspective: 1400px; }
+  .dash-body { overflow-x: hidden; }
+  @keyframes page-turn-next { from { opacity: 0.55; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+  @keyframes page-turn-prev { from { opacity: 0.55; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+  .month-detail.turn-next { animation: page-turn-next 0.55s ease-out both; }
+  .month-detail.turn-prev { animation: page-turn-prev 0.55s ease-out both; }
+  .flip-sheet {
+    position: absolute; inset: -1px; z-index: 3; pointer-events: none;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    backface-visibility: hidden; will-change: transform;
+  }
+  /* 낱장 위 괘선 — 넘겨지는 종이가 빈 판때기가 아니라 장부 속지로 보이게 */
+  .flip-sheet::before {
+    content: ""; position: absolute; inset: 20px 22px;
+    background: repeating-linear-gradient(to bottom, transparent 0 27px, var(--line) 27px 28px);
+    opacity: 0.65;
+  }
+  .flip-sheet.flip-next {
+    transform-origin: left center;
+    background-image: linear-gradient(to right, rgba(74, 58, 30, 0.12), rgba(74, 58, 30, 0) 30%);
+    animation: sheet-next 0.7s cubic-bezier(0.45, 0.05, 0.35, 1) both;
+  }
+  .flip-sheet.flip-prev {
+    transform-origin: right center;
+    background-image: linear-gradient(to left, rgba(74, 58, 30, 0.12), rgba(74, 58, 30, 0) 30%);
+    animation: sheet-prev 0.7s cubic-bezier(0.45, 0.05, 0.35, 1) both;
+  }
+  @keyframes sheet-next { from { transform: rotateY(0); } to { transform: rotateY(-178deg); } }
+  @keyframes sheet-prev { from { transform: rotateY(0); } to { transform: rotateY(178deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .month-detail.turn-next, .month-detail.turn-prev { animation: none; }
+    .flip-sheet { display: none; }
   }
   .month-detail .dh { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .month-detail .dh b { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 16px; }
@@ -213,18 +293,22 @@
   .d-stat .delta.up { color: var(--red); }
   .d-stat .delta.down { color: var(--accent); }
   .trend {
-    display: flex; align-items: flex-end; justify-content: space-between; gap: 14px;
     background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
     padding: 12px 14px 10px; margin-bottom: 14px;
   }
-  .trend .tt { font-size: 11px; color: var(--muted); align-self: flex-start; line-height: 1.5; }
+  .trend .tt { font-size: 11px; color: var(--muted); line-height: 1.5; }
   .trend .tt b { display: block; color: var(--ink); font-size: 12px; }
-  .t-bars { display: flex; align-items: flex-end; gap: 12px; }
-  .t-col { text-align: center; font-size: 10px; color: var(--muted); }
-  .t-col i { display: block; width: 26px; margin: 0 auto 4px; background: var(--accent-soft); border-radius: 3px 3px 0 0; }
-  .t-col .ta { display: block; margin-top: 1px; }
-  .t-col.cur i { background: var(--accent); }
-  .t-col.cur { color: var(--accent); font-weight: 700; }
+  /* 지출 추이 꺾은선 — 포인트에 올리면 그 달 금액(.tv)이 보인다 */
+  .trend-line { display: block; width: 100%; height: auto; margin-top: 8px; }
+  .trend-line .ln { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .trend-line .pt circle { fill: var(--card); stroke: var(--accent); stroke-width: 2; }
+  .trend-line .pt.cur circle { fill: var(--accent); }
+  .trend-line .tm { font-size: 11px; fill: var(--muted); }
+  .trend-line .pt.cur .tm { fill: var(--accent); font-weight: 700; }
+  .trend-line .tv { font-size: 11.5px; font-weight: 700; fill: var(--ink); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+  .trend-line .pt:hover .tv, .trend-line .pt:focus .tv { opacity: 1; }
+  .trend-line .pt { outline: none; }
+  .trend-line .hit { fill: transparent; }
   .d-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
   .d-actions .btn { font-size: 12.5px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
   .btn-quiet { background: transparent; color: var(--muted); }
@@ -297,38 +381,51 @@
   .dash-main { display: flex; flex-direction: column; overflow: hidden; }
   .dash-top {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-    padding: 18px 28px 14px; border-bottom: 1px solid var(--line);
+    padding: 18px 28px 14px; border-bottom: 1px solid var(--line); position: relative;
   }
   .dash-top h2 { font-size: 21px; line-height: 1.35; margin: 0; }
+  .dash-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  /* 보관월 상세(book) — 제목을 가운데 두고 좌우 화살표로 이웃 장부로 장을 넘긴다 */
+  .dash-top.book { justify-content: center; }
+  .dash-top.book .chip { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); }
+  @media (max-width: 720px) { .dash-top.book .chip { display: none; } }
+  .book-arrow {
+    font: inherit; font-size: 17px; font-weight: 700; cursor: pointer;
+    width: 30px; height: 30px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; padding: 0; flex: none;
+  }
+  .book-arrow:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .book-arrow:disabled { opacity: 0.3; cursor: default; }
   .chip {
     font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 999px;
     background: var(--soft); color: var(--muted); white-space: nowrap;
   }
   .chip.run { background: var(--accent-soft); color: var(--accent); }
   .chip.ok { background: var(--accent); color: var(--accent-contrast); }
-  /* 결산 단계 스텝 — 대시보드 상단, 도달한 스텝은 탭처럼 눌러 오간다 */
+  /* 결산 단계 탭 — 대시보드 상단, 도달한 단계는 탭으로 눌러 오간다 */
   .dash-steps {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    padding: 10px 28px 0;
+    display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap;
+    padding: 0 28px; border-bottom: 1px solid var(--line);
   }
   .dstep {
     display: flex; align-items: center; gap: 7px;
     font: inherit; font-size: 12.5px; font-weight: 700; color: var(--muted);
-    background: none; border: none; padding: 5px 8px; border-radius: var(--radius); cursor: default;
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 10px 9px; cursor: default;
   }
   .dstep .n {
     width: 20px; height: 20px; border-radius: 50%; font-size: 11px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
     background: var(--soft); color: var(--muted);
   }
-  .dstep.cur { color: var(--accent); }
+  .dstep.cur { color: var(--accent); border-bottom-color: var(--accent); }
   .dstep.cur .n { background: var(--accent); color: var(--accent-contrast); }
   .dstep.open { color: var(--ink); cursor: pointer; }
   .dstep.open .n { background: var(--accent-soft); color: var(--accent); }
-  .dstep.open:hover { background: var(--soft); }
+  .dstep.open:hover { color: var(--accent); }
   .dstep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dstep:disabled { opacity: 0.5; }
-  .step-sep { color: var(--muted); font-size: 13px; }
 
   /* 결과 머리줄 — 제목 왼쪽, 다운로드 버튼 오른쪽 */
   .result-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -388,6 +485,11 @@
   }
   .rtab-btn:hover { color: var(--ink); }
   .rtab-btn.sel { color: var(--accent); border-bottom-color: var(--accent); }
+  .rtab-btn .tbadge {
+    display: inline-block; margin-left: 6px; min-width: 18px; padding: 1px 6px;
+    border-radius: 999px; background: var(--red); color: #fff;
+    font-size: 10.5px; line-height: 1.5; text-align: center; vertical-align: 1px;
+  }
   .rtab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .rtab-panel { display: none; padding-top: 28px; }
   .rtab-panel.sel { display: block; }
@@ -525,12 +627,27 @@
   }
   .cp-table th { font-size: 12px; color: var(--muted); font-weight: 500; }
   .cp-table td.reason { white-space: normal; min-width: 180px; color: var(--red); font-size: 12.5px; }
-  .cp-table input[type="text"] {
+  .cp-table input[type="text"], .cp-table input[type="date"], .cp-table select {
     font: inherit; font-size: 13.5px; padding: 6px 8px; width: 120px;
     border: 1px solid var(--line); border-radius: var(--radius);
     background: var(--bg); color: var(--ink);
   }
-  .cp-table input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  .cp-table select { width: auto; max-width: 200px; }
+  .cp-table input:focus, .cp-table select:focus { outline: none; border-color: var(--accent); }
+  .cp-table input[type="checkbox"] { accent-color: var(--accent); }
+  /* 날짜 칸 — 표기는 텍스트(YYYY-MM-DD)로 고정하고, 달력 버튼이 숨긴 date 입력의 피커를 연다 */
+  .cp-date { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .cp-date input[type="text"] { width: 104px; }
+  .cp-date .cp-date-pick {
+    position: absolute; left: 0; bottom: 0; width: 0; height: 0;
+    opacity: 0; pointer-events: none; border: 0; padding: 0;
+  }
+  .cp-date .cp-date-btn {
+    font: inherit; display: inline-flex; align-items: center; cursor: pointer;
+    padding: 7px 8px; background: var(--bg); color: var(--muted);
+    border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .cp-date .cp-date-btn:hover { border-color: var(--accent); color: var(--accent); }
   .cp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .cp-actions .hint { font-size: 12.5px; color: var(--muted); }
 
@@ -545,6 +662,10 @@
   .stat .k { font-size: 12.5px; color: var(--muted); }
   .stat .v { font-size: 21px; font-weight: 600; margin-top: 2px; }
   .stat .v.minus { color: var(--red); }
+  /* 확인 필요 네모칸 — 버튼이라 누르면 확인 필요 탭이 선택된다 */
+  button.stat, button.d-stat { font: inherit; text-align: left; cursor: pointer; color: inherit; width: 100%; }
+  button.stat:hover, button.d-stat:hover { border-color: var(--accent); }
+  button.stat:focus-visible, button.d-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .cats { display: grid; gap: 12px; }
   .cat { display: grid; grid-template-columns: 76px 1fr auto auto; gap: 12px; align-items: center; font-size: 14px; }
   .cat .bar-track { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; }
@@ -788,7 +909,7 @@
     <div class="vault-head">
       <div>
         <div class="eyebrow">결산 서고</div>
-        <h2 id="shelf-title">2026년 결산 서고</h2>
+        <h2 id="shelf-title">2026년 서고</h2>
       </div>
       <div class="year-nav">
         <button id="shelf-yprev" type="button" aria-label="이전 연도">‹</button>
@@ -796,7 +917,7 @@
         <button id="shelf-ynext" type="button" aria-label="다음 연도">›</button>
       </div>
     </div>
-    <p class="lead">결산이 끝난 달은 장부가 꽂혀 있습니다 — 달을 누르면 그 달의 작업 화면으로 들어갑니다.</p>
+    <p class="lead">결산이 끝난 달은 장부로 제본되어 선반에 꽂힙니다 — 꽂힌 장부를 누르면 그 달을 펼쳐 봅니다.</p>
     <div class="vault" id="months"></div>
   </div>
 </section>
@@ -816,14 +937,16 @@
   </aside>
   <div class="dash-main">
     <div class="dash-top">
-      <h2 id="dash-title">결산 서고</h2>
+      <div class="dash-title-row">
+        <button class="book-arrow hidden" id="book-prev" type="button" aria-label="이전 달 장부">‹</button>
+        <h2 id="dash-title">결산 서고</h2>
+        <button class="book-arrow hidden" id="book-next" type="button" aria-label="다음 달 장부">›</button>
+      </div>
       <span class="chip hidden" id="dash-chip"></span>
     </div>
     <div class="dash-steps hidden" id="dash-steps">
       <button type="button" class="dstep" data-pane="upload-sec"><span class="n">1</span>자료 넣기</button>
-      <span class="step-sep">›</span>
       <button type="button" class="dstep" data-pane="run-sec"><span class="n">2</span>결산 진행</button>
-      <span class="step-sep">›</span>
       <button type="button" class="dstep" data-pane="result-sec"><span class="n">3</span>결산 결과</button>
     </div>
     <div class="dash-body">
@@ -920,7 +1043,7 @@
     </div>
 
     <div class="run-done hidden" id="run-done">
-      <div><b>결산이 끝났습니다</b><div class="hint">요약·거래 내역·리포트가 준비되었습니다</div></div>
+      <div><b>결산이 끝났습니다 — 장부 한 권이 완성됐습니다</b><div class="hint">요약·거래 내역·리포트가 준비되었습니다</div></div>
       <button class="btn" id="run-done-open" type="button">결산 결과 보기 →</button>
     </div>
 
@@ -944,28 +1067,22 @@
     </div>
 
     <div class="save-bar hidden" id="save-bar">
-      <div><b>결산 서고에 저장되었습니다</b><div class="hint">서고에서 언제든 다시 열 수 있습니다</div></div>
+      <div><b>이 달 장부가 결산 서고에 꽂혔습니다</b><div class="hint">서고에서 언제든 다시 펼쳐 볼 수 있습니다</div></div>
       <div class="save-actions">
         <button class="btn btn-ghost" id="r-rerun" type="button">다시 결산하기</button>
-      </div>
-    </div>
-
-    <!-- 재결산 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
-    <div class="confirm-panel hidden" id="refix-panel">
-      <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>
-      <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
-      <div class="cp-actions">
-        <button class="btn" id="refix-apply" type="button">수정 반영해 다시 결산</button>
-        <span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span>
       </div>
     </div>
 
     <div class="report-block">
       <h3>결산 개요</h3>
       <div class="stats">
-        <div class="stat"><div class="k">총지출</div><div class="v minus mono" id="r-expense">-3,481,200</div><div class="delta" id="r-expense-delta"></div></div>
+        <button class="stat" id="r-expense-stat" type="button" title="요약 탭으로 이동"><div class="k">총지출</div><div class="v minus mono" id="r-expense">-3,481,200</div><div class="delta" id="r-expense-delta"></div></button>
         <div class="stat"><div class="k">총수익</div><div class="v mono" id="r-income">+5,214,000</div></div>
         <div class="stat"><div class="k">순액</div><div class="v mono" id="r-net">+1,732,800</div></div>
+        <button class="stat hidden" id="r-flagged-stat" type="button" title="확인 필요 탭으로 이동">
+          <div class="k">확인 필요</div><div class="v mono minus" id="r-flagged">0건</div>
+          <div class="delta">눌러서 바로 정리</div>
+        </button>
       </div>
       <div class="hint" id="r-count">거래 42건 · 카드 3장 통합</div>
     </div>
@@ -974,6 +1091,7 @@
       <div class="rtab-bar">
         <button type="button" class="rtab-btn" data-tab="summary">요약</button>
         <button type="button" class="rtab-btn" data-tab="tx">거래 내역</button>
+        <button type="button" class="rtab-btn hidden" data-tab="fix">확인 필요</button>
         <button type="button" class="rtab-btn" data-tab="doc">결산 요약 전문</button>
         <button type="button" class="rtab-btn" data-tab="pdf">리포트</button>
       </div>
@@ -986,7 +1104,7 @@
           </div>
           <div class="report-block">
             <h3>전월 비교</h3>
-            <div id="r-compare"><div class="hint">전월 보관본이 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div></div>
+            <div id="r-compare"><div class="hint">전월 장부가 서고에 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div></div>
           </div>
           <div class="report-block">
             <h3>주요 지출 Top 5</h3>
@@ -1013,6 +1131,18 @@
         <div class="tx-scroll"></div>
       </div>
 
+      <!-- 확인 필요 탭 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
+      <div class="rtab-panel" data-panel="fix">
+        <div class="confirm-panel hidden" id="refix-panel">
+          <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>
+          <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
+          <div class="cp-actions">
+            <button class="btn" id="refix-apply" type="button">재결산</button>
+            <span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span>
+          </div>
+        </div>
+      </div>
+
       <div class="rtab-panel" data-panel="doc">
         <div class="summary-doc" id="r-summary-doc"><p class="loading">요약을 불러오는 중…</p></div>
       </div>
@@ -1037,7 +1167,7 @@
   <div class="wrap">
     <div class="eyebrow">분류 기준</div>
     <h2>카테고리 관리</h2>
-    <p class="lead">가공(분류)과 검증 1(적합성 확인)이 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다 — 개인결제는 개인카드 표, 법인결제는 법인카드 표.</p>
+    <p class="lead">가공(분류)과 분류 검증(적합성 확인)이 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다 — 개인결제는 개인카드 표, 법인결제는 법인카드 표.</p>
     <div class="cat-updated" id="cat-updated"></div>
     <div class="cat-toolbar">
       <div class="cat-tabs" role="tablist">
@@ -1147,6 +1277,8 @@
     dashSec.classList.add("hidden");
     shelfSec.classList.remove("hidden");
     window.scrollTo(0, 0);
+    // 숨김 상태에선 CSS 애니메이션이 돌지 않으므로 화면에 드러나는 이 시점에 연출이 시작된다 — 한 번만
+    justArchivedKey = null;
   }
   /* 사용자가 서고로 나갈 때만 달 해시를 지운다 — 새로고침 복원(route)과 구분 */
   function backToShelf() {
@@ -1194,6 +1326,10 @@
     var chip = document.getElementById("dash-chip");
     chip.textContent = chipText || "";
     chip.className = "chip" + (chipCls ? " " + chipCls : "") + (chipText ? "" : " hidden");
+    // 장 넘김 화살표는 보관월 상세 전용 — 기본은 끄고, showMonthDetail이 다시 켠다
+    document.querySelector("#dash-sec .dash-top").classList.remove("book");
+    document.getElementById("book-prev").classList.add("hidden");
+    document.getElementById("book-next").classList.add("hidden");
   }
 
   /* 뷰 전환 — 랜딩 ↔ 월말결산하기 ↔ 분류 기준 (해시 라우팅: #app · #categories) */
@@ -1215,9 +1351,7 @@
     if (isApp) {
       var mk = appHashMonth();
       // 열 수 있는 달: 보관본이 있거나, 진행 중인 결산이거나, 새로 결산할 수 있는 달(데모는 이번 달만)
-      var canOpen = mk && (findArchived(mk) || (mk === selectedMonth && jobPhase) ||
-                           (vaultReal ? mk <= CUR_KEY : mk === CUR_KEY));
-      if (canOpen) openMonth(mk);
+      if (mk && canOpenMonth(mk)) openMonth(mk);
       else showShelf();
     }
     // 저장 안 한 편집이 있으면 정본을 다시 불러 덮지 않는다 — 다른 화면에 다녀와도 편집 유지
@@ -1355,6 +1489,7 @@
   var jobPhase = null;      // 진행 중인 결산 상태: null | "upload" | "run" | "result"
   var viewKey = null;       // 대시보드가 지금 보여주는 달
   var lastResult = null;    // 마지막 결산 결과 요약 — 보관 확인(서고에 넣기/삭제)에 쓴다
+  var justArchivedKey = null; // 방금 서고에 꽂힌 달 — 서고로 돌아온 첫 화면에서 꽂히는 연출을 한 번 튼다
 
   function fmtShortMan(n) { return "-" + Math.round(n / 10000).toLocaleString("ko-KR") + "만"; }
   function monthNum(key) { return parseInt(key.slice(5), 10); }
@@ -1363,6 +1498,11 @@
   function prevMonthKey(key) {
     var y = monthYear(key), m = monthNum(key) - 1;
     if (m === 0) { m = 12; y -= 1; }
+    return monthKeyOf(y, m);
+  }
+  function nextMonthKey(key) {
+    var y = monthYear(key), m = monthNum(key) + 1;
+    if (m === 13) { m = 1; y += 1; }
     return monthKeyOf(y, m);
   }
   function findArchived(key) {
@@ -1424,10 +1564,34 @@
         .then(function (res) { renderFileList((res.data && res.data.files) || []); })
         .catch(function () { renderFileList([]); });
     }
-    setDashTop(monthTitle(key) + " 결산", "자료 대기", "");
+    setDashTop(monthTitle(key), "자료 대기", "");
+    setBookNav(key);
     sideYear = monthYear(key);
     renderSideMonths();
     showPane("upload-sec");
+  }
+
+  /* 달 화면 공통 — 열 수 있는 달 판정 (서고 진입 라우팅·장 넘김 화살표가 같은 기준을 쓴다) */
+  function canOpenMonth(key) {
+    return !!(findArchived(key) || (key === selectedMonth && jobPhase) ||
+              (vaultReal ? key <= CUR_KEY : key === CUR_KEY));
+  }
+  /* 제목 좌우 화살표 — 달력 기준 한 달씩 장을 넘긴다. 열 수 없는 달 방향은 비활성 */
+  function goBook(key, dir) {
+    var entry = findArchived(key);
+    if (entry) showMonthDetail(entry, archivedList, dir);
+    else openMonth(key);
+  }
+  function setBookNav(key) {
+    var pk = prevMonthKey(key), nk = nextMonthKey(key);
+    document.querySelector("#dash-sec .dash-top").classList.add("book");
+    var bp = document.getElementById("book-prev"), bn = document.getElementById("book-next");
+    bp.classList.remove("hidden");
+    bn.classList.remove("hidden");
+    bp.disabled = !canOpenMonth(pk);
+    bn.disabled = !canOpenMonth(nk);
+    bp.onclick = bp.disabled ? null : function () { goBook(pk, -1); };
+    bn.onclick = bn.disabled ? null : function () { goBook(nk, 1); };
   }
 
   /* 대시보드에서 달을 여는 단일 진입점 — 진행 중인 결산이면 그 단계로, 보관본이면 상세로 */
@@ -1437,9 +1601,10 @@
       history.replaceState(null, "", "#app/" + key);
       sideYear = monthYear(key);
       renderSideMonths();
-      if (jobPhase === "run") { setDashTop(monthTitle(key) + " 결산", "결산 중", "run"); showPane("run-sec"); }
-      else if (jobPhase === "result") { setDashTop(monthTitle(key) + " 결산", "결산 완료", "ok"); showPane("result-sec"); }
-      else { setDashTop(monthTitle(key) + " 결산", "자료 대기", ""); showPane("upload-sec"); }
+      if (jobPhase === "run") { setDashTop(monthTitle(key), "결산 중", "run"); showPane("run-sec"); }
+      else if (jobPhase === "result") { setDashTop(monthTitle(key), "결산 완료", "ok"); showPane("result-sec"); }
+      else { setDashTop(monthTitle(key), "자료 대기", ""); showPane("upload-sec"); }
+      setBookNav(key);
       return;
     }
     var entry = findArchived(key);
@@ -1469,6 +1634,64 @@
     });
     if (buttons.length) buttons[0].classList.add("sel");
     if (panels.length) panels[0].classList.add("sel");
+  }
+
+  /* 확인 필요 탭 버튼 — 정리할 건수만큼만 보이고, 건수는 배지로 붙는다.
+     탭이 선택된 채 0건이 되면 첫 탭으로 돌아간다 */
+  function setFixTabVisible(root, count) {
+    var btn = root.querySelector('.rtab-btn[data-tab="fix"]');
+    if (!btn) return;
+    if (count) {
+      btn.innerHTML = '확인 필요<span class="tbadge">' + count + "</span>";
+      btn.classList.remove("hidden");
+    } else {
+      btn.classList.add("hidden");
+      if (btn.classList.contains("sel")) {
+        var first = root.querySelector(".rtab-btn:not(.hidden)");
+        if (first) first.click();
+      }
+    }
+  }
+  /* 통계 네모칸 클릭 → 해당 탭 선택 + 탭 위치로 스크롤 */
+  function goTab(root, name) {
+    var btn = root.querySelector('.rtab-btn[data-tab="' + name + '"]:not(.hidden)');
+    if (!btn) return false;
+    btn.click();
+    root.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+    return true;
+  }
+  /* 확인 필요 네모칸 클릭 — 확인 필요 탭을 선택한다. 정리표가 없는 달은 거래 내역 탭(행 강조)으로 */
+  function selectFixTab(root) {
+    if (!goTab(root, "fix")) goTab(root, "tx");
+  }
+
+  /* 지출 추이 — 최근 6개월 꺾은선 SVG. 포인트에 올리면 그 달 금액이 보인다 */
+  function trendChartHtml(rows) {
+    if (!rows || rows.length < 2) return "";
+    var W = 560, H = 150, padX = 40, padT = 30, padB = 24;
+    var vals = rows.map(function (r) { return r.total; });
+    var maxV = Math.max.apply(null, vals), minV = Math.min.apply(null, vals);
+    var span = maxV - minV;
+    var pts = rows.map(function (r, i) {
+      var x = padX + (W - 2 * padX) * i / (rows.length - 1);
+      var y = span ? padT + (H - padT - padB) * (1 - (r.total - minV) / span)
+                   : (padT + H - padB) / 2;
+      return { x: Math.round(x), y: Math.round(y), r: r };
+    });
+    var line = pts.map(function (p) { return p.x + "," + p.y; }).join(" ");
+    var gs = pts.map(function (p) {
+      // 금액 라벨은 좌우 끝에서 잘리지 않게 안쪽으로 당긴다
+      var tx = Math.min(Math.max(p.x, 46), W - 46);
+      return '<g class="pt' + (p.r.cur ? " cur" : "") + '" tabindex="0">' +
+        '<rect class="hit" x="' + (p.x - 24) + '" y="0" width="48" height="' + H + '"></rect>' +
+        '<circle cx="' + p.x + '" cy="' + p.y + '" r="4"></circle>' +
+        '<text class="tv mono" x="' + tx + '" y="' + (p.y - 11) + '" text-anchor="middle">-' + fmt(p.r.total) + "</text>" +
+        '<text class="tm" x="' + p.x + '" y="' + (H - 6) + '" text-anchor="middle">' + monthLabel(p.r.key) + "</text>" +
+        "</g>";
+    }).join("");
+    return '<svg class="trend-line" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="최근 ' +
+      rows.length + '개월 지출 추이">' +
+      '<polyline class="ln" points="' + line + '"></polyline>' + gs + "</svg>";
   }
 
   /* 카테고리별 지출 — 상위 5개 + "더보기"로 나머지 전부 펼친다 (파일을 안 열어도 전체를 보게) */
@@ -1599,7 +1822,7 @@
       countEl.textContent = rows.length
         ? "전체 " + rows.length + "건 중 " + filtered.length + "건 표시" +
           (flaggedTotal ? " · 확인 필요 " + flaggedTotal + "건" : "") + (note || "")
-        : "이 보관본에는 거래 내역이 없습니다" + (note || "");
+        : "이 장부에는 거래 내역이 없습니다" + (note || "");
       if (!filtered.length) {
         scroll.innerHTML = '<div class="tx-empty">표시할 거래가 없습니다</div>';
         return;
@@ -1735,8 +1958,8 @@
       "| 단계 | 상태 | 처리 건수 (전체/정상/확인필요) | 산출물 |\n|---|---|---|---|\n" +
       "| 수집 | ok | " + total + " / " + total + " / 0 | collect/result.csv |\n" +
       "| 가공 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | refine/result.csv |\n" +
-      "| 검증 1 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | verify1/result.csv |\n" +
-      "| 검증 2 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | verify2/result.csv |\n" +
+      "| 분류 검증 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | verify1/result.csv |\n" +
+      "| 기간·금액 검증 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | verify2/result.csv |\n" +
       "| 통합 | partial | " + total + " / " + ok + " / " + entry.flagged_count + " | merge/result.xlsx, merge/result.pdf |\n\n" +
       "## 2. 확인 필요 목록\n\n샘플 데이터 데모라 행 단위 상세는 생략됩니다 — 실제 모드에서는 사유가 그대로 표시됩니다.\n\n" +
       "## 3. 산출물 위치\n\n- 엑셀 회계장부: merge/result.xlsx\n- PDF 결산 리포트: merge/result.pdf\n\n" +
@@ -1808,24 +2031,43 @@
     return d;
   }
 
-  function showMonthDetail(entry, archived) {
+  function showMonthDetail(entry, archived, turn) {
     var prev = null;
     var prevKey = prevMonthKey(entry.month);
     archived.forEach(function (e) { if (e.month === prevKey) prev = e; });
 
     monthDetailEl.innerHTML = "";
+    // 장 넘김 연출 — 이웃 장부로 이동할 때만. 낱장이 새 면 위에 얹혀 시작해 젖혀지며 걷힌다
+    monthDetailEl.classList.remove("turn-next", "turn-prev");
+    if (turn) {
+      void monthDetailEl.offsetWidth; // 같은 방향 연속 넘김에도 애니메이션이 다시 돌게 리플로 강제
+      monthDetailEl.classList.add(turn > 0 ? "turn-next" : "turn-prev");
+      var sheet = document.createElement("div");
+      sheet.className = "flip-sheet " + (turn > 0 ? "flip-next" : "flip-prev");
+      sheet.setAttribute("aria-hidden", "true");
+      sheet.addEventListener("animationend", function () { sheet.remove(); });
+      setTimeout(function () { sheet.remove(); }, 900); // 이벤트가 유실돼도 반드시 걷어낸다
+      monthDetailEl.appendChild(sheet);
+    }
     viewKey = entry.month;
     history.replaceState(null, "", "#app/" + entry.month);
     sideYear = monthYear(entry.month);
     renderSideMonths();
-    setDashTop(monthTitle(entry.month) + " 결산 — 보관됨",
-               entry.completed_at ? entry.completed_at + " 완료" : "보관됨", "ok");
+    setDashTop(monthTitle(entry.month),
+               entry.completed_at ? entry.completed_at + " 완료" : "서고 보관", "ok");
+
+    setBookNav(entry.month);
 
     var stats = document.createElement("div");
     stats.className = "d-stats";
-    function addStat(k, v, minus, deltaText, deltaClass) {
-      var box = document.createElement("div");
+    function addStat(k, v, minus, deltaText, deltaClass, onClick, clickTitle) {
+      var box = document.createElement(onClick ? "button" : "div");
       box.className = "d-stat";
+      if (onClick) {
+        box.type = "button";
+        if (clickTitle) box.title = clickTitle;
+        box.addEventListener("click", onClick);
+      }
       box.innerHTML = '<div class="k"></div><div class="v mono"></div>';
       box.children[0].textContent = k;
       box.children[1].textContent = v;
@@ -1846,8 +2088,10 @@
       else if (diff < 0) { expDelta = "▼ " + fmt(diff) + " (전월 대비 " + pct + "%)"; expClass = "down"; }
       else expDelta = "전월과 동일";
     }
-    addStat("총지출", "-" + fmt(entry.total_expense || 0), true, expDelta, expClass);
-    addStat("거래", (entry.tx_count || 0) + "건", false, prev ? "전월 " + (prev.tx_count || 0) + "건" : "", "");
+    addStat("총지출", "-" + fmt(entry.total_expense || 0), true, expDelta, expClass,
+      function () { goTab(tabsWrap, "summary"); }, "요약 탭으로 이동");
+    addStat("거래", (entry.tx_count || 0) + "건", false, prev ? "전월 " + (prev.tx_count || 0) + "건" : "", "",
+      function () { goTab(tabsWrap, "tx"); }, "거래 내역 탭으로 이동");
     var fDelta = "", fClass = "";
     if (prev && typeof prev.flagged_count === "number") {
       var fd = (entry.flagged_count || 0) - prev.flagged_count;
@@ -1855,30 +2099,20 @@
       else if (fd < 0) { fDelta = "▼ " + (-fd) + "건 (전월 " + prev.flagged_count + "건)"; fClass = "down"; }
       else fDelta = "전월과 같음 (" + prev.flagged_count + "건)";
     }
-    addStat("확인 필요", (entry.flagged_count || 0) + "건", false, fDelta, fClass);
+    addStat("확인 필요", (entry.flagged_count || 0) + "건", false, fDelta, fClass,
+      entry.flagged_count ? function () { selectFixTab(tabsWrap); } : null, "확인 필요 탭으로 이동");
     monthDetailEl.appendChild(stats);
 
-    // 지출 추이 — 이 달까지 보관된 최근 3개월 (2개월 이상일 때만)
-    var upto = archived.filter(function (e) { return e.month <= entry.month && e.total_expense; }).slice(-3);
+    // 지출 추이 — 이 달까지 보관된 최근 6개월 꺾은선 (2개월 이상일 때만)
+    var upto = archived.filter(function (e) { return e.month <= entry.month && e.total_expense; }).slice(-6);
     if (upto.length >= 2) {
-      var maxV = Math.max.apply(null, upto.map(function (e) { return e.total_expense; }));
       var trend = document.createElement("div");
       trend.className = "trend";
-      trend.innerHTML = '<div class="tt"><b>지출 추이</b>보관된 월 기준</div><div class="t-bars"></div>';
-      var bars = trend.querySelector(".t-bars");
-      upto.forEach(function (e) {
-        var col = document.createElement("div");
-        col.className = "t-col" + (e.month === entry.month ? " cur" : "");
-        var bar = document.createElement("i");
-        bar.style.height = Math.round(18 + 26 * e.total_expense / maxV) + "px";
-        col.appendChild(bar);
-        col.appendChild(document.createTextNode(monthLabel(e.month)));
-        var ta = document.createElement("span");
-        ta.className = "ta mono";
-        ta.textContent = fmtShortMan(e.total_expense);
-        col.appendChild(ta);
-        bars.appendChild(col);
-      });
+      trend.innerHTML =
+        '<div class="tt"><b>지출 추이</b>보관된 월 기준 · 포인트에 올리면 금액이 보입니다</div>' +
+        trendChartHtml(upto.map(function (e) {
+          return { key: e.month, total: e.total_expense, cur: e.month === entry.month };
+        }));
       monthDetailEl.appendChild(trend);
     }
 
@@ -1889,15 +2123,13 @@
       detail = demoBreakdown(entry);
     }
 
-    // 재결산 패널 — 보관된 결산에 확인 필요 건이 남아 있으면 여기서 정리해 다시 만든다
-    appendMonthRefixPanel(monthDetailEl, entry, detail);
-
     var tabsWrap = document.createElement("div");
     tabsWrap.className = "rtabs";
     tabsWrap.innerHTML =
       '<div class="rtab-bar">' +
         '<button type="button" class="rtab-btn" data-tab="summary">요약</button>' +
         '<button type="button" class="rtab-btn" data-tab="tx">거래 내역</button>' +
+        '<button type="button" class="rtab-btn hidden" data-tab="fix">확인 필요</button>' +
         '<button type="button" class="rtab-btn" data-tab="doc">결산 요약 전문</button>' +
         '<button type="button" class="rtab-btn" data-tab="pdf">리포트</button>' +
       "</div>" +
@@ -1913,10 +2145,14 @@
         '<select class="tx-cat-filter" aria-label="카테고리 필터"></select></div>' +
         '<div class="tx-count"></div><div class="tx-scroll"></div>' +
       "</div>" +
+      '<div class="rtab-panel" data-panel="fix"></div>' +
       '<div class="rtab-panel" data-panel="doc"><div class="summary-doc"><p class="loading">요약을 불러오는 중…</p></div></div>' +
       '<div class="rtab-panel" data-panel="pdf"></div>';
     monthDetailEl.appendChild(tabsWrap);
     initTabs(tabsWrap);
+
+    // 확인 필요 탭 — 보관된 결산에 확인 필요 건이 남아 있으면 이 탭에서 정리해 다시 만든다
+    appendMonthRefixPanel(tabsWrap, entry, detail);
 
     renderTxPanel(tabsWrap.querySelector('[data-panel="tx"]'), detail.rows,
       REAL ? "" : " · 데모는 샘플 거래로 근사 구성됩니다");
@@ -1985,7 +2221,7 @@
   /* 서고 그리드 — shelfYear 기준 12개월 */
   function renderShelf() {
     syncYearNav("shelf", shelfYear);
-    document.getElementById("shelf-title").textContent = shelfYear + "년 결산 서고";
+    document.getElementById("shelf-title").textContent = shelfYear + "년 서고";
     monthsEl.innerHTML = "";
     for (var m = 1; m <= 12; m++) {
       (function (key, mm) {
@@ -1994,21 +2230,28 @@
         btn.type = "button";
         if (entry) {
           btn.className = "m-card archived";
-          btn.innerHTML = '<div class="mh"><span class="mm"></span><span class="amt mono"></span></div><div class="flagged"></div>';
+          btn.innerHTML = '<span class="spine"><b class="mm"></b><span class="amt mono"></span></span>';
+          var sp = btn.querySelector(".spine");
+          // 책등 높이 미세 변주 — 같은 키의 장부만 꽂힌 선반보다 실제 서가처럼 보인다
+          sp.style.setProperty("--h", 122 + (mm % 3) * 8 + "px");
           btn.querySelector(".mm").textContent = mm + "월";
           btn.querySelector(".amt").textContent = entry.total_expense ? fmtShortMan(entry.total_expense) : "";
-          // 확인 필요 건수만 표시 — 0건이면 아무것도 붙이지 않아 깨끗한 달이 한눈에 구분된다
+          // 확인 필요 건수는 책갈피 탭으로 — 0건이면 붙이지 않아 깨끗한 장부가 한눈에 구분된다
           if (entry.flagged_count) {
-            var fl = btn.querySelector(".flagged");
-            fl.textContent = "확인 필요 ";
-            var cnt = document.createElement("b");
-            cnt.textContent = entry.flagged_count + "건";
-            fl.appendChild(cnt);
+            var tab = document.createElement("i");
+            tab.className = "flag-tab";
+            tab.textContent = entry.flagged_count;
+            tab.title = "확인 필요 " + entry.flagged_count + "건";
+            sp.appendChild(tab);
           }
+          btn.setAttribute("aria-label", mm + "월 장부" +
+            (entry.flagged_count ? " — 확인 필요 " + entry.flagged_count + "건" : ""));
+          if (key === justArchivedKey) sp.classList.add("slot-in");
           btn.addEventListener("click", function () { openMonth(key); });
         } else if ((vaultReal && key <= CUR_KEY) || key === CUR_KEY) {
           btn.className = "m-card current";
-          btn.innerHTML = '<div class="mh"><span class="mm"></span></div><span class="go"></span>';
+          btn.innerHTML = '<span class="spine"><b class="mm"></b><span class="go"></span></span>';
+          btn.querySelector(".spine").style.setProperty("--h", "114px");
           btn.querySelector(".mm").textContent = mm + "월";
           btn.querySelector(".go").textContent =
             (key === selectedMonth && jobPhase === "result") ? "결과 보기 →" :
@@ -2016,8 +2259,8 @@
           btn.addEventListener("click", function () { openMonth(key); });
         } else {
           btn.className = "m-card empty";
-          btn.innerHTML = '<div class="mh"><span class="mm"></span></div><span>자료 없음</span>';
-          btn.querySelector(".mm").textContent = mm + "월";
+          btn.innerHTML = '<span class="slot-mm"></span>';
+          btn.querySelector(".slot-mm").textContent = mm + "월";
           btn.addEventListener("click", function () {
             showToast(vaultReal ? "아직 오지 않은 달입니다 — 오늘이 포함된 달까지 결산할 수 있습니다"
                                 : COPY.toastMonthLimit);
@@ -2068,19 +2311,138 @@
   document.getElementById("side-yprev").addEventListener("click", function () { sideYear = stepYear(sideYear, -1); renderSideMonths(); });
   document.getElementById("side-ynext").addEventListener("click", function () { sideYear = stepYear(sideYear, 1); renderSideMonths(); });
   document.getElementById("shelf-back").addEventListener("click", backToShelf);
+
+  /* ← → 키로 장 넘기기 — 보관월 상세(펼친 장부)가 열려 있을 때만, 달력 기준 한 달씩 */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+    var t = ev.target;
+    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if (viewApp.classList.contains("hidden") || dashSec.classList.contains("hidden")) return;
+    if (!document.getElementById("month-sec").classList.contains("on")) return;
+    if (!viewKey) return;
+    var dir = ev.key === "ArrowRight" ? 1 : -1;
+    var target = dir > 0 ? nextMonthKey(viewKey) : prevMonthKey(viewKey);
+    if (canOpenMonth(target)) goBook(target, dir);
+  });
   renderVault(DEMO_MONTHS, false);
 
   /* ---------- 확인 테이블 공용 렌더 ----------
      중간 확인 패널(결산 진행)과 재결산 패널(결산 결과)이 같은 표 모양·입력 수집을 쓴다 */
+  /* 확인 표 카테고리 목록 — 정본은 분류 기준(docs/categories.md). 실제 모드는 서버 것을 한 번 받아
+     캐시해 쓰고, 받기 전·데모는 정본 스냅숏(DEMO_CATEGORIES)으로 채운다 */
+  var confirmCats = null;
+  function ensureConfirmCats() {
+    if (!REAL || confirmCats) return;
+    apiJson("categories").then(function (res) {
+      if (!res.ok || !res.data.content) return;
+      confirmCats = {
+        personal: parseCatTable(res.data.content, CAT_SECTIONS.personal).map(function (r) { return r[0]; }),
+        corporate: parseCatTable(res.data.content, CAT_SECTIONS.corporate).map(function (r) { return r[0]; })
+      };
+    }).catch(function () {}); // 못 받으면 스냅숏 폴백 — 확인 표가 막히지 않게 조용히 넘어간다
+  }
+  function confirmCatNames(division) {
+    var src = confirmCats || {
+      personal: DEMO_CATEGORIES.personal.map(function (r) { return r[0]; }),
+      corporate: DEMO_CATEGORIES.corporate.map(function (r) { return r[0]; })
+    };
+    if (division === "법인결제") return src.corporate.slice();
+    if (division === "개인결제") return src.personal.slice();
+    // 결제구분을 모르면 두 표를 합쳐 준다 (중복 제거)
+    var merged = [];
+    src.personal.concat(src.corporate).forEach(function (n) {
+      if (merged.indexOf(n) < 0) merged.push(n);
+    });
+    return merged;
+  }
+
+  /* 확인 표 입력 위젯 — 날짜는 년-월-일 표기 + 달력 버튼, 카테고리는 결제구분(개인/법인)에 맞는
+     드롭다운, 나머지는 텍스트. {el: 붙일 요소, ctl: 값·이벤트를 담당하는 입력}을 돌려준다 */
+  function confirmFieldInput(field, d) {
+    var val = d[field] || "";
+    if (field === "날짜" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      // 네이티브 date 입력은 로캘에 따라 월/일/년으로 보여서, 표기는 텍스트(YYYY-MM-DD)로
+      // 고정하고 달력은 숨긴 date 입력의 피커만 빌려 쓴다
+      var wrap = document.createElement("span");
+      wrap.className = "cp-date";
+      var text = document.createElement("input");
+      text.type = "text";
+      text.placeholder = "YYYY-MM-DD";
+      text.value = val;
+      var pick = document.createElement("input");
+      pick.type = "date";
+      pick.className = "cp-date-pick";
+      pick.tabIndex = -1;
+      pick.value = val;
+      pick.setAttribute("aria-hidden", "true");
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cp-date-btn";
+      btn.title = "달력에서 선택";
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+      btn.addEventListener("click", function () {
+        try { pick.showPicker(); } catch (e) { pick.click(); }
+      });
+      pick.addEventListener("change", function () {
+        if (!pick.value) return;
+        text.value = pick.value;
+        text.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      text.addEventListener("input", function () {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text.value)) pick.value = text.value;
+      });
+      wrap.appendChild(text);
+      wrap.appendChild(pick);
+      wrap.appendChild(btn);
+      return { el: wrap, ctl: text };
+    }
+    if (field === "카테고리") {
+      var sel = document.createElement("select");
+      var names = confirmCatNames(d["결제구분"]);
+      if (val && names.indexOf(val) < 0) names = [val].concat(names);
+      names.forEach(function (name) {
+        var opt = document.createElement("option");
+        opt.value = opt.textContent = name;
+        sel.appendChild(opt);
+      });
+      sel.value = val || names[0] || "";
+      return { el: sel, ctl: sel };
+    }
+    var input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = field;
+    input.value = val;
+    return { el: input, ctl: input };
+  }
+
   function fillConfirmTable(table, rows, editable) {
+    ensureConfirmCats();
     table.innerHTML = "";
     var head = document.createElement("tr");
-    ["반영", "거래"].concat(editable).concat(["사유"]).forEach(function (h) {
+    // 반영 열 머리 — 전체 선택 체크박스 (일부만 선택되면 indeterminate)
+    var thCheck = document.createElement("th");
+    var checkAll = document.createElement("input");
+    checkAll.type = "checkbox";
+    checkAll.className = "cp-check-all";
+    checkAll.title = "전체 선택";
+    thCheck.appendChild(checkAll);
+    head.appendChild(thCheck);
+    ["거래"].concat(editable).concat(["사유"]).forEach(function (h) {
       var th = document.createElement("th");
       th.textContent = h;
       head.appendChild(th);
     });
     table.appendChild(head);
+    function syncCheckAll() {
+      var checks = [].slice.call(table.querySelectorAll(".cp-check"));
+      var on = checks.filter(function (c) { return c.checked; }).length;
+      checkAll.checked = on > 0 && on === checks.length;
+      checkAll.indeterminate = on > 0 && on < checks.length;
+    }
+    checkAll.addEventListener("change", function () {
+      table.querySelectorAll(".cp-check").forEach(function (c) { c.checked = checkAll.checked; });
+      checkAll.indeterminate = false;
+    });
     rows.forEach(function (row) {
       var d = row.data || {};
       var tr = document.createElement("tr");
@@ -2089,6 +2451,7 @@
       var check = document.createElement("input");
       check.type = "checkbox";
       check.className = "cp-check";
+      check.addEventListener("change", syncCheckAll);
       tdCheck.appendChild(check);
       tr.appendChild(tdCheck);
       var info = document.createElement("td");
@@ -2097,13 +2460,12 @@
       tr.appendChild(info);
       editable.forEach(function (field) {
         var td = document.createElement("td");
-        var input = document.createElement("input");
-        input.type = "text";
-        input.dataset.field = field;
-        input.placeholder = field;
-        input.value = d[field] || "";
-        input.addEventListener("input", function () { check.checked = true; });
-        td.appendChild(input);
+        var widget = confirmFieldInput(field, d);
+        widget.ctl.dataset.field = field;
+        function markEdited() { check.checked = true; syncCheckAll(); }
+        widget.ctl.addEventListener("input", markEdited);
+        widget.ctl.addEventListener("change", markEdited);
+        td.appendChild(widget.el);
         tr.appendChild(td);
       });
       var reason = document.createElement("td");
@@ -2118,7 +2480,7 @@
     table.querySelectorAll("tr[data-tid]").forEach(function (tr) {
       if (!tr.querySelector(".cp-check").checked) return;
       var fields = {};
-      tr.querySelectorAll("input[data-field]").forEach(function (inp) {
+      tr.querySelectorAll("[data-field]").forEach(function (inp) {
         fields[inp.dataset.field] = inp.value;
       });
       resolutions.push({ transaction_id: tr.dataset.tid, fields: fields });
@@ -2320,7 +2682,7 @@
   var fraudToggle = document.getElementById("fraud-toggle");
   function fraudOn() { return !!(fraudToggle && fraudToggle.checked); }
 
-  /* 부정 사용 감지 켠 데모 — 기본 연출에 검증 3(부정) 축·로그를 끼워 넣은 사본을 만든다 */
+  /* 부정 사용 감지 켠 데모 — 기본 연출에 부정 사용 검증(부정) 축·로그를 끼워 넣은 사본을 만든다 */
   function buildFraudScript() {
     var out = [];
     SCRIPTED.forEach(function (ev) {
@@ -2357,7 +2719,8 @@
     document.getElementById("run-done").classList.add("hidden");
     document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
-    setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
+    setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
+    setBookNav(selectedMonth || CUR_KEY);
     renderSideMonths();
     showPane("run-sec");
     var i = 0;
@@ -2534,7 +2897,8 @@
     document.getElementById("run-done").classList.add("hidden");
     document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
-    setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
+    setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
+    setBookNav(selectedMonth || CUR_KEY);
     renderSideMonths();
     showPane("run-sec");
 
@@ -2704,6 +3068,9 @@
     document.getElementById("r-count").textContent =
       "거래 " + data.tx_count + "건 · 업로드 파일 " + (data.upload_count || 0) + "건" +
       (data.flagged_count ? " · 확인 필요 " + data.flagged_count + "건" : "");
+    // 확인 필요 네모칸 — 남은 건이 있을 때만 보이고, 누르면 확인 필요 탭으로 간다
+    document.getElementById("r-flagged").textContent = (data.flagged_count || 0) + "건";
+    document.getElementById("r-flagged-stat").classList.toggle("hidden", !data.flagged_count);
 
     document.getElementById("r-cats-wrap").innerHTML = catsBodyHtml(data.by_category, data.total_expense);
     document.getElementById("r-split-wrap").innerHTML = splitBodyHtml(data.by_payer);
@@ -2725,7 +3092,8 @@
     document.getElementById("r-pdf-frame").src = data.pdfUrl || "artifacts/result.pdf?inline=1";
 
     jobPhase = "result";
-    setDashTop(monthTitle(month) + " 결산", "결산 완료", "ok");
+    setDashTop(monthTitle(month), "결산 완료", "ok");
+    setBookNav(month);
     renderCompare(month, data);
     // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
     lastResult = { month: month, total_expense: data.total_expense || 0,
@@ -2753,7 +3121,7 @@
     deltaEl.textContent = "";
     deltaEl.className = "delta";
     if (!prev || !prev.total_expense) {
-      host.innerHTML = '<div class="hint">전월 보관본이 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div>';
+      host.innerHTML = '<div class="hint">전월 장부가 서고에 없어 비교할 수 없습니다 — 다음 결산부터 자동으로 비교됩니다.</div>';
       return;
     }
     var diff = (cur.total_expense || 0) - prev.total_expense;
@@ -2765,22 +3133,16 @@
       deltaEl.textContent = (diff > 0 ? "▲ " : "▼ ") + fmt(diff) +
         " (전월 대비 " + (diff > 0 ? "+" : "-") + (Math.round(pct * 10) / 10) + "%)";
     }
-    // 추이 — 이 달 직전의 연속 보관 구간(최대 3개월) + 이번 결산
+    // 추이 — 이 달 직전의 연속 보관 구간(최대 5개월) + 이번 결산 = 최근 6개월 꺾은선
     var rows = [];
     var k = monthKey;
-    while (rows.length < 3) {
+    while (rows.length < 5) {
       k = prevMonthKey(k);
       var e = findArchived(k);
       if (!e || !e.total_expense) break;
       rows.unshift({ key: k, total: e.total_expense });
     }
     rows.push({ key: monthKey, total: cur.total_expense || 0, cur: true });
-    var maxV = Math.max.apply(null, rows.map(function (r) { return r.total; })) || 1;
-    var bars = rows.map(function (r) {
-      return '<div class="t-col' + (r.cur ? " cur" : "") + '"><i style="height:' +
-        Math.round(18 + 26 * r.total / maxV) + 'px"></i>' + monthLabel(r.key) + "<br>" +
-        '<span class="mono">' + fmtShortMan(r.total) + "</span></div>";
-    }).join("");
     function noteRow(label, value, cls) {
       return '<div class="row"><span class="k">' + label + '</span><span class="mono' +
         (cls ? " " + cls : "") + '">' + value + "</span></div>";
@@ -2788,7 +3150,8 @@
     var fd = (cur.flagged_count || 0) - (prev.flagged_count || 0);
     host.innerHTML =
       '<div class="cmp">' +
-        '<div class="trend"><div class="tt"><b>지출 추이</b>보관된 월 기준</div><div class="t-bars">' + bars + "</div></div>" +
+        '<div class="trend"><div class="tt"><b>지출 추이</b>보관된 월 기준 · 포인트에 올리면 금액이 보입니다</div>' +
+          trendChartHtml(rows) + "</div>" +
         '<div class="cmp-notes">' +
           noteRow("총지출", pct < 0.5 ? "전월(" + fmtShortMan(prev.total_expense) + ")과 비슷"
                   : (diff > 0 ? "▲ " : "▼ ") + fmt(diff),
@@ -2818,13 +3181,17 @@
   var refixMonth = null;
   var lastResultData = null; // 마지막으로 그린 결과 데이터 — 데모 재결산이 이 사본을 수정해 다시 그린다
 
-  function hideRefixPanel() { refixPanel.classList.add("hidden"); }
+  function hideRefixPanel() {
+    refixPanel.classList.add("hidden");
+    setFixTabVisible(document.getElementById("r-tabs"), 0);
+  }
   function setRefixBusy(busy) {
     refixBtn.disabled = busy;
-    refixBtn.textContent = busy ? "재결산 중…" : "수정 반영해 다시 결산";
+    refixBtn.textContent = busy ? "재결산 중…" : "재결산";
   }
   function setRefixTitle(count) {
     document.getElementById("refix-title").textContent = "확인 필요 거래 " + count + "건 정리";
+    setFixTabVisible(document.getElementById("r-tabs"), count);
   }
 
   function demoRefixPending(rows) {
@@ -2835,7 +3202,7 @@
       pending.push({
         transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
         data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
-                "결제처": r["결제처"], "카테고리": r["카테고리"] }
+                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": r["결제구분"] || "" }
       });
     });
     return { editable: ["날짜", "금액", "카테고리"], rows: pending };
@@ -2933,6 +3300,13 @@
     }, REDUCED ? 0 : 1200);
   }
 
+  document.getElementById("r-flagged-stat").addEventListener("click", function () {
+    selectFixTab(document.getElementById("r-tabs"));
+  });
+  document.getElementById("r-expense-stat").addEventListener("click", function () {
+    goTab(document.getElementById("r-tabs"), "summary");
+  });
+
   refixBtn.addEventListener("click", function () {
     var resolutions = collectResolutions(refixTable);
     if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
@@ -2960,14 +3334,14 @@
       '<div class="cp-head"><b class="rfx-title">확인 필요 거래 정리</b>' +
       '<span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>' +
       '<div class="cp-scroll"><table class="cp-table"></table></div>' +
-      '<div class="cp-actions"><button class="btn rfx-apply" type="button">수정 반영해 다시 결산</button>' +
+      '<div class="cp-actions"><button class="btn rfx-apply" type="button">재결산</button>' +
       '<span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span></div>';
     return el;
   }
   function setPanelBusy(panel, busy) {
     var btn = panel.querySelector(".rfx-apply");
     btn.disabled = busy;
-    btn.textContent = busy ? "재결산 중…" : "수정 반영해 다시 결산";
+    btn.textContent = busy ? "재결산 중…" : "재결산";
   }
 
   function demoRefixArchived(entry, panel) {
@@ -3000,13 +3374,18 @@
     }, REDUCED ? 0 : 1200);
   }
 
-  function appendMonthRefixPanel(host, entry, detail) {
+  function appendMonthRefixPanel(tabsRoot, entry, detail) {
+    var host = tabsRoot.querySelector('[data-panel="fix"]');
     var panel = buildRefixPanelEl();
     var table = panel.querySelector(".cp-table");
+    function showFix(count) {
+      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + count + "건 정리";
+      setFixTabVisible(tabsRoot, count);
+    }
     if (!REAL) {
       var pending = demoRefixPending(detail.rows);
       if (!pending.rows.length) return;
-      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + pending.rows.length + "건 정리";
+      showFix(pending.rows.length);
       fillConfirmTable(table, pending.rows, pending.editable);
       panel.querySelector(".rfx-apply").addEventListener("click", function () {
         demoRefixArchived(entry, panel);
@@ -3014,14 +3393,12 @@
       host.appendChild(panel);
       return;
     }
-    // 실제 모드 — 자리만 잡아 두고 보관본 pending이 오면 보인다 (없으면 자리 제거)
-    panel.classList.add("hidden");
+    // 실제 모드 — 자리만 잡아 두고 보관본 pending이 오면 탭 버튼이 보인다 (없으면 자리 제거)
     host.appendChild(panel);
     apiJson("refix/pending?month=" + entry.month).then(function (res) {
       if (!res.ok || !(res.data.rows || []).length) { panel.remove(); return; }
-      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + res.data.rows.length + "건 정리";
+      showFix(res.data.rows.length);
       fillConfirmTable(table, res.data.rows, res.data.editable || []);
-      panel.classList.remove("hidden");
       panel.querySelector(".rfx-apply").addEventListener("click", function () {
         var resolutions = collectResolutions(table);
         if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
@@ -3051,6 +3428,7 @@
   }
   function autoArchive(key) {
     if (!lastResult) return;
+    justArchivedKey = key;
     if (REAL) {
       // 보관본은 파이프라인이 이미 만들어 뒀다 — 목록만 새로 읽어 서고에 노출한다
       loadVault();
@@ -3308,12 +3686,17 @@
       setCatDirty(false);
       showToast("분류 기준을 저장했습니다 — 다음 결산 실행부터 반영됩니다");
       loadCategories(); // 정본 재로드 — 서버가 찍은 최종 업데이트 일시를 그대로 보여준다
+      confirmCats = null; // 확인 표 드롭다운 캐시도 새 정본으로 갱신
+      ensureConfirmCats();
     }).catch(function () { restoreSaveBtn(); showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
   });
 
   /* ---- 실제 모드 켜기 ---- */
   function enableRealMode() {
     REAL = true;
+
+    // 확인 표 카테고리 드롭다운용 정본을 미리 받아 둔다
+    ensureConfirmCats();
 
     // "이번 달" 기준을 오늘 날짜로 — 결산 서고 연도도 그 해로 맞춘다
     var now = new Date();

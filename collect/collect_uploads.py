@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import sys
+import json
 import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +29,9 @@ from concurrent.futures import ThreadPoolExecutor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(BASE_DIR)
 DEFAULT_UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")
+# 현금 등 자동 수집이 어려운 거래의 직접 입력 (collect.md "하는 단계 7") — 웹 서버가
+# uploads/inbox/ 밖에 쓴다 (orchestrator/server.py의 POST /uploads/manual)
+MANUAL_ENTRIES_PATH = os.path.join(REPO_ROOT, "uploads", "manual_entries.json")
 
 TEXT_EXTS = {".csv", ".txt"}
 IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
@@ -275,6 +279,39 @@ def map_receipt(r):
     }
 
 
+def load_manual_entries():
+    if not os.path.exists(MANUAL_ENTRIES_PATH):
+        return []
+    try:
+        with open(MANUAL_ENTRIES_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def map_manual_entry(m):
+    """POST /uploads/manual로 받은 직접 입력 한 건 → 거래 표 스키마 v1 한 행.
+
+    값을 사용자가 직접 입력했으므로 핵심 값(날짜·금액·결제처)을 못 읽는 경우가 없다 —
+    collect_status는 항상 확인됨 (collect.md "하는 단계 7").
+    """
+    return {
+        "transaction_id": "",
+        "날짜": m.get("날짜") or "",
+        "금액": m.get("금액") or 0,
+        "결제처": m.get("결제처") or "",
+        "카테고리": "",
+        "비고": m.get("비고") or "",
+        "결제수단": m.get("결제수단") or "현금",
+        "결제구분": m.get("결제구분") or "개인결제",
+        "원거래통화": "",
+        "원거래금액": "",
+        "source_type": "manual",
+        "collect_status": "확인됨",
+        "구매항목": "",
+    }
+
+
 def process_image(path):
     """이미지 1건 처리 — (rows, error) 반환. AI 실패는 error 문자열로 흡수한다.
 
@@ -349,6 +386,7 @@ def build_envelope(rows, stats, errors):
     """interface-spec.md "단계 결과 보고" 규격 — 상태 미확인 행은 확인 필요, 파일 실패는 오류."""
     total = len(rows)
     message = (f"업로드 처리 — 카드사 파일 {stats['card']}건 · 이미지 {stats['image']}장"
+               + (f" · 직접 입력 {stats['manual']}건" if stats.get("manual") else "")
                + (f" · 실패 {len(errors)}건" if errors else ""))
     if total == 0:
         return {"stage": "collect", "status": "empty", "output": "",
@@ -383,8 +421,9 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
     보고 규격·산출물에는 영향 없음).
     """
     paths = sorted(e.path for e in os.scandir(upload_dir) if e.is_file()) if os.path.isdir(upload_dir) else []
-    if not paths:
-        return {"out_path": None, "rows": [], "envelope": build_envelope([], {"card": 0, "image": 0}, [])}
+    manual_entries = load_manual_entries()
+    if not paths and not manual_entries:
+        return {"out_path": None, "rows": [], "envelope": build_envelope([], {"card": 0, "image": 0, "manual": 0}, [])}
 
     # zip은 압축을 풀어 안의 파일을 개별 원천으로 편입한다 (collect.md "하는 단계 0" 확정).
     # 풀린 파일은 임시 폴더에만 쓰고 처리가 끝나면 지운다 — uploads/inbox/에는 원본 zip만 남는다.
@@ -447,6 +486,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         if tempdir:
             shutil.rmtree(tempdir, ignore_errors=True)
 
+    rows += [map_manual_entry(m) for m in manual_entries]  # 현금 등 직접 입력 (collect.md "하는 단계 7")
     rows = dedupe_receipt_matches(rows)  # 영수증-카드내역 같은 거래 병합 (이중 계상 방지)
     for r in rows:  # 통화 표기 승격 안전망 — 원천(정형·AI 변환·영수증) 공통, 채워진 값은 유지
         promote_foreign(r)
@@ -460,7 +500,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         for r in rows:
             writer.writerow(r)
 
-    stats = {"card": len(hana_paths) + len(table_paths), "image": len(image_paths)}
+    stats = {"card": len(hana_paths) + len(table_paths), "image": len(image_paths), "manual": len(manual_entries)}
     return {"out_path": out_path if rows else None, "rows": rows,
             "envelope": build_envelope(rows, stats, errors)}
 

@@ -30,8 +30,9 @@ model: sonnet
 
 # 내놓는 모양
 
-- `merge/YYYYMM_ledger.xlsx` — 엑셀 회계장부, 거래 표 스키마와 동일 컬럼
-- `merge/YYYYMM_report.pdf` — PDF 결산 리포트, 위 7개 목차
+- `merge/result.xlsx` — 엑셀 회계장부, 거래 표 스키마와 동일 컬럼 (칸 폴더 공용 관례 `result.*`, AGENTS.md §2)
+- `merge/result.pdf` — PDF 결산 리포트, 위 7개 목차
+- 웹 다운로드 시에는 `{월}_ledger_{생성일시}.xlsx`·`{월}_report_{생성일시}.pdf`로 파일명만 바꿔 내려준다 (orchestrator/server.py — 산출물 자체의 자리·이름은 바뀌지 않는다)
 - 결과를 만드는 데 코드가 필요하면 그 코드도 merge 폴더 안에 둔다
 
 # 못 할 때
@@ -47,4 +48,4 @@ model: sonnet
 
 # 도구 제한
 
-읽기는 입력 자리인 refine/·verify1/·verify2/ 폴더와 merge/ 폴더, 그리고 과거 월 집계용 archive/ 폴더(`summary.json`만, 읽기 전용) 안에서만 한다. 쓰기는 merge/ 폴더 안에서만 한다. `Bash`는 merge/ 안의 변환 코드 실행(CSV→xlsx·pdf)에만 쓴다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.
+읽기는 입력 자리인 refine/·verify1/·verify2/·verify3/ 폴더(verify3/는 부정 사용 감지 토글을 켠 실행에만 존재)와 merge/ 폴더, 그리고 과거 월 집계용 archive/ 폴더(`summary.json`만, 읽기 전용) 안에서만 한다. 쓰기는 merge/ 폴더 안에서만 한다. `Bash`는 merge/ 안의 변환 코드 실행(CSV→xlsx·pdf)에만 쓴다. 그 외 폴더 접근이나 다른 도구 사용은 하지 않는다.

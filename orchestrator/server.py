@@ -9,6 +9,8 @@
 - GET  /uploads             : 업로드된 파일 목록
 - POST /uploads             : 파일 업로드 (JSON base64) → uploads/inbox/ 저장
 - POST /uploads/delete      : 업로드 파일 1건 삭제 / POST /uploads/clear : 전체 삭제
+- GET  /uploads/manual      : 현금 등 직접 입력 목록 (collect.md "하는 단계 7")
+- POST /uploads/manual      : 직접 입력 1건 추가 / POST /uploads/manual/delete : 1건 삭제
 - POST /runs                : 파이프라인 실행 시작 (run-pipeline.py를 백그라운드 스레드로)
                               body.source가 "uploads"면 업로드 파일로 수집한다
                               body.fraud_check가 참이면 부정 사용 검증(부정 사용 감지)을 함께 실행한다
@@ -133,11 +135,96 @@ def load_env_value(key):
     return None
 
 
+DRIVE_MANIFEST_PATH = os.path.join(REPO_ROOT, "uploads", "drive_manifest.json")  # uploads/inbox/ 밖에 둬서 collect가 데이터 파일로 오인해 처리하지 않게 한다
+
+
+def load_drive_manifest():
+    if not os.path.exists(DRIVE_MANIFEST_PATH):
+        return set()
+    try:
+        with open(DRIVE_MANIFEST_PATH, encoding="utf-8") as f:
+            return set(json.load(f))
+    except (OSError, ValueError):
+        return set()
+
+
+def add_to_drive_manifest(names):
+    if not names:
+        return
+    names = load_drive_manifest() | set(names)
+    os.makedirs(os.path.dirname(DRIVE_MANIFEST_PATH), exist_ok=True)
+    with open(DRIVE_MANIFEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(sorted(names), f, ensure_ascii=False)
+
+
 def list_uploads():
     if not os.path.isdir(UPLOAD_DIR):
         return []
-    return [{"name": e.name, "size": e.stat().st_size}
+    drive_names = load_drive_manifest()
+    return [{"name": e.name, "size": e.stat().st_size,
+             "source": "drive" if e.name in drive_names else "upload"}
             for e in sorted(os.scandir(UPLOAD_DIR), key=lambda e: e.name) if e.is_file()]
+
+
+# 현금 등 자동 수집이 어려운 거래의 직접 입력 (collect.md "하는 단계 7") — uploads/inbox/
+# 밖에 둬서 파일 기반 수집(카드사 엑셀·이미지·zip) 경로와 섞이지 않게 한다.
+MANUAL_ENTRIES_PATH = os.path.join(REPO_ROOT, "uploads", "manual_entries.json")
+MANUAL_REQUIRED_FIELDS = ("날짜", "결제처", "금액")
+
+
+def load_manual_entries():
+    if not os.path.exists(MANUAL_ENTRIES_PATH):
+        return []
+    try:
+        with open(MANUAL_ENTRIES_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def save_manual_entries(entries):
+    os.makedirs(os.path.dirname(MANUAL_ENTRIES_PATH), exist_ok=True)
+    with open(MANUAL_ENTRIES_PATH, "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False)
+
+
+def add_manual_entry(payload):
+    """직접 입력 한 건을 검증해 저장한다 — 실패하면 ValueError(사용자에게 보여줄 사유)."""
+    missing = [k for k in MANUAL_REQUIRED_FIELDS if not str(payload.get(k, "")).strip()]
+    if missing:
+        raise ValueError(f"필수 항목 누락: {', '.join(missing)}")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(payload.get("날짜", "")).strip()):
+        raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다")
+    try:
+        amount = int(payload.get("금액"))
+    except (TypeError, ValueError):
+        raise ValueError("금액은 숫자여야 합니다")
+    if amount == 0:
+        raise ValueError("금액은 0이 될 수 없습니다")
+    payment_type = payload.get("결제구분") or "개인결제"
+    if payment_type not in ("개인결제", "법인결제"):
+        raise ValueError("결제구분은 개인결제/법인결제 중 하나여야 합니다")
+
+    entries = load_manual_entries()
+    next_id = (max((e["id"] for e in entries), default=0)) + 1
+    entry = {
+        "id": next_id,
+        "날짜": payload["날짜"].strip(),
+        "결제처": payload["결제처"].strip(),
+        "금액": -abs(amount),  # 거래 표 스키마 — 지출은 음수 (직접 입력은 대부분 현금 지출)
+        "결제구분": payment_type,
+        "결제수단": (payload.get("결제수단") or "현금").strip(),
+        "비고": (payload.get("비고") or "").strip(),
+    }
+    entries.append(entry)
+    save_manual_entries(entries)
+    return entries
+
+
+def delete_manual_entry(entry_id):
+    entries = [e for e in load_manual_entries() if e.get("id") != entry_id]
+    save_manual_entries(entries)
+    return entries
 
 
 def build_result_data(month=None):
@@ -225,6 +312,11 @@ def drive_import(month):
     사전 조건: claude CLI 설치 + .mcp.json에 Drive MCP 등록(.mcp.json.example 참고) +
     해당 MCP의 계정 인증이 이 머신에서 완료돼 있어야 한다. 조건이 빠지면 안내 오류를 돌려준다.
     CLI는 repo 밖 임시 디렉터리에서 실행한다 (프로젝트 지침 주입 방지 — run-pipeline.py와 같은 관례).
+
+    월로 거르지 않고 폴더의 파일을 그대로 가져온다 — 범위 밖 데이터를 거르는 책임은 수집이
+    아니라 기간·금액 검증 몫이다(interface-spec.md §실행 파라미터: "수집은 대상 월 위주로
+    모으되 걸러내는 책임은 지지 않는다"). month는 프롬프트가 아니라 반환값(신규 저장 파일
+    목록)을 통해 "Drive에서 가져옴" 표시에만 쓴다.
     """
     if not shutil.which("claude"):
         raise RuntimeError("claude CLI가 설치되어 있지 않습니다 — Drive 가져오기는 CLI 경유로 동작합니다")
@@ -232,12 +324,14 @@ def drive_import(month):
         raise RuntimeError(".mcp.json이 없습니다 — .mcp.json.example을 복사해 Drive MCP를 등록하고 "
                            "계정 인증을 먼저 완료해 주세요")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    before = {e.name for e in os.scandir(UPLOAD_DIR) if e.is_file()}
     folder = load_env_value("DRIVE_FOLDER") or "ledger-flow"
     allowed = ", ".join(sorted(UPLOAD_EXTS))
     prompt = (
         f"연결된 Google Drive MCP 도구로 Drive에서 폴더 이름 \"{folder}\"(없으면 그 이름이 포함된 폴더)를 찾아, "
-        f"그 안의 파일 중 결산 대상 월 {month}에 해당하는 카드 내역·영수증 파일만 골라 "
-        f"로컬 디렉터리 {UPLOAD_DIR} 에 원본 파일명 그대로 저장하라. "
+        f"그 안의 카드 내역·영수증 파일을 모두 골라 로컬 디렉터리 {UPLOAD_DIR} 에 "
+        "원본 파일명 그대로 저장하라. 대상 월로 미리 거르지 말고 폴더의 파일을 그대로 가져온다 — "
+        f"범위 밖 파일을 거르는 일은 이후 단계(검증) 몫이다. "
         f"허용 확장자: {allowed} — 그 외 파일은 건너뛴다. 파일당 10MB를 넘으면 건너뛴다. "
         "작업이 끝나면 저장한 파일명 목록과 건너뛴 파일·사유를 한국어로 짧게 보고하라. "
         "Drive에 접근할 수 없으면 그 사실만 보고하라."
@@ -248,6 +342,8 @@ def drive_import(month):
          "Write,mcp__gdrive__*", prompt],
         capture_output=True, text=True, timeout=DRIVE_IMPORT_TIMEOUT,
         cwd=tempfile.gettempdir())
+    after = {e.name for e in os.scandir(UPLOAD_DIR) if e.is_file()}
+    add_to_drive_manifest(after - before)  # 실제로 새로 생긴 파일만 "Drive에서 가져옴"으로 표시
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()[:300]
         raise RuntimeError(f"Drive 가져오기 실패 (claude CLI exit {result.returncode}): {detail}")
@@ -423,6 +519,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/uploads":
             self._send_json(200, {"files": list_uploads()})
+            return
+
+        if path == "/uploads/manual":
+            self._send_json(200, {"entries": load_manual_entries()})
             return
 
         if path == "/categories":
@@ -676,7 +776,34 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/uploads/clear":
             for entry in list_uploads():
                 os.remove(os.path.join(UPLOAD_DIR, entry["name"]))
+            if os.path.exists(DRIVE_MANIFEST_PATH):
+                os.remove(DRIVE_MANIFEST_PATH)
+            if os.path.exists(MANUAL_ENTRIES_PATH):
+                os.remove(MANUAL_ENTRIES_PATH)
             self._send_json(200, {"files": []})
+            return
+
+        if self.path == "/uploads/manual":
+            try:
+                payload = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                self._send_json(400, {"error": "요청 본문이 JSON이 아닙니다"})
+                return
+            try:
+                entries = add_manual_entry(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            self._send_json(200, {"entries": entries})
+            return
+
+        if self.path == "/uploads/manual/delete":
+            try:
+                entry_id = int(json.loads(raw).get("id")) if raw else None
+            except (json.JSONDecodeError, TypeError, ValueError):
+                entry_id = None
+            entries = delete_manual_entry(entry_id) if entry_id is not None else load_manual_entries()
+            self._send_json(200, {"entries": entries})
             return
 
         if self.path == "/call-agent":

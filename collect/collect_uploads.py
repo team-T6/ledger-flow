@@ -151,12 +151,42 @@ def pdf_to_text(path):
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
+# 결제처·비고의 해외결제 표기 승격용 패턴 — "29.99 USD" / "USD 29.99" (단계 문서 "하는 단계 1" 확정).
+# 대상 통화는 verify2.md 상식 환율 범위 표와 맞춘다
+FOREIGN_CODES = "USD|EUR|JPY|CNY|GBP"
+FOREIGN_PATTERNS = [
+    re.compile(rf"([0-9]+(?:\.[0-9]+)?)\s*({FOREIGN_CODES})\b"),
+    re.compile(rf"\b({FOREIGN_CODES})\s*([0-9]+(?:\.[0-9]+)?)"),
+]
+
+
+def promote_foreign(row):
+    """결제처·비고의 통화 표기를 원거래통화·원거래금액 컬럼으로 승격한다 (일반 코드).
+
+    이미 채워진 값은 건드리지 않는다. 통화 컬럼이 없는 원본(가맹점명에 'AMAZON.COM 29.99 USD'처럼
+    섞인 경우)을 위한 안전망 — 검증 2의 환산 검증이 이 컬럼을 근거로 돈다.
+    """
+    if str(row.get("원거래통화") or "").strip():
+        return
+    text = f"{row.get('결제처') or ''} {row.get('비고') or ''}"
+    for pattern in FOREIGN_PATTERNS:
+        m = pattern.search(text)
+        if not m:
+            continue
+        a, b = m.group(1), m.group(2)
+        currency, amount = (a, b) if a.isalpha() else (b, a)
+        row["원거래통화"] = currency
+        row["원거래금액"] = amount
+        return
+
+
 def map_table_row(r):
     """call_agent_convert_table 출력 행 → 거래 표 스키마 v1 (transaction_id는 나중에 부여)."""
     income = r.get("수익") or 0
     expense = r.get("지출") or 0
     amount = income if income > 0 else -expense
     payer_hint = f"{r.get('결제자') or ''} {r.get('결제수단') or ''}"
+    foreign_amount = r.get("원거래금액") or 0
     return {
         "transaction_id": "",
         "날짜": r.get("날짜") or "",
@@ -166,8 +196,9 @@ def map_table_row(r):
         "비고": r.get("비고") or "",
         "결제수단": r.get("결제수단") or "",
         "결제구분": "법인결제" if "법인" in payer_hint else "개인결제",
-        "원거래통화": "",         # 해외 원거래 정보는 원본 비고 보존으로 대신한다 — 판정은 검증 2 몫
-        "원거래금액": "",
+        # 해외결제면 AI 변환이 원본 통화·해외금액을 함께 내놓는다 — 국내 결제는 빈칸 유지
+        "원거래통화": (r.get("원거래통화") or "").strip(),
+        "원거래금액": foreign_amount if foreign_amount else "",
         "source_type": "card_excel",
         "collect_status": "확인됨" if r.get("확인됨") else "확인 필요",
         "구매항목": r.get("구매항목") or "",
@@ -366,6 +397,8 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         if tempdir:
             shutil.rmtree(tempdir, ignore_errors=True)
 
+    for r in rows:  # 통화 표기 승격 안전망 — 원천(정형·AI 변환·영수증) 공통, 채워진 값은 유지
+        promote_foreign(r)
     assign_ids(rows, month)
     rows.sort(key=lambda r: (r["날짜"], r["transaction_id"]))
 

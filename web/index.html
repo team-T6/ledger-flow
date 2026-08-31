@@ -346,6 +346,15 @@
   .save-actions { display: flex; gap: 10px; flex-wrap: wrap; }
   .save-actions .btn { font-size: 13px; padding: 9px 18px; }
 
+  /* 결산 완료 안내 — 진행 화면에서 결과로 넘어갈지 묻는다 (자동 전환 없음) */
+  .run-done {
+    margin: 22px 0 6px; padding: 16px 20px;
+    background: var(--card); border: 1px solid var(--accent); border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  }
+  .run-done b { font-size: 14.5px; }
+  .run-done .btn { font-size: 13px; padding: 9px 18px; }
+
   .dash-body { flex: 1; overflow-y: auto; padding: 24px 28px 40px; }
   .dash-body .wrap { max-width: 720px; margin: 0 auto; }
   .dash-pane { display: none; }
@@ -799,7 +808,7 @@
 <div class="dash-pane" id="run-sec">
   <div class="wrap">
     <div class="eyebrow">결산 진행</div>
-    <h2>렛저가 결산하고 있습니다</h2>
+    <h2 id="run-title">렛저가 결산하고 있습니다</h2>
 
     <div class="overall">
       <div class="oh"><b>전체 <span class="mono" id="o-pct">0%</span></b><span class="mono" id="o-time"></span></div>
@@ -844,6 +853,11 @@
         <button class="btn btn-ghost" id="confirm-skip">그대로 계속</button>
         <span class="hint">체크한 행만 확인 완료로 반영됩니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
       </div>
+    </div>
+
+    <div class="run-done hidden" id="run-done">
+      <div><b>결산이 끝났습니다</b><div class="hint">요약·거래 내역·리포트가 준비되었습니다</div></div>
+      <button class="btn" id="run-done-open" type="button">결산 결과 보기 →</button>
     </div>
 
     <details class="more runlog-more">
@@ -2036,6 +2050,8 @@
     var log = document.getElementById("runlog");
     log.innerHTML = "";
     progressUI.reset();
+    document.getElementById("run-done").classList.add("hidden");
+    document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
     setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
     renderSideMonths();
@@ -2205,6 +2221,8 @@
     var log = document.getElementById("runlog");
     log.innerHTML = "";
     progressUI.reset();
+    document.getElementById("run-done").classList.add("hidden");
+    document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
     setDashTop(monthTitle(selectedMonth || CUR_KEY) + " 결산", "결산 중", "run");
     renderSideMonths();
@@ -2443,13 +2461,19 @@
     jobPhase = "result";
     setDashTop(monthTitle(month) + " 결산", "결산 완료", "ok");
     renderCompare(month, data);
-    showPane("result-sec");
     // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
     lastResult = { month: month, total_expense: data.total_expense || 0,
                    tx_count: data.tx_count || 0, flagged_count: data.flagged_count || 0 };
     autoArchive(month);
     document.getElementById("save-bar").classList.remove("hidden");
+    // 화면은 진행 화면에 남긴 채 안내만 띄운다 — 결과로는 사용자가 버튼을 눌러 넘어간다
+    document.getElementById("run-title").textContent = "결산이 끝났습니다";
+    document.getElementById("run-done").classList.remove("hidden");
   }
+
+  document.getElementById("run-done-open").addEventListener("click", function () {
+    showPane("result-sec");
+  });
 
   /* ---- 전월 비교 — 개요 증감 + "전월 비교" 탭(추이·건수) ---- */
   function renderCompare(monthKey, cur) {

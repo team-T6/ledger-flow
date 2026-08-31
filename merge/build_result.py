@@ -33,6 +33,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    KeepTogether,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -89,11 +90,11 @@ PAGE_MARGIN = 18 * mm
 CONTENT_WIDTH = A4[0] - 2 * PAGE_MARGIN
 
 
-def _col_widths(*fractions):
+def _col_widths(*fractions, total=CONTENT_WIDTH):
     """비율을 표 컬럼 폭(포인트)으로 바꾼다. 마지막 컬럼이 남은 폭을 다 가져가
-    반올림 오차 없이 합이 정확히 CONTENT_WIDTH가 되게 한다."""
-    widths = [CONTENT_WIDTH * f for f in fractions[:-1]]
-    widths.append(CONTENT_WIDTH - sum(widths))
+    반올림 오차 없이 합이 정확히 total(기본 CONTENT_WIDTH)이 되게 한다."""
+    widths = [total * f for f in fractions[:-1]]
+    widths.append(total - sum(widths))
     return widths
 
 def _parse_amount(value):
@@ -266,7 +267,50 @@ def _styles():
         "meta": ParagraphStyle("meta", fontName=FONT_NAME, fontSize=10, leading=14, textColor=MUTED),
         "body": ParagraphStyle("body", fontName=FONT_NAME, fontSize=11, leading=16, textColor=INK),
         "flag": ParagraphStyle("flag", fontName=FONT_NAME, fontSize=10, leading=14, textColor=FLAG_COLOR),
+        # 표 셀 안에서 줄바꿈이 필요한 일반 텍스트(긴 결제처명 등)용
+        "cell": ParagraphStyle("cell", fontName=FONT_NAME, fontSize=10, leading=13, textColor=INK),
+        # 인사이트 요약문 불릿용
+        "insight": ParagraphStyle("insight", fontName=FONT_NAME, fontSize=10, leading=15, textColor=INK),
     }
+
+
+def _fmt_delta(cur, before):
+    """전월 대비 증감 표기 — "+210,000원 (+7.2%)". 기준값 0이면 %는 생략한다."""
+    diff = cur - before
+    pct = f" ({diff / before * 100:+.1f}%)" if before else ""
+    return f"{diff:+,}원{pct}"
+
+
+def _is_weekend(date_str):
+    """YYYY-MM-DD가 토·일이면 True. 날짜 해석 불가면 False (인사이트는 부가 정보)."""
+    try:
+        return datetime.date.fromisoformat(str(date_str or "").strip()).weekday() >= 5
+    except ValueError:
+        return False
+
+
+def _group_top(items, limit=9):
+    """(이름, 금액) 내림차순 목록의 상위 limit개만 남기고 나머지를 한 조각으로 묶는다 —
+    파이 조각이 잘게 쪼개지는 것 방지. 묶음 이름은 실제 카테고리 "기타"와 헷갈리지 않게
+    "그 외 N개"로 쓴다. 묶어서 조각이 하나만 줄면(초과분 1개) 묶지 않고 그대로 보여준다."""
+    if len(items) <= limit + 1:
+        return list(items)
+    rest = sum(amount for _, amount in items[limit:])
+    return list(items[:limit]) + [(f"그 외 {len(items) - limit}개", rest)]
+
+
+def _insight_box(lines, style):
+    """인사이트 요약문 묶음 — 옅은 배경 상자에 불릿 줄로 싣는다."""
+    rows = [[Paragraph(f"•  {line}", style)] for line in lines]
+    return Table(rows, colWidths=[CONTENT_WIDTH], style=TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), ACCENT_LIGHT),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (0, 0), 6),
+        ("BOTTOMPADDING", (0, -1), (0, -1), 6),
+    ]))
 
 
 def _section_heading(text):
@@ -286,12 +330,13 @@ def _section_heading(text):
     return table
 
 
-def _table(header, rows, col_widths, num_cols=()):
-    """헤더 색·격자선이 있는 표 하나를 만든다. num_cols는 오른쪽 정렬할 열 인덱스."""
+def _table(header, rows, col_widths, num_cols=(), font_size=10):
+    """헤더 색·격자선이 있는 표 하나를 만든다. num_cols는 오른쪽 정렬할 열 인덱스.
+    font_size는 좁은 폭(그래프 옆 배치 등)에 맞춰 줄일 때 쓴다."""
     data = [header] + rows
     style = [
         ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("FONTSIZE", (0, 0), (-1, -1), font_size),
         ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
         ("TEXTCOLOR", (0, 0), (-1, 0), ACCENT_CONTRAST),
         ("GRID", (0, 0), (-1, -1), 0.5, GRID_COLOR),
@@ -345,14 +390,15 @@ def _pie_chart(items):
     return drawing
 
 
-def _hbar_chart(items):
+def _hbar_chart(items, total=None):
     """(이름, 금액) 목록을 가로 막대로 그린다 — 순위형(Top 10)·소수 항목 비교용.
 
     첫 항목이 맨 위에 오도록 뒤집어 넣는다 (HorizontalBarChart는 첫 카테고리를
     맨 아래에 그린다). 금액은 막대 끝 라벨로 붙이고 값 축은 숨긴다.
+    total을 주면 라벨에 비중(%)도 붙는다 — 같은 수치의 표를 생략할 때 쓴다.
     """
     LEFT = 40 * mm   # 이름 라벨 자리
-    RIGHT = 24 * mm  # 막대 끝 금액 라벨 자리
+    RIGHT = 34 * mm if total else 24 * mm  # 막대 끝 라벨 자리 (비중 포함 시 더 넓게)
     TOP = BOTTOM = 2 * mm
     row = 8 * mm
     height = TOP + BOTTOM + row * len(items)
@@ -380,7 +426,10 @@ def _hbar_chart(items):
     chart.barLabels.fillColor = INK
     chart.barLabels.boxAnchor = "w"
     chart.barLabels.nudge = 8
-    chart.barLabelFormat = lambda v: f"{int(v):,}"
+    if total:
+        chart.barLabelFormat = lambda v: f"{int(v):,} ({v / total * 100:.1f}%)"
+    else:
+        chart.barLabelFormat = lambda v: f"{int(v):,}"
 
     drawing.add(chart)
     return drawing
@@ -490,12 +539,12 @@ def _prev_month(month):
     return f"{last_of_prev.year:04d}-{last_of_prev.month:02d}"
 
 
-def _category_chart(by_category):
+def _category_chart(by_category, width=CONTENT_WIDTH):
     """카테고리별 지출 막대그래프 — 도형(Drawing)으로 그린다.
 
-    Drawing 폭을 표·섹션 배너와 같은 CONTENT_WIDTH로 맞춰 오른쪽 끝이 서로
-    어긋나지 않게 하고, 막대 사이 간격(barSpacing)을 고정값으로 줘서 항상
-    일정하게 유지한다.
+    Drawing 폭은 기본으로 표·섹션 배너와 같은 CONTENT_WIDTH를 써서 오른쪽 끝이
+    서로 어긋나지 않게 하고(표 옆에 나란히 둘 때는 width로 줄인다), 막대 사이
+    간격(barSpacing)을 고정값으로 줘서 항상 일정하게 유지한다.
     """
     LEFT_AXIS_MARGIN = 16 * mm   # 금액 축 눈금 숫자가 들어갈 자리
     BOTTOM_AXIS_MARGIN = 14 * mm  # 카테고리 이름이 들어갈 자리
@@ -503,13 +552,13 @@ def _category_chart(by_category):
     TOP_PAD = 6 * mm
     height = 60 * mm
 
-    drawing = Drawing(CONTENT_WIDTH, height)
+    drawing = Drawing(width, height)
     chart = VerticalBarChart()
     chart.x = LEFT_AXIS_MARGIN
     chart.y = BOTTOM_AXIS_MARGIN
     # 항목이 적으면 그래프 폭도 항목 수에 비례해 줄인다 — 막대가 전체 폭으로
     # 늘어지거나 라벨 위치와 어긋나는 것 방지 (항목당 28mm)
-    max_plot_width = CONTENT_WIDTH - LEFT_AXIS_MARGIN - RIGHT_PAD
+    max_plot_width = width - LEFT_AXIS_MARGIN - RIGHT_PAD
     chart.width = min(max_plot_width, len(by_category) * 28 * mm)
     chart.height = height - BOTTOM_AXIS_MARGIN - TOP_PAD
 
@@ -657,28 +706,26 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path, month=None, incomplet
     story.append(_section_heading("2. 월별 비교·추이"))
     story.append(Spacer(1, 2 * mm))
     archived = load_archived_months()
-    current = {"total_expense": total_expense, "total_income": total_income, "net": net}
     prev = _prev_month(base_month) if base_month else None
-    if prev and prev in archived:
+    has_comparison = bool(prev and prev in archived)
+
+    def _comparison_flowable(width, font_size):
+        """전월 대비 표 — 보관 데이터가 없으면 안내 문구를 대신 돌려준다."""
+        if not has_comparison:
+            return Paragraph(
+                f"전월 대비 — 비교 대상 없음 (전월 {prev or '미상'} 보관 데이터 없음)", s["meta"])
         p = archived[prev]
-
-        def _delta(cur, before):
-            diff = cur - before
-            pct = f" ({diff / before * 100:+.1f}%)" if before else ""
-            return f"{diff:+,}원{pct}"
-
-        story.append(_table(
+        return _table(
             ["", f"당월 ({base_month})", f"전월 ({prev})", "증감"],
             [["총지출", f"{total_expense:,}원", f"{p.get('total_expense', 0):,}원",
-              _delta(total_expense, p.get("total_expense", 0))],
+              _fmt_delta(total_expense, p.get("total_expense", 0))],
              ["총수익", f"{total_income:,}원", f"{p.get('total_income', 0):,}원",
-              _delta(total_income, p.get("total_income", 0))],
-             ["순액", f"{net:,}원", f"{p.get('net', 0):,}원", _delta(net, p.get("net", 0))]],
-            col_widths=_col_widths(0.16, 0.28, 0.28, 0.28), num_cols=(1, 2, 3),
-        ))
-    else:
-        story.append(Paragraph(
-            f"전월 대비 — 비교 대상 없음 (전월 {prev or '미상'} 보관 데이터 없음)", s["meta"]))
+              _fmt_delta(total_income, p.get("total_income", 0))],
+             ["순액", f"{net:,}원", f"{p.get('net', 0):,}원", _fmt_delta(net, p.get("net", 0))]],
+            col_widths=_col_widths(0.14, 0.25, 0.25, 0.36, total=width),
+            num_cols=(1, 2, 3), font_size=font_size,
+        )
+
     # 같은 해 추이 — 보관된 월들 + 당월(집계 중인 데이터)
     year = base_month[:4] if base_month else None
     trend = sorted(
@@ -686,106 +733,177 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path, month=None, incomplet
          for m, d in archived.items() if year and m.startswith(year) and m != base_month]
         + ([(base_month, total_expense, total_income)] if base_month else [])
     )
-    if len(trend) >= 2:
-        story.append(Spacer(1, 4 * mm))
-        story.append(_table(
+
+    def _trend_table(width, font_size):
+        return _table(
             ["월", "총지출", "총수익", "순액"],
             [[m, f"{exp:,}원", f"{inc:,}원", f"{inc - exp:,}원"] for m, exp, inc in trend],
-            col_widths=_col_widths(0.22, 0.26, 0.26, 0.26), num_cols=(1, 2, 3),
+            col_widths=_col_widths(0.22, 0.26, 0.26, 0.26, total=width),
+            num_cols=(1, 2, 3), font_size=font_size,
+        )
+
+    if 2 <= len(trend) <= 4:
+        # 막대그래프 구간 — 그래프를 왼쪽에 두고, 전월 대비·추이 표 두 개를
+        # 그래프 오른쪽 빈 공간에 세로로 쌓아 섹션을 한 덩어리로 배치한다
+        chart_width = CONTENT_WIDTH * 0.42
+        gutter = 5 * mm
+        table_width = CONTENT_WIDTH - chart_width - gutter
+        right_column = [
+            _comparison_flowable(table_width, 9),
+            Spacer(1, 4 * mm),
+            _trend_table(table_width, 9),
+        ]
+        left_column = [  # 그래프가 무엇의 추이인지 캡션으로 밝힌다
+            Paragraph("월별 총지출", s["meta"]),
+            _category_chart([(m, exp) for m, exp, _ in trend], width=chart_width),
+        ]
+        story.append(Table(
+            [[left_column, right_column]],
+            colWidths=[chart_width + gutter, table_width],
+            style=TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]),
         ))
-        story.append(Spacer(1, 4 * mm))
+    else:
+        story.append(_comparison_flowable(CONTENT_WIDTH, 10))
         if len(trend) >= 5:  # 월이 쌓이면 추세 읽기 좋은 꺾은선으로 전환
+            story.append(Spacer(1, 4 * mm))
+            story.append(_trend_table(CONTENT_WIDTH, 10))
+            story.append(Spacer(1, 4 * mm))
             story.append(_trend_line_chart(trend))
         else:
-            story.append(_category_chart([(m, exp) for m, exp, _ in trend]))
-    else:
-        story.append(Spacer(1, 2 * mm))
-        story.append(Paragraph(f"{year or '대상'}년 추이 — 표시할 다른 월 없음", s["meta"]))
+            story.append(Spacer(1, 2 * mm))
+            story.append(Paragraph(f"{year or '대상'}년 추이 — 표시할 다른 월 없음", s["meta"]))
     story.append(Spacer(1, 7 * mm))
 
-    story.append(_section_heading("3. 카테고리별 지출"))
+    # ── 인사이트 계산 재료 — §3·§4·§5가 함께 쓴다 ──
+    expense_rows = [r for r in ok_rows if r["지출"]]
+    by_payer = dict(summary["by_payer"])
+    foreign_rows = [r for r in ok_rows if (r.get("원거래통화") or "").strip()]  # 스키마 v1: 원거래통화 유무로 판별
+    # 구분별 전월 대비의 데이터 원천은 보관 집계의 by_payer (interface-spec.md 산출물 양식)
+    prev_by_payer = dict(archived[prev].get("by_payer", []) or []) if has_comparison else {}
+
+    story.append(_section_heading("3. 종합 분석·인사이트"))
     story.append(Spacer(1, 2 * mm))
+    common_lines = []
+    line = f"총지출 {total_expense:,}원 · 총수익 {total_income:,}원 · 순액 {net:,}원"
+    if has_comparison:
+        line += f" — 지출 전월 대비 {_fmt_delta(total_expense, archived[prev].get('total_expense', 0))}"
+    common_lines.append(line)
     if summary["by_category"]:
-        rows = [
-            [category, f"{amount:,}원", f"{(amount / total_expense * 100 if total_expense else 0):.1f}%"]
-            for category, amount in summary["by_category"]
-        ]
-        story.append(_table(["카테고리", "금액", "비중"], rows, col_widths=_col_widths(0.40, 0.30, 0.30), num_cols=(1, 2)))
-        story.append(Spacer(1, 4 * mm))
-        story.append(_pie_chart(summary["by_category"]))
+        top_cat, top_amt = summary["by_category"][0]
+        common_lines.append(
+            f"최대 지출 카테고리는 {top_cat} — 전체 지출의 {(top_amt / total_expense * 100 if total_expense else 0):.1f}%")
+    if summary["top_spenders"]:
+        t = summary["top_spenders"][0]
+        common_lines.append(f"최대 단일 지출은 {t['날짜']} {t['결제처']} {t['지출']:,}원")
+    if foreign_rows:
+        foreign_sum = sum((r["지출"] or r["수익"] or 0) for r in foreign_rows)
+        common_lines.append(f"해외결제 {len(foreign_rows)}건 · 원화 환산 {foreign_sum:,}원 — 명세는 §6 참조")
+    misc_expense = sum(v for p, v in by_payer.items() if p not in ("개인결제", "법인결제"))
+    if misc_expense:
+        common_lines.append(f"결제구분 미상 지출 {misc_expense:,}원 — 구분 확인 필요")
+    if flagged_rows:
+        n_reject = sum(1 for r in flagged_rows if r.get("type") != "확인 요청")
+        n_review = len(flagged_rows) - n_reject
+        common_lines.append(
+            f"확인 필요 {len(flagged_rows)}건 (반려 {n_reject} · 확인 요청 {n_review}) — 목록은 §7 참조")
     else:
-        story.append(Paragraph("집계할 지출 없음", s["body"]))
-    story.append(Spacer(1, 7 * mm))
+        common_lines.append("확인 필요 항목 없음")
+    story.append(_insight_box(common_lines, s["insight"]))
 
-    def _share(amount):
-        return f"{(amount / total_expense * 100 if total_expense else 0):.1f}%"
-
-    story.append(_section_heading("4. 결제수단별 합계"))
-    story.append(Spacer(1, 2 * mm))
+    band_items = [(p, v) for p, v in by_payer.items() if v > 0]
+    if len(band_items) >= 2:  # 구성비는 조각이 둘 이상일 때만 의미 있다
+        story.append(Spacer(1, 4 * mm))
+        story.append(KeepTogether([  # 소제목이 페이지 끝에 홀로 남지 않게 그래프와 묶는다
+            Paragraph("개인/법인 구성비", s["body"]),
+            Spacer(1, 1 * mm),
+            _share_band(band_items),
+        ]))
     methods = sorted(summary["by_method"], key=lambda kv: kv[1], reverse=True)
-    story.append(_table(
-        ["결제수단", "금액", "비중"],
-        [[method, f"{amount:,}원", _share(amount)] for method, amount in methods],
-        col_widths=_col_widths(0.40, 0.30, 0.30), num_cols=(1, 2),
-    ))
     if methods:
         story.append(Spacer(1, 4 * mm))
-        story.append(_hbar_chart(methods))
-    story.append(Spacer(1, 7 * mm))
-
-    story.append(_section_heading("5. 결제구분별 분석 (개인/법인)"))
-    story.append(Spacer(1, 2 * mm))
-    by_payer = dict(summary["by_payer"])
-    # 개인/법인 두 구분은 0원이어도 고정으로 보여준다 — 데이터에 있는 그 외 구분("(미상)" 등)은 뒤에 덧붙인다
-    payers = ["개인결제", "법인결제"] + [p for p in by_payer if p not in ("개인결제", "법인결제")]
-    story.append(_table(
-        ["결제구분", "금액", "비중"],
-        [[payer, f"{by_payer.get(payer, 0):,}원", _share(by_payer.get(payer, 0))] for payer in payers],
-        col_widths=_col_widths(0.40, 0.30, 0.30), num_cols=(1, 2),
-    ))
-    band_items = [(p, by_payer.get(p, 0)) for p in payers if by_payer.get(p, 0) > 0]
-    if len(band_items) >= 2:  # 구성비는 조각이 둘 이상일 때만 의미 있다
-        story.append(Spacer(1, 3 * mm))
-        story.append(_share_band(band_items))
-    # 구분별 카테고리 세부 — 개인·법인은 카테고리 체계가 이원화되어 각자 자기 체계로 집계된다 (categories.md)
-    for payer in payers:
-        story.append(Spacer(1, 4 * mm))
-        story.append(Paragraph(f"{payer} — 카테고리별", s["body"]))
-        story.append(Spacer(1, 1 * mm))
-        detail = summary["by_payer_category"].get(payer, [])
-        if detail:
-            subtotal = by_payer.get(payer, 0)
-            story.append(_table(
-                ["카테고리", "금액", "구분 내 비중"],
-                [[category, f"{amount:,}원",
-                  f"{(amount / subtotal * 100 if subtotal else 0):.1f}%"]
-                 for category, amount in detail],
-                col_widths=_col_widths(0.40, 0.30, 0.30), num_cols=(1, 2),
-            ))
-        else:
-            story.append(Paragraph(f"해당 없음 ({payer} 건 없음)", s["meta"]))
-    story.append(Spacer(1, 7 * mm))
-
-    story.append(_section_heading("6. 주요 지출 Top 10"))
-    story.append(Spacer(1, 2 * mm))
-    story.append(_table(
-        ["날짜", "결제처", "금액"],
-        [[r["날짜"], r["결제처"], f"{r['지출']:,}원"] for r in summary["top_spenders"]],
-        col_widths=_col_widths(0.23, 0.54, 0.23), num_cols=(2,),
-    ))
+        # 막대 라벨이 금액·비중을 다 보여주므로 같은 수치의 표는 싣지 않는다 (중복 게재 금지)
+        story.append(KeepTogether([
+            Paragraph("결제수단별 합계", s["body"]),
+            _hbar_chart(methods, total=total_expense),
+        ]))
     if summary["top_spenders"]:
         story.append(Spacer(1, 4 * mm))
-        story.append(_hbar_chart([(r["결제처"], r["지출"]) for r in summary["top_spenders"]]))
+        story.append(Paragraph("주요 지출 Top 10 (지출 행만)", s["body"]))
+        story.append(Spacer(1, 1 * mm))
+        story.append(_table(
+            ["날짜", "결제처", "금액"],
+            [[r["날짜"], Paragraph(r["결제처"], s["cell"]), f"{r['지출']:,}원"] for r in summary["top_spenders"]],
+            col_widths=_col_widths(0.23, 0.54, 0.23), num_cols=(2,),
+        ))
     story.append(Spacer(1, 7 * mm))
 
-    story.append(_section_heading("7. 해외결제 명세"))
+    def _payer_section(payer, corporate=False):
+        """구분(개인/법인) 하나의 분석·인사이트 묶음 — 카테고리 파이 + 규칙 기반 요약문.
+        카테고리 세부 표는 파이 범례(금액·비중)가 대신한다 (중복 게재 금지)."""
+        rows_p = [r for r in expense_rows if (r["결제자"] or "").strip() == payer]
+        subtotal = by_payer.get(payer, 0)
+        if not rows_p:
+            return [Paragraph(f"해당 없음 ({payer} 건 없음)", s["body"])]
+        detail = summary["by_payer_category"].get(payer, [])
+        out = [_pie_chart(_group_top(detail)), Spacer(1, 3 * mm)]
+
+        lines = []
+        line = f"{payer} 지출 {subtotal:,}원 — 전체 지출의 {(subtotal / total_expense * 100 if total_expense else 0):.1f}%"
+        if payer in prev_by_payer:
+            line += f" · 전월 대비 {_fmt_delta(subtotal, prev_by_payer[payer])}"
+        lines.append(line)
+        if detail:
+            top_cat, top_amt = detail[0]
+            lines.append(f"최대 카테고리는 {top_cat} — {payer} 지출의 {(top_amt / subtotal * 100 if subtotal else 0):.1f}%")
+        biggest = max(rows_p, key=lambda r: r["지출"])
+        lines.append(f"최고 단일 건은 {biggest['날짜']} {biggest['결제처']} {biggest['지출']:,}원")
+        merchants = {}
+        for r in rows_p:
+            name = (r["결제처"] or "").strip()
+            if name:
+                entry = merchants.setdefault(name, [0, 0])
+                entry[0] += 1
+                entry[1] += r["지출"]
+        repeats = sorted(((name, cnt, amt) for name, (cnt, amt) in merchants.items() if cnt >= 2),
+                         key=lambda item: item[2], reverse=True)[:2]
+        if repeats:
+            lines.append("같은 결제처 반복 결제: " + " · ".join(f"{name} {cnt}회 {amt:,}원" for name, cnt, amt in repeats))
+        if corporate:
+            # 법인은 지출 통제 관점 — 주말 결제는 0건이어도 확인 결과로 명시한다
+            weekend = [r for r in rows_p if _is_weekend(r.get("날짜"))]
+            if weekend:
+                lines.append(f"주말 결제 {len(weekend)}건 · {sum(r['지출'] for r in weekend):,}원 — 업무 관련성 확인 권장")
+            else:
+                lines.append("주말 결제 없음")
+            if any("verify3_result" in r for r in ok_rows):  # 부정 사용 감지 토글을 켠 실행에만 결과가 있다
+                n_review = sum(1 for r in flagged_rows if r.get("type") == "확인 요청")
+                lines.append(f"부정 사용 감지 확인 요청 {n_review}건" + (" — 목록은 §7 참조" if n_review else ""))
+        out.append(_insight_box(lines, s["insight"]))
+        return out
+
+    story.append(_section_heading("4. 법인결제 분석·인사이트"))
     story.append(Spacer(1, 2 * mm))
-    # 해외결제 여부는 원거래통화가 채워져 있는지로 판별한다 (스키마 v1)
-    foreign_rows = [r for r in ok_rows if (r.get("원거래통화") or "").strip()]
+    story.extend(_payer_section("법인결제", corporate=True))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("5. 개인결제 분석·인사이트"))
+    story.append(Spacer(1, 2 * mm))
+    story.extend(_payer_section("개인결제"))
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(_section_heading("6. 해외결제 명세"))
+    story.append(Spacer(1, 2 * mm))
     if foreign_rows:
         story.append(_table(
             ["날짜", "결제처", "원거래", "원화 환산"],
-            [[r["날짜"], r["결제처"], f"{r['원거래금액']} {r['원거래통화']}", f"{(r['지출'] or r['수익'] or 0):,}원"]
+            [[r["날짜"], Paragraph(r["결제처"], s["cell"]), f"{r['원거래금액']} {r['원거래통화']}",
+              f"{(r['지출'] or r['수익'] or 0):,}원"]
              for r in foreign_rows],
             col_widths=_col_widths(0.18, 0.34, 0.24, 0.24), num_cols=(3,),
         ))
@@ -793,12 +911,13 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path, month=None, incomplet
         story.append(Paragraph("해당 없음 (해외결제 건 없음)", s["body"]))
     story.append(Spacer(1, 7 * mm))
 
-    story.append(_section_heading("8. 확인 필요 항목"))
+    story.append(_section_heading("7. 확인 필요 항목"))
     story.append(Spacer(1, 2 * mm))
     if flagged_rows:
         table = _table(
             ["transaction_id", "날짜", "결제처", "유형", "사유"],
-            [[r.get("transaction_id", ""), r["날짜"], r["결제처"], r.get("type", "반려"),
+            # 긴 결제처명이 이웃 열을 침범하지 않게 결제처도 Paragraph로 줄바꿈시킨다
+            [[r.get("transaction_id", ""), r["날짜"], Paragraph(r["결제처"], s["cell"]), r.get("type", "반려"),
               Paragraph(r["reason"], s["flag"])] for r in flagged_rows],
             col_widths=_col_widths(0.18, 0.14, 0.18, 0.10, 0.40),
         )

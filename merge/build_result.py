@@ -153,6 +153,27 @@ def split_transactions(transactions):
     return ok_rows, flagged_rows
 
 
+def build_row_list(transactions, flagged_rows):
+    """결과·보관 화면의 "거래 내역" 표용 — 전체 거래를 확인 필요 여부·사유와 함께 반환한다.
+    split_transactions()가 매긴 1-기준 행 번호(row)로 flagged_rows와 대조한다."""
+    reason_by_row = {r["row"]: r["reason"] for r in flagged_rows}
+    rows = []
+    for idx, r in enumerate(transactions, start=1):
+        rows.append({
+            "transaction_id": r.get("transaction_id", ""),
+            "날짜": r.get("날짜", ""),
+            "결제처": r.get("결제처", ""),
+            "카테고리": r.get("카테고리", ""),
+            "지출": r.get("지출") or 0,
+            "수익": r.get("수익") or 0,
+            "결제수단": r.get("결제수단", ""),
+            "결제구분": r.get("결제구분", ""),
+            "flagged": idx in reason_by_row,
+            "reason": reason_by_row.get(idx, ""),
+        })
+    return rows
+
+
 def build_envelope(total, ok_rows, flagged_rows, failed=False, message="", incomplete=()):
     """지휘(orchestrator)에게 돌려주는 단계 결과 보고 — interface-spec.md "단계 결과 보고" 규격.
     status 어휘 4개 고정: ok(정상) · empty(대상 없음) · partial(확인 필요 건 있음) · failed(단계 실패).

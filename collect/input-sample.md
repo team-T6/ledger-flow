@@ -71,5 +71,5 @@
 ## 6. 영수증 이미지·결제 문자 캡처 (OCR 대상)
 
 - 형식: Google Drive·Google Photos에 업로드된 이미지 파일 (사진·스크린샷)
-- 견본: `sample_data/receipts/` PNG 6장 — 정상 영수증·정상 결제 문자 외에 흐린 영수증, 금액이 잘린 영수증, 결제 문자를 흉내 낸 스미싱 광고, 영수증이 아닌 일반 사진이 섞여 있다 (파일별 성격·기대 동작은 [`sample_data/README.md`](../sample_data/README.md) §2)
+- 견본: `sample_data/receipts/` PNG (7월분 6장 + 6월분 7장) — 정상 영수증·정상 결제 문자 외에 흐린 영수증, 금액이 잘린 영수증, 결제 문자를 흉내 낸 스미싱 광고, 영수증이 아닌 일반 사진, 카드 정보 없는 수기 간이영수증이 섞여 있다 (파일별 성격·기대 동작은 [`sample_data/README.md`](../sample_data/README.md) §2·§3)
 - 추출 대상 정보: 거래일 · 금액 · 결제처 · 결제수단 (`collect.md` "하는 단계" 참고)

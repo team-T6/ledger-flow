@@ -1,15 +1,16 @@
 """collect 웹 업로드 수집기 — uploads/inbox/의 사용자 업로드 파일을 표준 거래 표로 만든다.
 
 파일 유형별 처리 (단계 문서 collect.md "판단 기준"의 AI 판단/일반 코드 구분 그대로):
+- zip: 압축을 풀어 안의 파일을 개별 원천으로 편입 — 일반 코드 (collect.md "하는 단계 0")
 - 하나카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 normalize 재사용 — 일반 코드
-- 낯선 서식 CSV/TXT/XLSX: call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
+- 낯선 서식 CSV/TXT/XLSX/PDF(텍스트 레이어 있는 문서만): call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
   한 호출로 묶어 변환 — collect.md "하는 단계 1" 확정, 호출당 고정 비용 절감)
 - 영수증·결제 문자 캡처 이미지 (PNG/JPG): call-agent.py call_agent_with_image — AI 판단
 
 계약은 collect.run()과 동일 — collect/result.csv 작성 + {"out_path", "rows", "envelope"} 반환.
 지휘(orchestrator/run-pipeline.py)가 웹 실행 시 upload_dir와 함께 부른다.
 개별 파일의 AI 처리 실패는 전체를 중단하지 않고 envelope flags에 오류로 남긴다
-(collect.md "못 할 때" — 인식 실패 건은 버리지 않는다).
+(collect.md "못 할 때" — 인식 실패 건은 버리지 않는다). zip 안의 개별 항목 실패도 같은 원칙.
 
 사용법(단독 실행): python3 collect/collect_uploads.py 2026-07 [업로드 폴더]
 """
@@ -18,7 +19,10 @@ import csv
 import importlib.util
 import os
 import re
+import shutil
 import sys
+import tempfile
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +31,11 @@ DEFAULT_UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")
 
 TEXT_EXTS = {".csv", ".txt"}
 IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+# zip 안에서 허용하는 확장자 — 업로드 화이트리스트(orchestrator/server.py UPLOAD_EXTS)에서 zip 자체만 뺀 것
+ZIP_ALLOWED_EXTS = TEXT_EXTS | set(IMAGE_MEDIA_TYPES) | {".xlsx", ".pdf"}
+ZIP_MAX_MEMBERS = 50            # 압축 안 파일 개수 상한 (zip bomb 방어)
+ZIP_MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 압축 해제 총 용량 상한(50MB, 비압축 기준)
 
 # 하나카드 정형 CSV 판별용 필수 헤더 (collect.py normalize가 읽는 컬럼)
 HANA_HEADER = {"이용일자", "이용가맹점", "이용금액", "할부기간", "회차",
@@ -65,6 +74,58 @@ def is_hana_csv(text):
     return False
 
 
+def _is_path_traversal(member_name):
+    """경로 탈출(`../`, 절대경로) 항목인지 판별한다."""
+    normalized = os.path.normpath(member_name)
+    return normalized.startswith("..") or os.path.isabs(normalized)
+
+
+def extract_zip(zip_path, extract_root):
+    """zip 안 항목을 검사해 허용된 확장자만 extract_root 아래에 풀고, 나머지는 오류로 남긴다.
+
+    반환: (extracted_paths, errors). 손상된 zip이거나 상한(ZIP_MAX_MEMBERS·ZIP_MAX_TOTAL_BYTES)을
+    넘으면 extracted_paths=[]와 오류 메시지 하나만 돌려주고 zip 전체를 건너뛴다 (collect.md
+    "하는 단계 0" 확정 — zip bomb 방어). 개별 항목의 확장자 불허·경로 탈출·zip 안의 zip·
+    macOS 부산물(`__MACOSX/`, `.DS_Store`)은 그 항목만 건너뛰고 오류로 남기며 나머지는 처리한다.
+    """
+    zip_name = os.path.basename(zip_path)
+    errors = []
+    extracted = []
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            infos = [i for i in zf.infolist() if not i.is_dir()]
+            if len(infos) > ZIP_MAX_MEMBERS:
+                return [], [f"{zip_name}: 압축 안 파일이 {ZIP_MAX_MEMBERS}개를 넘어 처리하지 않음"]
+            if sum(i.file_size for i in infos) > ZIP_MAX_TOTAL_BYTES:
+                return [], [f"{zip_name}: 압축 해제 용량이 상한"
+                            f"({ZIP_MAX_TOTAL_BYTES // (1024 * 1024)}MB)을 넘어 처리하지 않음"]
+            dest_dir = os.path.join(extract_root, os.path.splitext(zip_name)[0])
+            os.makedirs(dest_dir, exist_ok=True)
+            for info in infos:
+                name = info.filename
+                base = os.path.basename(name.rstrip("/"))
+                if name.startswith("__MACOSX/") or base == ".DS_Store":
+                    errors.append(f"{zip_name}: {name} — macOS 부산물, 건너뜀")
+                    continue
+                if _is_path_traversal(name):
+                    errors.append(f"{zip_name}: {name} — 경로 탈출 항목, 건너뜀")
+                    continue
+                ext = os.path.splitext(base)[1].lower()
+                if ext == ".zip":
+                    errors.append(f"{zip_name}: {name} — zip 안의 zip은 지원하지 않음, 건너뜀")
+                    continue
+                if ext not in ZIP_ALLOWED_EXTS:
+                    errors.append(f"{zip_name}: {name} — 허용되지 않는 확장자({ext or '없음'}), 건너뜀")
+                    continue
+                dest_path = os.path.join(dest_dir, f"{len(extracted)}_{base}")  # 이름 충돌 방지
+                with zf.open(info) as src, open(dest_path, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                extracted.append(dest_path)
+    except zipfile.BadZipFile:
+        return [], [f"{zip_name}: 손상된 zip 파일"]
+    return extracted, errors
+
+
 def xlsx_to_text(path):
     """엑셀을 탭 구분 텍스트로 펼친다 — 낯선 서식 변환(AI 판단)의 입력으로 쓴다."""
     from openpyxl import load_workbook  # merge 단계와 같은 기존 의존성
@@ -77,6 +138,17 @@ def xlsx_to_text(path):
                 lines.append("\t".join(cells))
     wb.close()
     return "\n".join(lines)
+
+
+def pdf_to_text(path):
+    """PDF를 텍스트로 뽑는다 — 낯선 서식 변환(AI 판단)의 입력으로 쓴다.
+
+    카드사 명세서 PDF처럼 텍스트 레이어가 있는 문서만 대상 — 스캔 이미지 PDF는
+    텍스트가 안 뽑혀 빈 문자열이 되고, process_table_batch가 "내용이 비어 있음" 오류로 남긴다.
+    """
+    from pypdf import PdfReader
+    reader = PdfReader(path)
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 def map_table_row(r):
@@ -146,8 +218,13 @@ def process_table_batch(paths):
     for path in paths:
         name = os.path.basename(path)
         try:
-            text = xlsx_to_text(path) if os.path.splitext(name)[1].lower() == ".xlsx" \
-                else read_text_any(path)
+            ext = os.path.splitext(name)[1].lower()
+            if ext == ".xlsx":
+                text = xlsx_to_text(path)
+            elif ext == ".pdf":
+                text = pdf_to_text(path)
+            else:
+                text = read_text_any(path)
         except Exception as e:
             errors.append(f"{name}: 처리 실패 — {e}")
             continue
@@ -228,50 +305,66 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
     if not paths:
         return {"out_path": None, "rows": [], "envelope": build_envelope([], {"card": 0, "image": 0}, [])}
 
-    total_files = len(paths)
-    done_files = 0
+    # zip은 압축을 풀어 안의 파일을 개별 원천으로 편입한다 (collect.md "하는 단계 0" 확정).
+    # 풀린 파일은 임시 폴더에만 쓰고 처리가 끝나면 지운다 — uploads/inbox/에는 원본 zip만 남는다.
+    zip_paths = [p for p in paths if os.path.splitext(p)[1].lower() == ".zip"]
+    other_paths = [p for p in paths if p not in zip_paths]
+    zip_errors = []
+    tempdir = tempfile.mkdtemp(prefix="collect_zip_") if zip_paths else None
+    try:
+        for zp in zip_paths:
+            extracted, errs = extract_zip(zp, tempdir)
+            other_paths += extracted
+            zip_errors += errs
+        paths = sorted(other_paths)
 
-    def notify():
-        if on_progress:
-            try:
-                on_progress(done_files, total_files)
-            except Exception:
-                pass  # 관찰자 오류가 수집을 멈추면 안 된다
+        total_files = len(paths)
+        done_files = 0
 
-    notify()
+        def notify():
+            if on_progress:
+                try:
+                    on_progress(done_files, total_files)
+                except Exception:
+                    pass  # 관찰자 오류가 수집을 멈추면 안 된다
 
-    hana_paths, image_paths, table_paths = [], [], []
-    for path in paths:
-        ext = os.path.splitext(path)[1].lower()
-        if ext in IMAGE_MEDIA_TYPES:
-            image_paths.append(path)
-        elif ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
-            hana_paths.append(path)
-        else:
-            table_paths.append(path)
-
-    rows, errors = [], []
-    if hana_paths:
-        by_month = collect.normalize(hana_paths, default_month=month)
-        rows += [r for month_rows in by_month.values() for r in month_rows]
-        done_files += len(hana_paths)
         notify()
 
-    if table_paths:
-        batch_rows, batch_errors = process_table_batch(table_paths)
-        rows += batch_rows
-        errors += batch_errors
-        done_files += len(table_paths)
-        notify()
+        hana_paths, image_paths, table_paths = [], [], []
+        for path in paths:
+            ext = os.path.splitext(path)[1].lower()
+            if ext in IMAGE_MEDIA_TYPES:
+                image_paths.append(path)
+            elif ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
+                hana_paths.append(path)
+            else:
+                table_paths.append(path)
 
-    if image_paths:
-        with ThreadPoolExecutor(max_workers=AI_WORKERS) as pool:
-            for file_rows, error in pool.map(process_image, image_paths):
-                rows += file_rows
-                if error:
-                    errors.append(error)
-                done_files += 1
-                notify()
+        rows, errors = [], list(zip_errors)
+        if hana_paths:
+            by_month = collect.normalize(hana_paths, default_month=month)
+            rows += [r for month_rows in by_month.values() for r in month_rows]
+            done_files += len(hana_paths)
+            notify()
+
+        if table_paths:
+            batch_rows, batch_errors = process_table_batch(table_paths)
+            rows += batch_rows
+            errors += batch_errors
+            done_files += len(table_paths)
+            notify()
+
+        if image_paths:
+            with ThreadPoolExecutor(max_workers=AI_WORKERS) as pool:
+                for file_rows, error in pool.map(process_image, image_paths):
+                    rows += file_rows
+                    if error:
+                        errors.append(error)
+                    done_files += 1
+                    notify()
+    finally:
+        if tempdir:
+            shutil.rmtree(tempdir, ignore_errors=True)
 
     assign_ids(rows, month)
     rows.sort(key=lambda r: (r["날짜"], r["transaction_id"]))

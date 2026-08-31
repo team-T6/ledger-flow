@@ -786,6 +786,8 @@ def archive_outputs(month):
         "flags": [{"row": r["row"], "결제처": r.get("결제처", ""),
                    "reason": r.get("reason", "")} for r in flagged_rows],
         "incomplete": incomplete,
+        # 보관월 상세 화면의 "거래 내역" 표 — 전체 거래(확인 필요 표시 포함)
+        "rows": merge_mod.build_row_list(transactions, flagged_rows),
     }
     with open(os.path.join(dest, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

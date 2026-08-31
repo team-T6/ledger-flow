@@ -428,6 +428,7 @@
     color: var(--muted); font-size: 14.5px;
   }
   .dropzone strong { color: var(--ink); }
+  .dz-formats { font-size: 12px; margin-top: 6px; opacity: 0.75; }
   .src-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
   .file-list { margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
   .file-list li {
@@ -775,7 +776,8 @@
     <h2 id="upload-title">8월에 쓴 카드 자료를 올려 주세요</h2>
     <div class="dropzone" id="dropzone">
       <strong>파일을 끌어다 놓으세요</strong><br>
-      카드사 엑셀·CSV, 영수증·결제 문자 캡처 이미지
+      카드사 엑셀·CSV, 영수증·결제 문자 캡처 이미지, PDF, zip
+      <div class="dz-formats">지원 확장자: .csv .txt .png .jpg .jpeg .xlsx .pdf .zip</div>
       <div class="src-buttons">
         <button class="btn btn-ghost inert" id="pick-files">파일 선택</button>
         <button class="btn btn-ghost inert" id="drive-btn">Google Drive 연결</button>

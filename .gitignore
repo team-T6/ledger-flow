@@ -228,6 +228,8 @@ archive/
 *.db
 *.pdf
 !sample_data/**
+# 웹 데모 샘플 산출물 — sample_data 기반 가짜 데이터라 커밋 허용 (Pages 데모의 리포트·장부 미리보기에 필요)
+!web/demo/**
 
 # 지휘에게 전달하는 단계 결과 보고 — 실거래 정보(결제처·비고 등)를 그대로 담고 있어 커밋 금지
 collect/result-report.json

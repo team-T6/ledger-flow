@@ -938,8 +938,8 @@
     <div class="result-head">
       <h2 id="r-title">2026년 8월 결산이 끝났습니다</h2>
       <div class="downloads" id="downloads">
-        <a class="btn btn-ghost" href="demo/result.pdf" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>분석 리포트</a>
-        <a class="btn btn-ghost" href="demo/result.xlsx" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>회계장부</a>
+        <a class="btn btn-ghost" href="demo/2026-08_report_20260831-1535.pdf" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>분석 리포트</a>
+        <a class="btn btn-ghost" href="demo/2026-08_ledger_20260831-1535.xlsx" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>회계장부</a>
       </div>
     </div>
 
@@ -947,6 +947,16 @@
       <div><b>결산 서고에 저장되었습니다</b><div class="hint">서고에서 언제든 다시 열 수 있습니다</div></div>
       <div class="save-actions">
         <button class="btn btn-ghost" id="r-rerun" type="button">다시 결산하기</button>
+      </div>
+    </div>
+
+    <!-- 재결산 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
+    <div class="confirm-panel hidden" id="refix-panel">
+      <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>
+      <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
+      <div class="cp-actions">
+        <button class="btn" id="refix-apply" type="button">수정 반영해 다시 결산</button>
+        <span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span>
       </div>
     </div>
 
@@ -1008,7 +1018,7 @@
       </div>
 
       <div class="rtab-panel" data-panel="pdf">
-        <iframe class="pdf-frame" id="r-pdf-frame" src="demo/result.pdf" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>
+        <iframe class="pdf-frame" id="r-pdf-frame" src="demo/2026-08_report_20260831-1535.pdf" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>
         <div class="hint">샘플 데이터로 만든 리포트입니다 — 실제 결산 리포트는 로컬 실행 모드에서 생성됩니다.</div>
       </div>
     </div>
@@ -1327,6 +1337,18 @@
     { month: "2026-07", total_expense: 3482100, tx_count: 45, flagged_count: 1, completed_at: "2026-08-01 09:12" }
   ];
   var CUR_KEY = "2026-08";  // "이번 달" — 실제 모드에서는 오늘 날짜로 대체된다
+  /* 데모 샘플 산출물 — 월별 결산 리포트·회계장부 (web/demo/, 파일명: {월}_{문서}_{생성일시}) */
+  var DEMO_FILES = {
+    "2025-11": { pdf: "demo/2025-11_report_20251201-0908.pdf", xlsx: "demo/2025-11_ledger_20251201-0908.xlsx" },
+    "2025-12": { pdf: "demo/2025-12_report_20260102-0915.pdf", xlsx: "demo/2025-12_ledger_20260102-0915.xlsx" },
+    "2026-05": { pdf: "demo/2026-05_report_20260601-0903.pdf", xlsx: "demo/2026-05_ledger_20260601-0903.xlsx" },
+    "2026-06": { pdf: "demo/2026-06_report_20260701-0911.pdf", xlsx: "demo/2026-06_ledger_20260701-0911.xlsx" },
+    "2026-07": { pdf: "demo/2026-07_report_20260801-0912.pdf", xlsx: "demo/2026-07_ledger_20260801-0912.xlsx" },
+    "2026-08": { pdf: "demo/2026-08_report_20260831-1535.pdf", xlsx: "demo/2026-08_ledger_20260831-1535.xlsx" }
+  };
+  function demoFile(month, kind) {
+    return (DEMO_FILES[month] || DEMO_FILES[CUR_KEY])[kind];
+  }
   var archivedList = [];    // 마지막으로 렌더한 보관 목록 (전월 비교·추이 계산용)
   var vaultReal = false;    // 마지막 렌더가 실제 모드였는지 (연도 전환 재렌더용)
   var shelfYear = 2026, sideYear = 2026;
@@ -1648,27 +1670,59 @@
     hostEl.innerHTML = html || '<p class="hint">내용이 없습니다</p>';
   }
 
-  /* 데모 샘플 보관본에는 집계·거래 내역이 없어 총지출 비율로 근사 구성한다 (데모 연출 한정) */
+  /* 데모 샘플 거래 — web/demo 샘플 산출물(2026-08)과 같은 데이터. 카테고리는 정본(docs/categories.md)의
+     개인/법인 이원화 체계를 따르고, 보관월 화면은 이 목록을 그 달 총지출 비율로 근사 구성한다 (데모 연출 한정) */
   var DEMO_TX_BASE = [
-    { "날짜": "2026-08-03", "결제처": "SK텔레콤", "카테고리": "통신비", "지출": 159000, "수익": 0, "결제수단": "국민카드", "결제구분": "법인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-05", "결제처": "스튜디오밝음", "카테고리": "사용료", "지출": 1200000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-06", "결제처": "김밥천국 역삼점", "카테고리": "식대", "지출": 9500, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-07", "결제처": "NICEPAY(스타벅스 역삼대로점)", "카테고리": "식대", "지출": 6200, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: true, reason: "결제대행사 결제 — 실제 가맹점명 확인 필요 (verify1)" },
-    { "날짜": "2026-08-09", "결제처": "역삼타워 관리사무소", "카테고리": "공과금", "지출": 128000, "수익": 0, "결제수단": "국민카드", "결제구분": "법인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-12", "결제처": "김밥천국 역삼점", "카테고리": "식대", "지출": 9500, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-15", "결제처": "Notion (USD 96.00)", "카테고리": "구독료", "지출": 132900, "수익": 0, "결제수단": "국민카드", "결제구분": "법인결제", flagged: true, reason: "해외결제 원화 환산 금액 확인 필요 (verify2)" },
+    { "날짜": "2026-08-01", "결제처": "티머니", "카테고리": "교통비", "지출": 55000, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-02", "결제처": "스포애니 역삼점", "카테고리": "취미생활", "지출": 99000, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-03", "결제처": "SK텔레콤", "카테고리": "통신비", "지출": 159000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-04", "결제처": "김밥천국 역삼점", "카테고리": "식대", "지출": 9500, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-05", "결제처": "스튜디오밝음", "카테고리": "외주용역비", "지출": 1200000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-05", "결제처": "멜론", "카테고리": "구독료", "지출": 10900, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-06", "결제처": "이디야커피 역삼점", "카테고리": "식대", "지출": 4800, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-07", "결제처": "유튜브 프리미엄", "카테고리": "구독료", "지출": 14900, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-07", "결제처": "NICEPAY(스타벅스 역삼대로점)", "카테고리": "식대", "지출": 6200, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: true, reason: "결제처가 결제대행사(PG) 표기 그대로 — 실제 가맹점 미확인이라 분류 근거 부족 (verify1)" },
+    { "날짜": "2026-08-08", "결제처": "배달의민족", "카테고리": "식대", "지출": 24500, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-09", "결제처": "역삼타워 관리사무소", "카테고리": "세금과공과", "지출": 128000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-09", "결제처": "교보문고 강남점", "카테고리": "교육비", "지출": 54000, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-10", "결제처": "맘스터치 역삼점", "카테고리": "식대", "지출": 11200, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-10", "결제처": "서울시 상수도사업본부", "카테고리": "공과금", "지출": 28400, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-11", "결제처": "카카오T", "카테고리": "여비교통비", "지출": 23600, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-12", "결제처": "김밥천국 역삼점", "카테고리": "복리후생비", "지출": 9500, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-12", "결제처": "서브웨이 역삼점", "카테고리": "식대", "지출": 8900, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-13", "결제처": "스타벅스 역삼대로점", "카테고리": "복리후생비", "지출": 12800, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-13", "결제처": "연세필내과", "카테고리": "의료비", "지출": 21500, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-13", "결제처": "온누리약국", "카테고리": "의료비", "지출": 8900, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-14", "결제처": "오피스디포 강남점", "카테고리": "소모품비", "지출": 34500, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-14", "결제처": "쿠팡", "카테고리": "기타물품", "지출": 458000, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-15", "결제처": "Notion", "카테고리": "지급수수료", "지출": 132900, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-15", "결제처": "OpenAI", "카테고리": "지급수수료", "지출": 89000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: true, reason: "유도 환율 4,450원/USD — USD 상식 환율 범위(1,250 - 1,550) 밖, 환산 오류 의심 (verify2)" },
+    { "날짜": "2026-08-16", "결제처": "GS칼텍스 역삼주유소", "카테고리": "교통비", "지출": 70000, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-17", "결제처": "CU 역삼타워점", "카테고리": "식대", "지출": 5400, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-18", "결제처": "GS25 역삼점", "카테고리": "식대", "지출": 6800, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-19", "결제처": "본죽 역삼점", "카테고리": "식대", "지출": 10500, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-19", "결제처": "카카오T", "카테고리": "교통비", "지출": 18400, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-21", "결제처": "코스트코 광명점", "카테고리": "식대", "지출": 286400, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-20", "결제처": "고고퀵서비스", "카테고리": "운반비", "지출": 18000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-20", "결제처": "제주항공", "카테고리": "여행", "지출": 365500, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-21", "결제처": "코스트코 광명점", "카테고리": "복리후생비", "지출": 286400, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-22", "결제처": "스타벅스 역삼대로점", "카테고리": "식대", "지출": 6700, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-23", "결제처": "삼천리도시가스", "카테고리": "공과금", "지출": 19600, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-24", "결제처": "카카오T", "카테고리": "교통비", "지출": 12300, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-25", "결제처": "KT", "카테고리": "통신비", "지출": 38500, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-25", "결제처": "파리바게뜨 역삼점", "카테고리": "식대", "지출": 12300, "수익": 0, "결제수단": "우리카드", "결제구분": "개인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-25", "결제처": "(주)한별테크", "카테고리": "입금·매출", "지출": 0, "수익": 5190000, "결제수단": "법인계좌", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-26", "결제처": "카카오T", "카테고리": "여비교통비", "지출": 17400, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-27", "결제처": "넷플릭스", "카테고리": "구독료", "지출": 17000, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-28", "결제처": "한전 역삼지점", "카테고리": "공과금", "지출": 66600, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" }
+    { "날짜": "2026-08-28", "결제처": "한국전력공사", "카테고리": "세금과공과", "지출": 66600, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
+    { "날짜": "2026-08-31", "결제처": "국민카드", "카테고리": "환급·캐시백", "지출": 0, "수익": 24000, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" }
   ];
   function demoTxRows(entry) {
     var ratio = (entry.total_expense || 0) / 3481200;
+    var lastDay = new Date(monthYear(entry.month), monthNum(entry.month), 0).getDate();
     return DEMO_TX_BASE.map(function (r) {
+      var day = Math.min(parseInt(r["날짜"].slice(8), 10), lastDay);
       return {
-        "날짜": entry.month + r["날짜"].slice(7), "결제처": r["결제처"], "카테고리": r["카테고리"],
+        "날짜": entry.month + "-" + ("0" + day).slice(-2), "결제처": r["결제처"], "카테고리": r["카테고리"],
         "지출": Math.round(r["지출"] * ratio), "수익": Math.round(r["수익"] * ratio),
         "결제수단": r["결제수단"], "결제구분": r["결제구분"], flagged: r.flagged, reason: r.reason
       };
@@ -1688,52 +1742,68 @@
       "## 3. 산출물 위치\n\n- 엑셀 회계장부: merge/result.xlsx\n- PDF 결산 리포트: merge/result.pdf\n\n" +
       "## 4. 메모\n\n- 이 요약은 샘플 데이터로 구성된 데모입니다.\n";
   }
-  function demoBreakdown(entry) {
-    var t = entry.total_expense || 0;
-    function share(r) { return Math.round(t * r); }
-    var byCategory = [["사용료", share(0.34)], ["식대", share(0.24)], ["기타", share(0.19)],
-                       ["구독료", share(0.09)], ["교통비", share(0.08)], ["공과금", share(0.06)]];
+  /* 거래 목록에서 집계를 만든다 — 확인 필요(flagged) 건은 리포트와 같은 규칙으로 집계에서 뺀다 */
+  function demoAggregate(rows) {
+    var byCat = {}, payer = { "개인결제": 0, "법인결제": 0 };
+    rows.forEach(function (r) {
+      if (r.flagged || !r["지출"]) return;
+      byCat[r["카테고리"]] = (byCat[r["카테고리"]] || 0) + r["지출"];
+      if (r["결제구분"] in payer) payer[r["결제구분"]] += r["지출"];
+    });
     return {
-      by_category: byCategory,
-      by_payer: [["개인결제", share(0.4)], ["법인결제", t - share(0.4)]],
-      top_spenders: demoTxRows(entry).filter(function (r) { return r["지출"]; })
-        .sort(function (a, b) { return b["지출"] - a["지출"]; }),
+      by_category: Object.keys(byCat).map(function (c) { return [c, byCat[c]]; })
+        .sort(function (a, b) { return b[1] - a[1]; }),
+      by_payer: [["개인결제", payer["개인결제"]], ["법인결제", payer["법인결제"]]],
+      top_spenders: rows.filter(function (r) { return r["지출"] && !r.flagged; })
+        .sort(function (a, b) { return b["지출"] - a["지출"]; })
+    };
+  }
+  function demoBreakdown(entry) {
+    var rows = demoTxRows(entry);
+    var agg = demoAggregate(rows);
+    return {
+      by_category: agg.by_category,
+      by_payer: agg.by_payer,
+      top_spenders: agg.top_spenders,
       flags: null,
       incomplete: null,
-      rows: demoTxRows(entry)
+      rows: rows
     };
   }
 
-  /* 데모 결산 실행(8월)이 끝났을 때 결산 결과 화면에 먹일 데이터 — Top5·카테고리·결제구분 합이 서로 맞다 */
+  /* 데모 결산 실행(8월)이 끝났을 때 결산 결과 화면에 먹일 데이터 — 집계는 DEMO_TX_BASE에서 그대로 계산해
+     Top5·카테고리·결제구분 합이 거래 목록·샘플 리포트와 서로 맞다 */
+  var DEMO_BASE_AGG = demoAggregate(DEMO_TX_BASE);
   var DEMO_RESULT_DATA = {
     month: "2026-08",
     total_expense: 3481200, total_income: 5214000, net: 1732800,
     tx_count: 42, upload_count: 3, flagged_count: 2,
-    by_category: [
-      ["사용료", 1200000], ["식대", 842300], ["구독료", 318900], ["교통비", 276400],
-      ["공과금", 194600], ["통신비", 159000], ["회식비", 140000], ["비품", 130000],
-      ["여가", 120000], ["기타", 100000]
-    ],
-    by_payer: [["개인결제", 1392500], ["법인결제", 2088700]],
-    top_spenders: [
-      { "날짜": "2026-08-05", "결제처": "스튜디오밝음", "카테고리": "사용료", "지출": 1200000 },
-      { "날짜": "2026-08-21", "결제처": "코스트코 광명점", "카테고리": "식대", "지출": 286400 },
-      { "날짜": "2026-08-03", "결제처": "SK텔레콤", "카테고리": "통신비", "지출": 159000 },
-      { "날짜": "2026-08-15", "결제처": "Notion (USD 96.00)", "카테고리": "구독료", "지출": 132900 },
-      { "날짜": "2026-08-09", "결제처": "역삼타워 관리사무소", "카테고리": "공과금", "지출": 128000 }
-    ],
+    by_category: DEMO_BASE_AGG.by_category,
+    by_payer: DEMO_BASE_AGG.by_payer,
+    top_spenders: DEMO_BASE_AGG.top_spenders,
     flags: [
-      { row: 7, "결제처": "해외결제 1건", reason: "원화 환산 금액 확인이 필요합니다" },
-      { row: 23, "결제처": "결제대행사 결제 1건", reason: "실제 가맹점명을 확인하지 못했습니다" }
+      { row: 9, "결제처": "결제대행사 결제 1건", reason: "실제 가맹점명을 확인하지 못했습니다" },
+      { row: 24, "결제처": "해외결제 1건", reason: "환산 환율이 통화별 상식 범위를 벗어났습니다" }
     ],
     incomplete: [],
     rows: DEMO_TX_BASE,
-    pdfUrl: "demo/result.pdf"
+    pdfUrl: demoFile("2026-08", "pdf")
   };
   function demoResultData(key) {
     var d = {};
     Object.keys(DEMO_RESULT_DATA).forEach(function (k) { d[k] = DEMO_RESULT_DATA[k]; });
+    // 행·확인 필요 목록은 사본으로 — 재결산 데모가 이 데이터를 수정해 다시 그리기 때문
+    function copyRows(list) {
+      return (list || []).map(function (r) {
+        var c = {};
+        Object.keys(r).forEach(function (k) { c[k] = r[k]; });
+        return c;
+      });
+    }
+    d.rows = copyRows(DEMO_RESULT_DATA.rows);
+    d.flags = copyRows(DEMO_RESULT_DATA.flags);
     d.month = key;
+    d.pdfUrl = demoFile(key, "pdf");
     d.summaryText = demoSummaryText({ month: key, tx_count: d.tx_count, flagged_count: d.flagged_count });
     return d;
   }
@@ -1845,7 +1915,7 @@
     initTabs(tabsWrap);
 
     renderTxPanel(tabsWrap.querySelector('[data-panel="tx"]'), detail.rows,
-      REAL ? "" : " · 데모는 대표 거래만 보여드립니다");
+      REAL ? "" : " · 데모는 샘플 거래로 근사 구성됩니다");
 
     var docHost = tabsWrap.querySelector('[data-panel="doc"] .summary-doc');
     var pdfPanel = tabsWrap.querySelector('[data-panel="pdf"]');
@@ -1858,7 +1928,7 @@
         .then(function (text) { renderSummaryDoc(docHost, text); })
         .catch(function () { docHost.innerHTML = '<p class="hint">요약을 불러오지 못했습니다</p>'; });
     } else {
-      pdfPanel.innerHTML = '<iframe class="pdf-frame" src="demo/result.pdf" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>' +
+      pdfPanel.innerHTML = '<iframe class="pdf-frame" src="' + demoFile(entry.month, "pdf") + '" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>' +
         '<div class="hint">샘플 데이터로 만든 리포트입니다 — 실제 결산 리포트는 로컬 실행 모드에서 생성됩니다.</div>';
       renderSummaryDoc(docHost, demoSummaryText(entry));
     }
@@ -1887,14 +1957,14 @@
       var demoPdf = document.createElement("a");
       demoPdf.className = "btn";
       demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
-      demoPdf.href = "demo/result.pdf";
+      demoPdf.href = demoFile(entry.month, "pdf");
       demoPdf.target = "_blank";
       demoPdf.rel = "noopener";
       actions.appendChild(demoPdf);
       var demoXlsx = document.createElement("a");
       demoXlsx.className = "btn btn-ghost";
       demoXlsx.innerHTML = DL_ICO + "회계장부";
-      demoXlsx.href = "demo/result.xlsx";
+      demoXlsx.href = demoFile(entry.month, "xlsx");
       demoXlsx.setAttribute("download", "");
       actions.appendChild(demoXlsx);
     }
@@ -1995,6 +2065,62 @@
   document.getElementById("side-ynext").addEventListener("click", function () { sideYear = stepYear(sideYear, 1); renderSideMonths(); });
   document.getElementById("shelf-back").addEventListener("click", backToShelf);
   renderVault(DEMO_MONTHS, false);
+
+  /* ---------- 확인 테이블 공용 렌더 ----------
+     중간 확인 패널(결산 진행)과 재결산 패널(결산 결과)이 같은 표 모양·입력 수집을 쓴다 */
+  function fillConfirmTable(table, rows, editable) {
+    table.innerHTML = "";
+    var head = document.createElement("tr");
+    ["반영", "거래"].concat(editable).concat(["사유"]).forEach(function (h) {
+      var th = document.createElement("th");
+      th.textContent = h;
+      head.appendChild(th);
+    });
+    table.appendChild(head);
+    rows.forEach(function (row) {
+      var d = row.data || {};
+      var tr = document.createElement("tr");
+      tr.dataset.tid = row.transaction_id;
+      var tdCheck = document.createElement("td");
+      var check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "cp-check";
+      tdCheck.appendChild(check);
+      tr.appendChild(tdCheck);
+      var info = document.createElement("td");
+      info.textContent = [d.결제처 || row.transaction_id, d.날짜, d.금액]
+        .filter(function (v) { return v; }).join(" · ");
+      tr.appendChild(info);
+      editable.forEach(function (field) {
+        var td = document.createElement("td");
+        var input = document.createElement("input");
+        input.type = "text";
+        input.dataset.field = field;
+        input.placeholder = field;
+        input.value = d[field] || "";
+        input.addEventListener("input", function () { check.checked = true; });
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+      var reason = document.createElement("td");
+      reason.className = "reason";
+      reason.textContent = row.reason || "";
+      tr.appendChild(reason);
+      table.appendChild(tr);
+    });
+  }
+  function collectResolutions(table) {
+    var resolutions = [];
+    table.querySelectorAll("tr[data-tid]").forEach(function (tr) {
+      if (!tr.querySelector(".cp-check").checked) return;
+      var fields = {};
+      tr.querySelectorAll("input[data-field]").forEach(function (inp) {
+        fields[inp.dataset.field] = inp.value;
+      });
+      resolutions.push({ transaction_id: tr.dataset.tid, fields: fields });
+    });
+    return resolutions;
+  }
 
   /* ---------- 결산 진행 화면 렌더러 (데모·실제 공용) ----------
      단계별 처리 건수 진행 막대 + 전체 진행률(단계 가중 합산)·경과·예상 남은 시간.
@@ -2439,47 +2565,8 @@
         (CONFIRM_LABEL[confirm.stage] || confirm.stage) + " 단계에서 확인이 필요한 거래 " +
         confirm.rows.length + "건";
       document.getElementById("confirm-sub").textContent = CONFIRM_DESC[confirm.stage] || "";
-      var editable = confirm.editable || [];
-      var table = document.getElementById("confirm-table");
-      table.innerHTML = "";
-      var head = document.createElement("tr");
-      ["반영", "거래"].concat(editable).concat(["사유"]).forEach(function (h) {
-        var th = document.createElement("th");
-        th.textContent = h;
-        head.appendChild(th);
-      });
-      table.appendChild(head);
-      confirm.rows.forEach(function (row) {
-        var d = row.data || {};
-        var tr = document.createElement("tr");
-        tr.dataset.tid = row.transaction_id;
-        var tdCheck = document.createElement("td");
-        var check = document.createElement("input");
-        check.type = "checkbox";
-        check.className = "cp-check";
-        tdCheck.appendChild(check);
-        tr.appendChild(tdCheck);
-        var info = document.createElement("td");
-        info.textContent = [d.결제처 || row.transaction_id, d.날짜, d.금액]
-          .filter(function (v) { return v; }).join(" · ");
-        tr.appendChild(info);
-        editable.forEach(function (field) {
-          var td = document.createElement("td");
-          var input = document.createElement("input");
-          input.type = "text";
-          input.dataset.field = field;
-          input.placeholder = field;
-          input.value = d[field] || "";
-          input.addEventListener("input", function () { check.checked = true; });
-          td.appendChild(input);
-          tr.appendChild(td);
-        });
-        var reason = document.createElement("td");
-        reason.className = "reason";
-        reason.textContent = row.reason || "";
-        tr.appendChild(reason);
-        table.appendChild(tr);
-      });
+      fillConfirmTable(document.getElementById("confirm-table"),
+                       confirm.rows, confirm.editable || []);
       confirmPanel.classList.remove("hidden");
       confirmPanel.scrollIntoView({ behavior: "smooth", block: "center" });
     }
@@ -2498,15 +2585,7 @@
 
     document.getElementById("confirm-apply").onclick = function () {
       if (!currentConfirm) return;
-      var resolutions = [];
-      document.querySelectorAll("#confirm-table tr[data-tid]").forEach(function (tr) {
-        if (!tr.querySelector(".cp-check").checked) return;
-        var fields = {};
-        tr.querySelectorAll("input[data-field]").forEach(function (inp) {
-          fields[inp.dataset.field] = inp.value;
-        });
-        resolutions.push({ transaction_id: tr.dataset.tid, fields: fields });
-      });
+      var resolutions = collectResolutions(document.getElementById("confirm-table"));
       sendConfirm(currentConfirm.stage, resolutions,
                   "사용자 확인 " + resolutions.length + "건 전송 — 파이프라인 계속");
     };
@@ -2648,6 +2727,10 @@
     lastResult = { month: month, total_expense: data.total_expense || 0,
                    tx_count: data.tx_count || 0, flagged_count: data.flagged_count || 0 };
     autoArchive(month);
+    // 남은 확인 필요 건 정리 패널 — 있으면 결과 화면에서 바로 수정·재결산할 수 있다
+    lastResultData = data;
+    refixMonth = month;
+    updateRefixPanel(data);
     document.getElementById("save-bar").classList.remove("hidden");
     // 화면은 진행 화면에 남긴 채 안내만 띄운다 — 결과로는 사용자가 버튼을 눌러 넘어간다
     document.getElementById("run-title").textContent = "결산이 끝났습니다";
@@ -2720,6 +2803,134 @@
   /* 다시 결산하기 */
   document.getElementById("r-rerun").addEventListener("click", function () {
     if (selectedMonth) selectRunMonth(selectedMonth);
+  });
+
+  /* ---- 재결산 — 결산 완료 후 남은 확인 필요 건 수정·확정 (데모·실제 공용 패널) ----
+     실제 모드는 서버가 확인 반영 후 통합만 재실행하고(GET /refix/pending → POST /runs/refix),
+     데모는 같은 흐름을 결과 데이터 위에서 연출한다 */
+  var refixPanel = document.getElementById("refix-panel");
+  var refixTable = document.getElementById("refix-table");
+  var refixBtn = document.getElementById("refix-apply");
+  var refixMonth = null;
+  var lastResultData = null; // 마지막으로 그린 결과 데이터 — 데모 재결산이 이 사본을 수정해 다시 그린다
+
+  function hideRefixPanel() { refixPanel.classList.add("hidden"); }
+  function setRefixBusy(busy) {
+    refixBtn.disabled = busy;
+    refixBtn.textContent = busy ? "재결산 중…" : "수정 반영해 다시 결산";
+  }
+  function setRefixTitle(count) {
+    document.getElementById("refix-title").textContent = "확인 필요 거래 " + count + "건 정리";
+  }
+
+  function demoRefixPending() {
+    // 데모 — 결과 데이터의 확인 필요 행으로 중간 확인(검증 시점)과 같은 payload를 만든다
+    var rows = [];
+    (lastResultData.rows || []).forEach(function (r, idx) {
+      if (!r.flagged) return;
+      rows.push({
+        transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
+        data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
+                "결제처": r["결제처"], "카테고리": r["카테고리"] }
+      });
+    });
+    return { editable: ["날짜", "금액", "카테고리"], rows: rows };
+  }
+
+  function updateRefixPanel(data) {
+    if (!data.flagged_count) { hideRefixPanel(); return; }
+    if (!REAL) {
+      var pending = demoRefixPending();
+      if (!pending.rows.length) { hideRefixPanel(); return; }
+      setRefixTitle(pending.rows.length);
+      fillConfirmTable(refixTable, pending.rows, pending.editable);
+      setRefixBusy(false);
+      refixPanel.classList.remove("hidden");
+      return;
+    }
+    apiJson("refix/pending?month=" + refixMonth).then(function (res) {
+      if (!res.ok || !(res.data.rows || []).length) { hideRefixPanel(); return; }
+      setRefixTitle(res.data.rows.length);
+      fillConfirmTable(refixTable, res.data.rows, res.data.editable || []);
+      setRefixBusy(false);
+      refixPanel.classList.remove("hidden");
+    }).catch(hideRefixPanel);
+  }
+
+  function pollRefix() {
+    fetch("runs/current?since=0", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.running) { setTimeout(pollRefix, POLL_MS); return; }
+        setRefixBusy(false);
+        if (data.error) { showToast("재결산 실패: " + data.error); return; }
+        apiJson("result-data").then(function (res) {
+          if (!res.ok) { showToast(res.data.error || "결과 집계에 실패했습니다"); return; }
+          renderResult(res.data);
+          showToast("재결산이 끝났습니다 — 결과가 갱신되었습니다");
+        });
+      })
+      .catch(function () { setTimeout(pollRefix, POLL_MS); });
+  }
+
+  function demoRefixRun(resolutions) {
+    setRefixBusy(true);
+    var data = lastResultData;
+    setTimeout(function () {
+      var applied = 0, addedExpense = 0;
+      resolutions.forEach(function (fix) {
+        var idx = parseInt(String(fix.transaction_id).replace("demo-", ""), 10);
+        var row = (data.rows || [])[idx];
+        if (!row || !row.flagged) return;
+        if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
+        if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
+        var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
+        if (!isNaN(amt) && amt < 0) row["지출"] = -amt;
+        row.flagged = false;
+        row.reason = "사용자 확인";
+        addedExpense += row["지출"] || 0; // 확인 필요 건은 집계 제외였다가 확인되며 합산에 들어온다
+        applied++;
+      });
+      if (applied) {
+        var agg = demoAggregate(data.rows);
+        data.by_category = agg.by_category;
+        data.by_payer = agg.by_payer;
+        data.top_spenders = agg.top_spenders;
+        data.total_expense = (data.total_expense || 0) + addedExpense;
+        data.net = (data.total_income || 0) - data.total_expense;
+        data.flagged_count = Math.max(0, (data.flagged_count || 0) - applied);
+        data.flags = (data.rows || []).filter(function (r) { return r.flagged; })
+          .map(function (r, i) { return { row: i + 1, "결제처": r["결제처"], reason: r.reason || "" }; });
+        data.summaryText = demoSummaryText({ month: data.month, tx_count: data.tx_count,
+                                             flagged_count: data.flagged_count });
+      }
+      setRefixBusy(false);
+      renderResult(data);
+      showToast(applied ? "재결산이 끝났습니다 — 사용자 확인 " + applied + "건이 장부에 반영되었습니다"
+                        : "반영된 행이 없습니다");
+    }, REDUCED ? 0 : 1200);
+  }
+
+  refixBtn.addEventListener("click", function () {
+    var resolutions = collectResolutions(refixTable);
+    if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
+    if (!REAL) { demoRefixRun(resolutions); return; }
+    setRefixBusy(true);
+    apiJson("runs/refix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: refixMonth, resolutions: resolutions })
+    }).then(function (res) {
+      if (!res.ok) {
+        setRefixBusy(false);
+        showToast(res.data.error || "재결산 요청에 실패했습니다");
+        return;
+      }
+      pollRefix();
+    }).catch(function () {
+      setRefixBusy(false);
+      showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+    });
   });
 
   /* 결산 단계 스텝·이전/다음 이동 */

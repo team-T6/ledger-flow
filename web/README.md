@@ -68,8 +68,9 @@
   (`.github/workflows/deploy-pages.yml`) → https://team-t6.github.io/ledger-flow/
 - **실서비스 → 데모 자동 동기화**: main에 `web/` 변경이 push되면 demo 브랜치에
   자동 커밋·배포된다 (`.github/workflows/sync-demo.yml`) — 데모를 따로 갱신할 필요 없음
-- **데모 샘플 산출물**: `web/demo/result.pdf`·`result.xlsx` (더미 데이터 기반 커밋본) —
-  데모 모드의 리포트 열기·장부 다운로드가 이 파일을 쓴다
+- **데모 샘플 산출물**: `web/demo/{YYYY-MM}_report_{생성일시}.pdf`·`{YYYY-MM}_ledger_{생성일시}.xlsx`
+  (더미 데이터 기반 커밋본, 결산 서고의 보관월 전체 + 당월) — 데모 모드의 리포트 열기·장부
+  다운로드가 월별로 이 파일을 쓴다 (`index.html`의 `DEMO_FILES` 매핑)
 - **실행 시연 = 로컬 + Cloudflare quick tunnel** (진짜 파이프라인을 보여줄 때):
   1. `python3 orchestrator/server.py` 실행 (포트 8788)
   2. `cloudflared tunnel --url http://localhost:8788` — 출력되는 임시 URL을 참석자에게 공유

@@ -255,3 +255,6 @@ token.pickle
 # Run logs (거래 정보 포함 가능)
 logs/*
 !logs/.gitkeep
+
+# Drive MCP 등록 (개인 머신 설정 — 견본은 .mcp.json.example)
+.mcp.json

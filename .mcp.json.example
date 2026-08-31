@@ -1,0 +1,14 @@
+{
+  "//": "Google Drive 가져오기(확정 방식: claude CLI headless + Drive MCP)용 등록 견본.",
+  "//사용법": "이 파일을 .mcp.json으로 복사한 뒤, 쓰려는 Drive MCP 서버로 채우고 그 서버의 안내대로 계정 인증(OAuth)을 이 머신에서 1회 완료한다. 서버 키 이름은 gdrive를 유지한다 — orchestrator/server.py의 Drive 가져오기가 mcp__gdrive__* 도구를 허용 목록으로 쓴다.",
+  "//주의": "인증 토큰·credential 파일은 로컬에만 두고 커밋하지 않는다 (.env·.gitignore 규칙과 같은 결).",
+  "mcpServers": {
+    "gdrive": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "env": {
+        "GDRIVE_CREDENTIALS_PATH": "~/.config/ledger-flow/gdrive-credentials.json"
+      }
+    }
+  }
+}

@@ -610,6 +610,45 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* ---------- 부정 사용 감지 토글 (자료 넣기 화면) ---------- */
+  .nav-link.quiet { background: var(--soft); color: var(--ink); }
+  .fraud-toggle {
+    display: flex; align-items: flex-start; gap: 10px; margin-top: 18px;
+    padding: 14px 16px; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); font-size: 14px; cursor: pointer; text-align: left;
+  }
+  .fraud-toggle input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+  .fraud-toggle .ft-sub { display: block; color: var(--muted); font-size: 13px; }
+
+  /* ---------- 분류 기준 화면 ---------- */
+  .cat-page { padding: 120px 24px 80px; min-height: 100svh; }
+  .cat-page .wrap { max-width: 760px; margin: 0 auto; }
+  .cat-updated { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .cat-tabs { display: flex; gap: 8px; margin: 24px 0 14px; }
+  .cat-tab {
+    font: inherit; font-size: 14px; font-weight: 700; padding: 8px 18px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--soft); color: var(--ink); cursor: pointer;
+  }
+  .cat-tab.on { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+  .cat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .cat-table th, .cat-table td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+  .cat-table th { background: var(--soft); font-size: 13px; }
+  .cat-table td:first-child { width: 32%; }
+  .cat-table td:last-child { width: 52px; text-align: center; }
+  .cat-table input {
+    width: 100%; border: none; background: transparent;
+    font: inherit; font-size: 14px; padding: 2px 0; color: var(--ink);
+  }
+  .cat-table input:disabled { color: var(--ink); opacity: 1; }
+  .cat-table .cat-del {
+    font: inherit; font-size: 12.5px; border: none; background: none;
+    color: var(--red); cursor: pointer; padding: 2px 4px;
+  }
+  .cat-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .cat-actions .hint { margin-top: 0; }
+  .cat-note { margin-top: 26px; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+
   /* ---------- 등장 애니메이션 ---------- */
   .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
   .reveal.in { opacity: 1; transform: none; }
@@ -632,7 +671,7 @@
     <span class="demo-badge">데모 버전</span>
   </div>
   <div class="header-right">
-    <nav><a class="nav-link" id="nav-app" href="#app">결산하기</a></nav>
+    <nav><a class="nav-link quiet" id="nav-categories" href="#categories">분류 기준</a><a class="nav-link" id="nav-app" href="#app">결산하기</a></nav>
   </div>
 </div>
 
@@ -654,7 +693,7 @@
     <p class="lead">월말이 되면 이걸 전부 내려받고, 옮겨 적고, 분류하고, 대조합니다. 매달 같은 순서로, 매달 사람 손으로.</p>
     <div class="pains">
       <div class="pain"><strong>파편화</strong><span>카드사마다 파일 형식이 달라서 합치는 것부터 수작업입니다</span></div>
-      <div class="pain"><strong>반복</strong><span>같은 절차를 매달 다시 합니다 — 한 번에 3시간씩</span></div>
+      <div class="pain"><strong>반복</strong><span>같은 절차를 매달 다시 합니다 — 한 번에 4 - 5시간씩</span></div>
       <div class="pain"><strong>불투명</strong><span>결산이 끝나기 전까지는 이번 달에 얼마 썼는지 아무도 모릅니다</span></div>
     </div>
   </div>
@@ -797,6 +836,12 @@
       <li><span>신한카드_202608.csv</span><span class="ok">준비됨</span></li>
       <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
     </ul>
+    <label class="fraud-toggle" id="fraud-toggle-wrap">
+      <input type="checkbox" id="fraud-toggle">
+      <span><strong>법인카드 부정 사용 감지</strong> — 검증에 부정 사용 점검을 추가합니다
+        <span class="ft-sub">주말·심야·유흥업종 등 의심 결제를 단정하지 않고 "확인 요청"으로 골라 드립니다</span>
+      </span>
+    </label>
     <div class="run-cta">
       <button class="btn" id="run-btn">결산 시작</button>
       <div class="hint" id="upload-hint">데모에서는 샘플 자료로 진행 과정을 보여드립니다</div>
@@ -833,6 +878,7 @@
         <div class="v-tracks">
           <div class="v-sub"><span class="v-name">분류</span><div class="track"><div class="fill" data-v="verify1"></div></div><span class="v-meta mono" data-vm="verify1"></span></div>
           <div class="v-sub"><span class="v-name">금액</span><div class="track"><div class="fill" data-v="verify2"></div></div><span class="v-meta mono" data-vm="verify2"></span></div>
+          <div class="v-sub hidden" data-vsub="verify3"><span class="v-name">부정</span><div class="track"><div class="fill" data-v="verify3"></div></div><span class="v-meta mono" data-vm="verify3"></span></div>
         </div>
         <span class="meta">대기</span>
         <div class="now-doing hidden"><span class="pulse"></span><span class="nd"></span></div>
@@ -955,6 +1001,29 @@
 </div>
 
     </div>
+  </div>
+</section>
+</div>
+
+<!-- 분류 기준 관리 화면 — 정본은 docs/categories.md 하나 (GNB "분류 기준") -->
+<div id="view-categories" class="hidden">
+<section class="cat-page">
+  <div class="wrap">
+    <div class="eyebrow">분류 기준</div>
+    <h2>카테고리 관리</h2>
+    <p class="lead">가공(분류)과 검증 1(적합성 확인)이 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다 — 개인결제는 개인카드 표, 법인결제는 법인카드 표.</p>
+    <div class="cat-updated" id="cat-updated"></div>
+    <div class="cat-tabs">
+      <button type="button" class="cat-tab on" data-cattab="personal">개인카드</button>
+      <button type="button" class="cat-tab" data-cattab="corporate">법인카드</button>
+    </div>
+    <table class="cat-table" id="cat-table"></table>
+    <div class="cat-actions">
+      <button class="btn btn-ghost" id="cat-add" type="button">행 추가</button>
+      <button class="btn" id="cat-save" type="button">저장</button>
+      <span class="hint" id="cat-hint"></span>
+    </div>
+    <div class="cat-note">저장하면 최종 업데이트 일시가 갱신되고, <strong>다음 결산 실행부터</strong> 새 기준이 적용됩니다. 수익 카테고리와 운영 규칙은 이 화면에서 다루지 않습니다 — 정본 문서(docs/categories.md)의 해당 절에서 직접 관리합니다.</div>
   </div>
 </section>
 </div>
@@ -1085,17 +1154,22 @@
     chip.className = "chip" + (chipCls ? " " + chipCls : "") + (chipText ? "" : " hidden");
   }
 
-  /* 뷰 전환 — 랜딩 ↔ 월말결산하기 (해시 라우팅: #app) */
+  /* 뷰 전환 — 랜딩 ↔ 월말결산하기 ↔ 분류 기준 (해시 라우팅: #app · #categories) */
   var viewLanding = document.getElementById("view-landing");
   var viewApp = document.getElementById("view-app");
+  var viewCategories = document.getElementById("view-categories");
   var navApp = document.getElementById("nav-app");
+  var navCategories = document.getElementById("nav-categories");
   function showView(name) {
     var isApp = name === "app";
-    viewLanding.classList.toggle("hidden", isApp);
+    var isCat = name === "categories";
+    viewLanding.classList.toggle("hidden", isApp || isCat);
     viewApp.classList.toggle("hidden", !isApp);
+    viewCategories.classList.toggle("hidden", !isCat);
     navApp.classList.toggle("active", isApp);
-    // 앱 모드에서는 랜딩용 스냅·푸터를 끈다 — 해시에 달이 있으면 그 달로, 없으면 결산 서고로
-    document.documentElement.classList.toggle("app-mode", isApp);
+    navCategories.classList.toggle("active", isCat);
+    // 앱·설정 모드에서는 랜딩용 스냅·푸터를 끈다 — 해시에 달이 있으면 그 달로, 없으면 결산 서고로
+    document.documentElement.classList.toggle("app-mode", isApp || isCat);
     if (isApp) {
       var mk = appHashMonth();
       // 열 수 있는 달: 보관본이 있거나, 진행 중인 결산이거나, 새로 결산할 수 있는 달(데모는 이번 달만)
@@ -1104,6 +1178,7 @@
       if (canOpen) openMonth(mk);
       else showShelf();
     }
+    if (isCat) loadCategories();
     window.scrollTo(0, 0);
     if (isApp && INVITE_CODE_ENABLED && !invited) openInviteModal();
     else closeInviteModal();
@@ -1138,7 +1213,10 @@
     var m = location.hash.match(/^#app\/(\d{4}-\d{2})$/);
     return m ? m[1] : null;
   }
-  function route() { showView(location.hash.indexOf("#app") === 0 ? "app" : "landing"); }
+  function route() {
+    showView(location.hash.indexOf("#app") === 0 ? "app"
+             : location.hash === "#categories" ? "categories" : "landing");
+  }
   window.addEventListener("hashchange", route);
 
   /* 헤더 브랜드 클릭 → 랜딩 맨 위로 */
@@ -1907,7 +1985,8 @@
     }
     function reset() {
       frac = { "수집": 0, "가공": 0, "검증": 0, "통합": 0 };
-      vf = { verify1: 0, verify2: 0 };
+      vf = {};
+      vsubs.forEach(function (k) { vf[k] = 0; });
       startedAt = {};
       runStart = Date.now();
       document.querySelectorAll("#stages .stage").forEach(function (r) {
@@ -1955,11 +2034,20 @@
       frac[name] = Math.max(frac[name] || 0, Math.min(done / total, 1));
       renderOverall();
     }
+    var vsubs = ["verify1", "verify2"];
     var vf = { verify1: 0, verify2: 0 };
+    function setVerifySubs(list) {
+      // 검증 축 구성 — 기본은 분류·금액 둘, 부정 사용 감지 토글을 켠 실행은 부정까지 셋
+      vsubs = list;
+      vf = {};
+      list.forEach(function (k) { vf[k] = 0; });
+      var extra = document.querySelector('.v-sub[data-vsub="verify3"]');
+      if (extra) extra.classList.toggle("hidden", list.indexOf("verify3") < 0);
+    }
     function progressVerify(sub, done, total) {
-      // 병렬 검증(분류=verify1·금액=verify2)은 각자 미니 막대로 — 행 진행률은 두 축의 평균
+      // 병렬 검증(분류=verify1·금액=verify2·부정=verify3)은 각자 미니 막대로 — 행 진행률은 축 평균
       var r = row("검증");
-      if (!r || !total) return;
+      if (!r || !total || !(sub in vf)) return;
       if (!startedAt["검증"]) startedAt["검증"] = Date.now();
       r.classList.add("running");
       r.classList.remove("indet");
@@ -1973,7 +2061,9 @@
         meta.textContent = done + "/" + total + " · " + pct + "%";
         vf[sub] = Math.max(vf[sub], Math.min(done / total, 1));
       }
-      frac["검증"] = (vf.verify1 + vf.verify2) / 2;
+      var sum = 0;
+      vsubs.forEach(function (k) { sum += vf[k] || 0; });
+      frac["검증"] = vsubs.length ? sum / vsubs.length : 0;
       r.querySelector(".meta").textContent = Math.round(frac["검증"] * 100) + "%";
       renderOverall();
     }
@@ -1995,7 +2085,7 @@
       document.getElementById("o-time").textContent = "총 " + fmtDur(Date.now() - runStart);
     }
     return { reset: reset, start: start, progress: progress, progressVerify: progressVerify,
-             doing: doing, finish: finish, stop: stop };
+             setVerifySubs: setVerifySubs, doing: doing, finish: finish, stop: stop };
   })();
 
   function logLine(logEl, head, rest, isError) {
@@ -2043,10 +2133,40 @@
     { s: "통합", ev: "done", meta: "42건", log: "통합 | 완료 | 결산 리포트(PDF)·결제내역 장부(엑셀) 생성" }
   ];
   var running = false;
+  var fraudToggle = document.getElementById("fraud-toggle");
+  function fraudOn() { return !!(fraudToggle && fraudToggle.checked); }
+
+  /* 부정 사용 감지 켠 데모 — 기본 연출에 검증 3(부정) 축·로그를 끼워 넣은 사본을 만든다 */
+  function buildFraudScript() {
+    var out = [];
+    SCRIPTED.forEach(function (ev) {
+      if (ev.s === "검증" && ev.ev === "done") {
+        out.push({ s: "검증", ev: "vprog", v: "verify3", d: 42, t: 42, wait: 200 });
+        out.push({ s: "검증", ev: "log",
+                   log: "부정 사용 검증 | 완료 | 법인결제 내역 점검 — 1건 확인 요청 (심야·유흥업종 의심)",
+                   wait: 250 });
+        out.push({ s: ev.s, ev: "done", meta: "42건 ×3", log: ev.log });
+        return;
+      }
+      out.push(ev);
+      if (ev.s === "검증" && ev.ev === "start") {
+        out.push({ s: "검증", ev: "log",
+                   log: "부정 사용 검증 | 시작 | 법인결제 행을 주말·심야·업종 기준으로 점검 중 (동시 진행)",
+                   wait: 150 });
+        out.push({ s: "검증", ev: "vprog", v: "verify3", d: 0, t: 42, wait: 120 });
+      } else if (ev.ev === "vprog" && ev.v === "verify2" && ev.d > 0 && ev.d < 42) {
+        out.push({ s: "검증", ev: "vprog", v: "verify3", d: Math.min(42, ev.d + 5), t: 42, wait: 150 });
+      }
+    });
+    return out;
+  }
+
   document.getElementById("run-btn").addEventListener("click", function () {
     if (running) return;
     if (REAL) { runReal(); return; }
     running = true;
+    var script = fraudOn() ? buildFraudScript() : SCRIPTED;
+    progressUI.setVerifySubs(fraudOn() ? ["verify1", "verify2", "verify3"] : ["verify1", "verify2"]);
     var log = document.getElementById("runlog");
     log.innerHTML = "";
     progressUI.reset();
@@ -2058,13 +2178,13 @@
     showPane("run-sec");
     var i = 0;
     function tick() {
-      if (i >= SCRIPTED.length) {
+      if (i >= script.length) {
         running = false;
         progressUI.stop();
         finishDemo();
         return;
       }
-      var ev = SCRIPTED[i++];
+      var ev = script[i++];
       if (ev.ev === "start") progressUI.start(ev.s, ev.note);
       else if (ev.ev === "prog") {
         progressUI.progress(ev.s, ev.d, ev.t);
@@ -2171,7 +2291,8 @@
 
   /* ---- 실행 + 폴링 ---- */
   var POLL_MS = 1500;
-  var STAGE_CHIP = { collect: "수집", refine: "가공", verify1: "검증", verify2: "검증", merge: "통합" };
+  var STAGE_CHIP = { collect: "수집", refine: "가공", verify1: "검증", verify2: "검증",
+                     verify3: "검증", merge: "통합" };
   // 실제 모드에서 단계 아래에 보여줄 "지금 하는 일" 설명 — 파이프라인 이벤트에는
   // 건수만 실려 오므로, 단계가 하는 일을 고정 문구로 알린다 (데모의 상세 연출과 대응)
   var STAGE_DOING = {
@@ -2200,24 +2321,29 @@
   function runReal() {
     if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
     running = true;
+    var withFraud = fraudOn();
     apiJson("runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: selectedMonth, source: "uploads" })
+      body: JSON.stringify({ month: selectedMonth, source: "uploads", fraud_check: withFraud })
     }).then(function (res) {
       if (!res.ok) {
         running = false;
         showToast(res.data.error || "실행 요청에 실패했습니다");
         return;
       }
-      startPolling();
+      startPolling(withFraud);
     }).catch(function () {
       running = false;
       showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
     });
   }
 
-  function startPolling() {
+  function startPolling(withFraud) {
+    progressUI.setVerifySubs(withFraud ? ["verify1", "verify2", "verify3"] : ["verify1", "verify2"]);
+    STAGE_DOING["검증"] = withFraud
+      ? "분류·금액·부정 사용 세 검증이 같은 표를 나란히 확인하는 중"
+      : "분류·금액 두 검증이 같은 표를 나란히 확인하는 중";
     var log = document.getElementById("runlog");
     log.innerHTML = "";
     progressUI.reset();
@@ -2232,6 +2358,7 @@
     var pollFails = 0;
     var mergeDone = false;
     var verifyFinal = { verify1: null, verify2: null }; // null=진행 전/중, "완료"/"실패"=확정
+    if (withFraud) verifyFinal.verify3 = null;
     var currentConfirm = null; // 화면에 떠 있는 중간 확인 요청 (seq로 중복 렌더 방지)
 
     function addLine(head, rest, isError) {
@@ -2242,7 +2369,7 @@
     var CONFIRM_DESC = {
       collect: "원본에서 정확히 읽지 못한 거래입니다 — 값을 바로잡거나 그대로 둘 수 있습니다",
       refine: "가맹점·카테고리를 확정하지 못한 거래입니다",
-      verify: "검증에서 반려된 거래입니다 — 수정해 확인하면 장부에 실립니다"
+      verify: "검증에서 반려되거나 확인 요청된 거래입니다 — 반려 건은 수정해 확인하면 장부에 실리고, 부정 사용 확인 요청 건은 체크하면 업무 사용으로 확정됩니다"
     };
     var CONFIRM_LABEL = { collect: "수집", refine: "가공", verify: "검증" };
     var confirmPanel = document.getElementById("confirm-panel");
@@ -2347,7 +2474,7 @@
       // 진행 이벤트 — 막대만 갱신하고 로그에는 싣지 않는다 (기록은 시작/완료/실패만)
       if (ev.state === "진행") {
         if (!ev.progress || !chipName) return;
-        if (ev.stage === "verify1" || ev.stage === "verify2") {
+        if (ev.stage === "verify1" || ev.stage === "verify2" || ev.stage === "verify3") {
           progressUI.progressVerify(ev.stage, ev.progress.done, ev.progress.total);
         } else {
           progressUI.progress(chipName, ev.progress.done, ev.progress.total);
@@ -2366,13 +2493,15 @@
       if (!chipName) return;
 
       if (chipName === "검증") {
-        // 검증 1·2는 병렬 — 행 하나로 묶고, 둘 다 확정돼야 done/fail로 굳힌다
+        // 검증기들은 병렬 — 행 하나로 묶고, 전부 확정돼야 done/fail로 굳힌다
         if (ev.state === "시작") { progressUI.start("검증", STAGE_DOING["검증"]); return; }
         if (ev.state === "완료" || ev.state === "실패") verifyFinal[ev.stage] = ev.state;
-        var states = [verifyFinal.verify1, verifyFinal.verify2];
+        var keys = Object.keys(verifyFinal);
+        var states = keys.map(function (k) { return verifyFinal[k]; });
         if (states.every(function (s) { return s !== null; })) {
           var per = ev.counts ? ev.counts.total : 0;
-          progressUI.finish("검증", states.indexOf("실패") >= 0, per ? per + "건 ×2" : "");
+          progressUI.finish("검증", states.indexOf("실패") >= 0,
+                            per ? per + "건 ×" + keys.length : "");
         }
         return;
       }
@@ -2571,6 +2700,190 @@
     renderVault(archivedList, vaultReal);
   }
 
+  /* ---- 분류 기준 관리 (정본: docs/categories.md — 실제 모드는 서버 GET/POST /categories) ---- */
+  var CAT_SECTIONS = { personal: "## 지출 — 개인카드", corporate: "## 지출 — 법인카드" };
+  var CAT_TAB_LABEL = { personal: "개인카드", corporate: "법인카드" };
+  // 데모 스냅숏 — 정본(docs/categories.md)의 표를 그대로 옮긴 보기 전용 사본 (DEMO_MONTHS와 같은 결)
+  var DEMO_CATEGORIES = {
+    updated: "2026-08-31 12:24",
+    personal: [
+      ["식대", "식사·배달·커피·디저트·편의점 간식"], ["교통비", "대중교통·택시·주유·주차"],
+      ["여행", "호텔·항공·출장 경비"], ["차량유지비용", "정비·세차·통행료"],
+      ["통신비", "휴대폰·인터넷"], ["기타물품", "사무용품·생활용품·가구·가전"],
+      ["구독료", "SaaS·멤버십·콘텐츠 구독"], ["지급수수료", "금융·플랫폼 수수료, 이자 비용"],
+      ["사용료", "외주 개발·디자인·번역 등 용역 대가, 광고 집행·홍보물 제작"],
+      ["경조사비", "외부 접대·선물·경조금"], ["교육비", "강의·서적·세미나"],
+      ["의료비", "병원·약국"], ["취미생활", "피트니스·체육관·운동"], ["월세", "월세"],
+      ["공과금", "관리비·전기·가스·수도·세금"], ["보험료", "사업·차량·보장성 보험"],
+      ["배송비", "택배·화물·퀵"], ["기타", "위에 속하지 않는 지출"]
+    ],
+    corporate: [
+      ["복리후생비", "식사·배달·커피·간식, 임직원 의료·건강(병원·약국·피트니스), 임직원 경조사"],
+      ["여비교통비", "대중교통·택시·주유·주차, 호텔·항공·출장 경비"],
+      ["차량유지비", "정비·세차·통행료"], ["통신비", "휴대폰·인터넷"],
+      ["소모품비", "사무용품·생활용품"], ["비품", "가구·가전"],
+      ["지급수수료", "SaaS·멤버십·콘텐츠 구독"], ["지급수수료·이자비용", "금융·플랫폼 수수료, 이자 비용"],
+      ["외주용역비", "외주 개발·디자인·번역 등 용역 대가"], ["광고선전비", "광고 집행·홍보물 제작"],
+      ["접대비", "외부(거래처·외부 인사) 접대·선물·경조금"],
+      ["교육훈련비·도서인쇄비", "강의·서적·세미나"], ["임차료", "월세"],
+      ["세금과공과", "관리비·전기·가스·수도·세금"], ["보험료", "사업·차량·보장성 보험"],
+      ["운반비", "택배·화물·퀵"], ["잡비", "위에 속하지 않는 지출"]
+    ]
+  };
+  var catData = null;
+  var catTab = "personal";
+  var catDirty = false;
+
+  function catSectionRange(lines, header) {
+    var start = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === header) { start = i; break; }
+    }
+    if (start < 0) return null;
+    var t0 = -1, t1 = -1;
+    for (var j = start + 1; j < lines.length; j++) {
+      var s = lines[j].trim();
+      if (s.indexOf("## ") === 0) break;
+      if (s.charAt(0) === "|") { if (t0 < 0) t0 = j; t1 = j; }
+    }
+    return { t0: t0, t1: t1 };
+  }
+  function parseCatTable(md, header) {
+    var lines = md.split("\n");
+    var r = catSectionRange(lines, header);
+    if (!r || r.t0 < 0) return [];
+    var rows = [];
+    for (var i = r.t0 + 2; i <= r.t1; i++) { // 헤더·구분선 두 줄 건너뜀
+      var cells = lines[i].split("|");
+      if (cells.length < 3) continue;
+      var name = cells[1].trim();
+      if (name) rows.push([name, (cells[2] || "").trim()]);
+    }
+    return rows;
+  }
+  function collectCatTable() {
+    // 화면의 현재 표를 상태로 되읽는다 — 탭 전환·저장 전에 호출해 편집을 잃지 않는다
+    if (!catData) return;
+    var rows = [];
+    document.querySelectorAll("#cat-table tr[data-idx]").forEach(function (tr) {
+      var inputs = tr.querySelectorAll("input");
+      rows.push([inputs[0].value.trim(), inputs[1].value.trim()]);
+    });
+    catData[catTab] = rows;
+  }
+  function serializeCategories() {
+    var lines = catData.content.split("\n");
+    Object.keys(CAT_SECTIONS).forEach(function (key) {
+      var r = catSectionRange(lines, CAT_SECTIONS[key]);
+      if (!r || r.t0 < 0) return;
+      var table = ["| 카테고리 | 포함 범위 |", "|--------------|---|"];
+      catData[key].forEach(function (row) {
+        if (row[0]) table.push("| " + row[0] + " | " + row[1] + " |");
+      });
+      Array.prototype.splice.apply(lines, [r.t0, r.t1 - r.t0 + 1].concat(table));
+    });
+    return lines.join("\n");
+  }
+  function renderCategories() {
+    document.getElementById("cat-updated").textContent =
+      catData && catData.updated ? "최종 업데이트: " + catData.updated : "";
+    document.querySelectorAll(".cat-tab").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.cattab === catTab);
+    });
+    var editable = REAL;
+    var table = document.getElementById("cat-table");
+    table.innerHTML = "";
+    var head = document.createElement("tr");
+    ["카테고리 (" + CAT_TAB_LABEL[catTab] + ")", "포함 범위", ""].forEach(function (h) {
+      var th = document.createElement("th");
+      th.textContent = h;
+      head.appendChild(th);
+    });
+    table.appendChild(head);
+    (catData ? catData[catTab] : []).forEach(function (row, idx) {
+      var tr = document.createElement("tr");
+      tr.dataset.idx = idx;
+      row.forEach(function (value) {
+        var td = document.createElement("td");
+        var input = document.createElement("input");
+        input.type = "text";
+        input.value = value;
+        input.disabled = !editable;
+        input.addEventListener("input", function () { catDirty = true; });
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+      var tdDel = document.createElement("td");
+      if (editable) {
+        var del = document.createElement("button");
+        del.type = "button";
+        del.className = "cat-del";
+        del.textContent = "삭제";
+        del.addEventListener("click", function () {
+          collectCatTable();
+          catData[catTab].splice(idx, 1);
+          catDirty = true;
+          renderCategories();
+        });
+        tdDel.appendChild(del);
+      }
+      tr.appendChild(tdDel);
+      table.appendChild(tr);
+    });
+    var saveBtn = document.getElementById("cat-save");
+    var addBtn = document.getElementById("cat-add");
+    saveBtn.disabled = addBtn.disabled = !editable;
+    document.getElementById("cat-hint").textContent = editable
+      ? "저장은 정본 문서(docs/categories.md)에 바로 반영됩니다"
+      : "데모에서는 보기만 가능합니다 — 편집·저장은 로컬 실행 모드에서 됩니다";
+  }
+  function loadCategories() {
+    if (!REAL) {
+      catData = { content: null, updated: DEMO_CATEGORIES.updated,
+                  personal: DEMO_CATEGORIES.personal.map(function (r) { return r.slice(); }),
+                  corporate: DEMO_CATEGORIES.corporate.map(function (r) { return r.slice(); }) };
+      renderCategories();
+      return;
+    }
+    apiJson("categories").then(function (res) {
+      if (!res.ok) { showToast(res.data.error || "분류 기준을 불러오지 못했습니다"); return; }
+      catData = { content: res.data.content, updated: res.data.updated,
+                  personal: parseCatTable(res.data.content, CAT_SECTIONS.personal),
+                  corporate: parseCatTable(res.data.content, CAT_SECTIONS.corporate) };
+      catDirty = false;
+      renderCategories();
+    }).catch(function () { showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
+  }
+  document.querySelectorAll(".cat-tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.cattab === catTab) return;
+      collectCatTable();
+      catTab = btn.dataset.cattab;
+      renderCategories();
+    });
+  });
+  document.getElementById("cat-add").addEventListener("click", function () {
+    if (!REAL || !catData) return;
+    collectCatTable();
+    catData[catTab].push(["", ""]);
+    catDirty = true;
+    renderCategories();
+  });
+  document.getElementById("cat-save").addEventListener("click", function () {
+    if (!REAL || !catData) return;
+    collectCatTable();
+    apiJson("categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: serializeCategories() })
+    }).then(function (res) {
+      if (!res.ok) { showToast(res.data.error || "저장에 실패했습니다"); return; }
+      catDirty = false;
+      showToast("분류 기준을 저장했습니다 — 다음 결산 실행부터 반영됩니다");
+      loadCategories(); // 정본 재로드 — 서버가 찍은 최종 업데이트 일시를 그대로 보여준다
+    }).catch(function () { showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
+  });
+
   /* ---- 실제 모드 켜기 ---- */
   function enableRealMode() {
     REAL = true;
@@ -2610,7 +2923,26 @@
     driveReal.classList.remove("inert");
     drive.parentNode.replaceChild(driveReal, drive);
     driveReal.addEventListener("click", function () {
-      showToast("Google Drive 연동은 아직 지원하지 않습니다 — 파일을 직접 올려 주세요");
+      // Drive 가져오기 (확정 방식: claude CLI headless + Drive MCP) — 서버가 uploads/inbox/에 저장한다
+      if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
+      if (driveReal.disabled) return;
+      driveReal.disabled = true;
+      var label = driveReal.textContent;
+      driveReal.textContent = "Drive에서 가져오는 중…";
+      function restore() { driveReal.disabled = false; driveReal.textContent = label; }
+      apiJson("drive/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: selectedMonth })
+      }).then(function (res) {
+        restore();
+        if (!res.ok) { showToast(res.data.error || "Drive 가져오기에 실패했습니다"); return; }
+        renderFileList(res.data.files || []);
+        showToast("Google Drive에서 가져왔습니다 — 준비된 파일 " + (res.data.files || []).length + "개");
+      }).catch(function () {
+        restore();
+        showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+      });
     });
 
     var dropzone = document.getElementById("dropzone");

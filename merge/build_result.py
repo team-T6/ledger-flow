@@ -55,6 +55,9 @@ VERIFY_CSVS = {
     "verify1": os.path.join(REPO_ROOT, "verify1", "result.csv"),
     "verify2": os.path.join(REPO_ROOT, "verify2", "result.csv"),
 }
+# 검증 3(법인카드 부정 사용 감지)은 토글 옵트인 — 파일이 없으면 "미완"이 아니라 정상 생략
+# (interface-spec.md 검증 3 행 · 2026-08-31 확정 로그)
+VERIFY3_CSV = os.path.join(REPO_ROOT, "verify3", "result.csv")
 
 # 엑셀 회계장부 컬럼 — 거래 표 스키마 (확정 v1)와 동일 (interface-spec.md "산출물 양식")
 LEDGER_COLUMNS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
@@ -122,6 +125,15 @@ def load_transactions():
                 for v in csv.DictReader(f)
             }
 
+    # 검증 3은 토글을 켠 실행에만 존재 — 파일이 있으면 같은 방식으로 판정을 붙인다
+    verify3 = None
+    if os.path.exists(VERIFY3_CSV):
+        with open(VERIFY3_CSV, encoding="utf-8-sig", newline="") as f:
+            verify3 = {
+                v["transaction_id"]: (v.get("verify3_result", ""), v.get("verify3_reason", ""))
+                for v in csv.DictReader(f)
+            }
+
     for row in rows:
         amount = _parse_amount(row.get("금액"))
         # 화면 호환용 파생 필드 — 스키마 v1의 금액(부호)·결제구분에서 계산
@@ -134,11 +146,19 @@ def load_transactions():
             else:
                 result, reason = verdicts[stage].get(row.get("transaction_id"), ("미완", f"{stage} 결과에 해당 행 없음"))
                 row[f"{stage}_result"], row[f"{stage}_reason"] = result, reason
+        if verify3 is not None:
+            result, reason = verify3.get(row.get("transaction_id"), ("미완", "verify3 결과에 해당 행 없음"))
+            row["verify3_result"], row["verify3_reason"] = result, reason
     return rows, incomplete
 
 
 def split_transactions(transactions):
     """verify1·verify2 중 하나라도 반려면 확인 필요 목록으로 뺀다 (재시도 없음).
+    검증 3(있으면)의 확인 요청 건은 **장부·집계에서 빼지 않고** 확인 필요 목록에만
+    함께 싣는다 — 데이터는 정상이고 업무 사용 여부만 확인 대상이라서다
+    (단계 문서 merge.md · interface-spec.md 검증 3 확정 로그). 그래서 이 건은
+    ok_rows와 flagged_rows 양쪽에 들어간다 — 보고 counts.ok는 build_envelope가
+    total - flagged로 계산해 문제 건으로 센다.
     flagged_rows에는 지휘 보고의 flags[].row로 쓸 1-기준 행 번호(row)를 함께 담는다."""
     ok_rows, flagged_rows = [], []
     for idx, row in enumerate(transactions, start=1):
@@ -149,6 +169,9 @@ def split_transactions(transactions):
             flagged_rows.append({**row, "row": idx, "type": "반려",
                                  "reason": f"{row.get('verify2_reason', '')} (verify2)"})
         else:
+            if row.get("verify3_result") == "확인 요청":
+                flagged_rows.append({**row, "row": idx, "type": "확인 요청",
+                                     "reason": f"{row.get('verify3_reason', '')} (verify3)"})
             ok_rows.append(row)
     return ok_rows, flagged_rows
 
@@ -188,12 +211,18 @@ def build_envelope(total, ok_rows, flagged_rows, failed=False, message="", incom
         output = OUTPUT_PATHS
 
     flags = [{"row": 0, "type": "미완", "reason": reason} for reason in incomplete]
-    flags += [{"row": r["row"], "type": "확인 필요", "reason": r["reason"]} for r in flagged_rows]
+    # 검증 3의 확인 요청 건은 유형을 보존한다 (장부에는 실리고 확인 목록에만 표시)
+    flags += [{"row": r["row"],
+               "type": "확인 요청" if r.get("type") == "확인 요청" else "확인 필요",
+               "reason": r["reason"]} for r in flagged_rows]
     return {
         "stage": "merge",
         "status": status,
         "output": output,
-        "counts": {"total": total, "ok": len(ok_rows), "flagged": len(flagged_rows)},
+        # 확인 요청 건이 ok_rows(장부)와 flagged_rows 양쪽에 들어가므로
+        # ok는 len(ok_rows)가 아니라 total - flagged로 센다 (문제 건 제외)
+        "counts": {"total": total, "ok": max(0, total - len(flagged_rows)),
+                   "flagged": len(flagged_rows)},
         "flags": flags,
         "message": message,
     }

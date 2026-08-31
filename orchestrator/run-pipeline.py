@@ -46,16 +46,17 @@ LOGS_DIR = os.path.join(REPO_ROOT, "logs")
 SUMMARY_PATH = os.path.join(BASE_DIR, "result-summary.md")
 
 # 판단형 단계 모델 (단계 문서 "도구·코드" 확정) — 가공은 sonnet(effort medium),
-# 검증 1·2는 기준 대조 위주의 기계적 판정이라 haiku. Haiku 4.5는 effort 파라미터
+# 검증 1·2·3은 기준 대조 위주의 기계적 판정이라 haiku. Haiku 4.5는 effort 파라미터
 # 미지원이라 STAGE_EFFORT에 넣지 않는다 (넣으면 API가 400을 돌려준다)
 STAGE_MODELS = {"refine": "claude-sonnet-5",
-                "verify1": "claude-haiku-4-5", "verify2": "claude-haiku-4-5"}
+                "verify1": "claude-haiku-4-5", "verify2": "claude-haiku-4-5",
+                "verify3": "claude-haiku-4-5"}
 STAGE_EFFORT = {"refine": "medium"}
 MAX_TOKENS = 32000
 
 STAGE_LABELS = {"collect": "수집", "refine": "가공", "verify1": "검증 1",
-                "verify2": "검증 2", "verify": "검증", "merge": "통합",
-                "summary": "최종 결과 요약", "archive": "보관"}
+                "verify2": "검증 2", "verify3": "검증 3", "verify": "검증",
+                "merge": "통합", "summary": "최종 결과 요약", "archive": "보관"}
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — gitignore가 커밋 차단
 
 # 판단형 단계의 입력 산출물 (앞 단계 output 경로 — 거래 표는 CSV로 흐른다)
@@ -63,6 +64,7 @@ LLM_STAGE_INPUTS = {
     "refine": os.path.join(REPO_ROOT, "collect", "result.csv"),
     "verify1": os.path.join(REPO_ROOT, "refine", "result.csv"),
     "verify2": os.path.join(REPO_ROOT, "refine", "result.csv"),
+    "verify3": os.path.join(REPO_ROOT, "refine", "result.csv"),
 }
 
 # 판단형 단계가 참조해야 하는 기준 문서 — 단발 호출은 파일을 못 읽으므로 메시지에 동봉한다
@@ -71,6 +73,7 @@ LLM_STAGE_REFERENCES = {
     "refine": [os.path.join(REPO_ROOT, "docs", "categories.md")],
     "verify1": [os.path.join(REPO_ROOT, "docs", "categories.md")],
     "verify2": [],
+    "verify3": [os.path.join(REPO_ROOT, "docs", "fraud-rules.md")],
 }
 
 STATUS_VOCAB = {"ok", "empty", "partial", "failed"}
@@ -96,7 +99,7 @@ ENVELOPE_SCHEMA = {
                 "properties": {"row": {"type": "integer"},
                                # interface-spec "단계 결과 보고" flags[].type 어휘 고정
                                "type": {"type": "string",
-                                        "enum": ["확인 필요", "반려", "오류", "미완"]},
+                                        "enum": ["확인 필요", "반려", "확인 요청", "오류", "미완"]},
                                "reason": {"type": "string"}},
                 "required": ["row", "type", "reason"],
                 "additionalProperties": False,
@@ -295,7 +298,7 @@ class Run:
     로그 한 줄이 곧 이벤트 한 건 — 파일 기록과 통지가 어긋나지 않는다.
     """
 
-    def __init__(self, month, on_event=None):
+    def __init__(self, month, on_event=None, fraud_check=False):
         self.month = month
         self.on_event = on_event
         self._seq = 0
@@ -308,7 +311,10 @@ class Run:
         self.warnings = []         # 요약 맨 앞에 실을 경고
         self.notes = []            # 요약 4장 메모
         self._lock = threading.Lock()  # 검증 병렬 구간의 로그·이벤트 직렬화용
-        self.log("run", "시작", memo=f"대상 월 {month}")
+        memo = f"대상 월 {month}"
+        if fraud_check:  # 실행 파라미터를 실행 로그에 기록 (interface-spec §실행 파라미터)
+            memo += " · 부정 사용 감지 토글 켬"
+        self.log("run", "시작", memo=memo)
 
     def log(self, stage, state, counts=None, memo="", envelope=None):
         counts_txt = ""
@@ -607,25 +613,31 @@ def apply_stage_fixes(stage, fixes):
     return applied
 
 
+# 검증기별 "사용자 확인 대상" 판정값 — 1·2는 반려, 3은 확인 요청(부정 단정 없음)
+VERIFY_FLAG_VALUES = {"verify1": "반려", "verify2": "반려", "verify3": "확인 요청"}
+
+
 def build_verify_pending():
-    """검증 확인 지점(통합 직전) — 두 검증 CSV의 반려 행을 transaction_id로 합쳐 만든다."""
+    """검증 확인 지점(통합 직전) — 검증 CSV들의 반려·확인 요청 행을 transaction_id로 합쳐 만든다."""
     refine_path = LLM_STAGE_INPUTS["verify1"]  # refine/result.csv — 장부 값의 정본
     refine_by_tid = {}
     if os.path.exists(refine_path):
         refine_by_tid = {_tid(r): r for r in read_csv_rows(refine_path)[0]}
     pending = {}
-    for stage in ("verify1", "verify2"):
+    for stage, flag_value in VERIFY_FLAG_VALUES.items():
         path = os.path.join(REPO_ROOT, stage, "result.csv")
         if not os.path.exists(path):
             continue
         for row in read_csv_rows(path)[0]:
-            if row.get(f"{stage}_result") != "반려" or not _tid(row):
+            if row.get(f"{stage}_result") != flag_value or not _tid(row):
                 continue
             entry = pending.setdefault(_tid(row), {
-                "transaction_id": _tid(row), "type": "반려", "reasons": [],
+                "transaction_id": _tid(row), "type": flag_value, "reasons": [],
                 "data": dict(refine_by_tid.get(_tid(row), row))})
             entry["reasons"].append(
                 f"{STAGE_LABELS[stage]}: {row.get(f'{stage}_reason', '')}".strip(" :"))
+            if flag_value == "반려":  # 반려·확인 요청이 겹치면 반려가 대표 유형
+                entry["type"] = "반려"
     result = []
     for entry in pending.values():
         entry["reason"] = " / ".join(entry.pop("reasons"))
@@ -658,7 +670,7 @@ def apply_verify_fixes(fixes):
     write_csv_rows(refine_path, rows, fieldnames)
 
     fixes_by_tid = {f["transaction_id"]: f for f in fixes}
-    for stage in ("verify1", "verify2"):
+    for stage, flag_value in VERIFY_FLAG_VALUES.items():
         path = os.path.join(REPO_ROOT, stage, "result.csv")
         if not os.path.exists(path):
             continue
@@ -671,7 +683,8 @@ def apply_verify_fixes(fixes):
                 if key in CONFIRM_EDITABLE["verify"] and key in row:
                     row[key] = value
             _tag_user_confirmed(row)
-            if row.get(f"{stage}_result") == "반려":
+            # 검증 3의 확인 요청은 "업무 사용 확정" 입력이 같은 방식으로 통과 처리한다
+            if row.get(f"{stage}_result") == flag_value:
                 row[f"{stage}_result"] = "통과"
                 row[f"{stage}_reason"] = "사용자 확인"
             changed = True
@@ -733,7 +746,7 @@ def run_confirmation(run, on_confirm, point):
     fixes = clean_resolutions(resolutions)
     if point == "verify":
         applied = apply_verify_fixes(fixes)
-        for stage in ("verify1", "verify2"):
+        for stage in ("verify1", "verify2", "verify3"):
             env = run.envelopes.get(stage)
             if env and env["status"] != "failed":
                 drop_resolved_flags(env, stage, applied)
@@ -805,6 +818,15 @@ def stage_row(stage, envelope):
     return f"| {STAGE_LABELS[stage]} | {envelope['status']} | {c['total']} / {c['ok']} / {c['flagged']} | {output_txt} |"
 
 
+def summary_stages(run):
+    """요약·집계에 쓸 단계 목록 — 검증 3은 토글을 켠 실행(보고 존재)에만 싣는다."""
+    stages = ["collect", "refine", "verify1", "verify2"]
+    if "verify3" in run.envelopes:
+        stages.append("verify3")
+    stages.append("merge")
+    return stages
+
+
 def write_summary(run):
     lines = [f"# 최종 결과 요약 ({run.month} 결산)", ""]
     for warning in run.warnings:
@@ -812,11 +834,11 @@ def write_summary(run):
 
     lines += ["## 1. 단계별 진행 현황", "",
               "| 단계 | 상태 | 처리 건수 (전체/정상/확인필요) | 산출물 |", "|---|---|---|---|"]
-    for stage in ("collect", "refine", "verify1", "verify2", "merge"):
+    for stage in summary_stages(run):
         lines.append(stage_row(stage, run.envelopes.get(stage)))
     lines.append("")
 
-    flags = [(stage, f) for stage in ("collect", "refine", "verify1", "verify2", "merge")
+    flags = [(stage, f) for stage in summary_stages(run)
              for f in (run.envelopes.get(stage) or {}).get("flags", [])]
     lines += ["## 2. 확인 필요 목록", ""]
     if flags:
@@ -849,19 +871,22 @@ def write_summary(run):
 ENV_PROBLEM_KEYWORDS = ("없음", "없습니다", "찾을 수 없", "로드 실패", "누락", "권한", "열 수 없")
 
 
-def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None):
+def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None, fraud_check=False):
     """파이프라인 1회 실행 — CLI(main)와 웹 서버가 같은 본체를 쓴다. Run을 돌려준다.
 
     upload_dir가 주어지고 파일이 있으면 수집을 그 업로드 파일들로 실행한다
     (없으면 기존 sample_data 경로 — CLI·대시보드 하위 호환).
     on_confirm이 있으면(웹 실행 경로) 확인 지점(수집·가공 직후, 통합 직전)에서
     파이프라인을 일시정지하고 사용자 입력을 받아 반영한다 — run_confirmation 참고.
+    fraud_check(부정 사용 감지 토글, 기본 꺼짐)를 켜면 검증 스테이지에 검증 3을
+    함께 병렬 실행한다 (interface-spec §실행 파라미터 확정).
     예외로 중단돼도 요약(run.log·result-summary.md)은 남기고, on_event에는
     반드시 종결 이벤트(state: 종료/오류)가 마지막으로 흐른다.
     """
-    run = Run(month, on_event=on_event)
+    run = Run(month, on_event=on_event, fraud_check=fraud_check)
     try:
-        _run_stages(run, month, upload_dir=upload_dir, on_confirm=on_confirm)
+        _run_stages(run, month, upload_dir=upload_dir, on_confirm=on_confirm,
+                    fraud_check=fraud_check)
         run.log("run", "종료", memo="정상 종결")
     except Exception as e:
         run.notes.append(f"실행기 오류로 중단: {e}")
@@ -874,15 +899,18 @@ def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None):
     return run
 
 
-def _run_stages(run, month, upload_dir=None, on_confirm=None):
+def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False):
     run.notes.append(f"대상 월: {month}")
+    if fraud_check:
+        run.notes.append("부정 사용 감지 토글: 켬 (검증 3 실행)")
     if upload_dir:
         upload_count = sum(1 for e in os.scandir(upload_dir) if e.is_file())
         run.notes.append(f"수집 원천: 웹 업로드 파일 {upload_count}건")
 
     # 신선도 — 이번 실행이 만들 판단형 단계 산출물의 이전 실행 잔재를 지운다
-    # (통합이 파일로 읽는 자리라, 옛 결과가 이번 실행 것으로 오인되지 않게)
-    for stage in ("refine", "verify1", "verify2"):
+    # (통합이 파일로 읽는 자리라, 옛 결과가 이번 실행 것으로 오인되지 않게.
+    # verify3는 토글과 무관하게 지운다 — 토글 끈 실행에 옛 결과가 남으면 안 된다)
+    for stage in ("refine", "verify1", "verify2", "verify3"):
         stale = os.path.join(REPO_ROOT, stage, "result.csv")
         if os.path.exists(stale):
             os.remove(stale)
@@ -938,12 +966,16 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None):
     # 중간 확인 2 — 가공이 확인 필요로 남긴 행(분류 불가 등)을 검증 전에 사용자에게
     run_confirmation(run, on_confirm, "refine")
 
-    # 3. 검증 1·2 병렬
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(run.call_stage, "verify1", make_llm_stage(client, "verify1", month, on_progress=run.progress))
-        f2 = pool.submit(run.call_stage, "verify2", make_llm_stage(client, "verify2", month, on_progress=run.progress))
-        v1_env, v2_env = f1.result(), f2.result()
+    # 3. 검증 스테이지 병렬 — 기본 1·2, 부정 사용 감지 토글을 켠 실행은 3도 함께
+    verify_stages = ["verify1", "verify2"] + (["verify3"] if fraud_check else [])
+    with ThreadPoolExecutor(max_workers=len(verify_stages)) as pool:
+        futures = {stage: pool.submit(run.call_stage, stage,
+                                      make_llm_stage(client, stage, month, on_progress=run.progress))
+                   for stage in verify_stages}
+        verify_envs = {stage: f.result() for stage, f in futures.items()}
+    v1_env, v2_env = verify_envs["verify1"], verify_envs["verify2"]
 
+    # 중단 판단은 검증 1·2 기준 (확정 — 검증 3 편측 실패는 "미완"으로 진행)
     v_failed = [env for env in (v1_env, v2_env) if env["status"] == "failed"]
     if len(v_failed) == 2:
         run.notes.append("검증 1·2 모두 실패 — 중단 (검증 없는 장부는 만들지 않는다)")
@@ -951,9 +983,10 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None):
             run.warnings.append("검증 실패 원인이 환경 문제로 보임 — 환경 조치 후 재실행 권고")
         finish()
         return
-    for env in v_failed:  # 편측 실패 — 그 자리는 통합이 "미완"으로 흡수한다
+    failed_envs = [env for env in verify_envs.values() if env["status"] == "failed"]
+    for env in failed_envs:  # 편측 실패 — 그 자리는 통합이 "미완"으로 흡수한다
         run.notes.append(f"{STAGE_LABELS[env['stage']]} 실패 — 해당 검증 자리는 통합에 '미완'으로 전달: {env['message']}")
-    for env in (v1_env, v2_env):
+    for env in verify_envs.values():
         if env["status"] != "failed" and env["counts"]["total"] != refine_env["counts"]["total"]:
             run.warnings.append(f"거래 행 유실 의심 — 가공 {refine_env['counts']['total']}건 → {STAGE_LABELS[env['stage']]} {env['counts']['total']}건")
 
@@ -968,7 +1001,7 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None):
         run.warnings.append(f"거래 행 유실 의심 — 가공 {refine_env['counts']['total']}건 → 통합 {merge_env['counts']['total']}건")
 
     # 대량 반려 경고 (partial 임계 50% 초과)
-    for stage in ("collect", "refine", "verify1", "verify2", "merge"):
+    for stage in summary_stages(run):
         env = run.envelopes.get(stage)
         if env and env["status"] == "partial" and env["counts"]["total"] > 0:
             if env["counts"]["flagged"] / env["counts"]["total"] > 0.5:
@@ -987,10 +1020,12 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None):
 
 
 def main():
-    if len(sys.argv) != 2 or not re.fullmatch(r"\d{4}-\d{2}", sys.argv[1]):
-        print("사용법: python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>")
+    args = [a for a in sys.argv[1:] if a != "--fraud-check"]
+    fraud_check = "--fraud-check" in sys.argv[1:]
+    if len(args) != 1 or not re.fullmatch(r"\d{4}-\d{2}", args[0]):
+        print("사용법: python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM> [--fraud-check]")
         sys.exit(1)
-    run_pipeline(sys.argv[1])
+    run_pipeline(args[0], fraud_check=fraud_check)
 
 
 if __name__ == "__main__":

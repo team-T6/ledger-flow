@@ -3,6 +3,7 @@
 표준 라이브러리(http.server)만 쓴다 — 추가 설치 없이 동작.
 - GET  /                    : 사용자 페이지 (web/index.html — 이 서버에서 열리면 실제 모드로 동작)
 - GET  /screen.html         : 개발자용 지휘 대시보드 (기존 화면)
+- GET  /favicon.svg         : 파비콘 (web/favicon.svg)
 - GET  /health              : 실제 모드 감지용 식별 응답 (프런트 프로브 전용)
 - POST /auth                : 초대코드 검증 (.env의 INVITE_CODE와 대조)
 - GET  /uploads             : 업로드된 파일 목록
@@ -362,6 +363,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/screen.html":
             self._send_file(SCREEN_PATH, "text/html; charset=utf-8")
+            return
+
+        if path == "/favicon.svg":
+            self._send_file(os.path.join(REPO_ROOT, "web", "favicon.svg"), "image/svg+xml")
             return
 
         if path == "/health":

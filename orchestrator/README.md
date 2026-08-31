@@ -5,7 +5,7 @@
 
 ## 하는 일
 
-실행 요청을 받으면 수집 → 가공 → 검증 1·2(병렬) → 통합을 순서대로 진행시키고, 각 단계가 돌려주는 **결과 보고 JSON만 읽어** 다음 진행을 판단한다. 산출물 내용은 열어보지 않는다. 단계 사이에서 `counts.total`을 대조해 거래 행 유실을 감지하고, 진행 내역을 실행 로그(`logs/`)에 남긴다.
+실행 요청을 받으면 수집 → 가공 → 분류/기간·금액 검증(병렬) → 통합을 순서대로 진행시키고, 각 단계가 돌려주는 **결과 보고 JSON만 읽어** 다음 진행을 판단한다. 산출물 내용은 열어보지 않는다. 단계 사이에서 `counts.total`을 대조해 거래 행 유실을 감지하고, 진행 내역을 실행 로그(`logs/`)에 남긴다.
 
 ## 받는 것 / 내놓는 것
 
@@ -45,7 +45,7 @@
 
 ## 실행 방법
 
-- 파이프라인 실행 (CLI): `python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>` — 수집→가공→검증 1·2(병렬)→통합을 돌리고 run 디렉터리(`logs/run_*/`)와 최종 결과 요약(`result-summary.md`)을 만든다
+- 파이프라인 실행 (CLI): `python3 orchestrator/run-pipeline.py <대상 월 YYYY-MM>` — 수집→가공→분류/기간·금액 검증(병렬)→통합을 돌리고 run 디렉터리(`logs/run_*/`)와 최종 결과 요약(`result-summary.md`)을 만든다
 - 인증: `.env`의 `ANTHROPIC_API_KEY`가 있으면 API 직접 호출, 없으면 **claude CLI 로그인 세션으로 자동 폴백**(`claude -p` 헤드리스 — 사전에 `claude` 실행 후 로그인 1회 필요). 둘 다 없으면 판단형 단계(가공·검증)는 failed로 보고된다
 - 파이프라인 실행 (웹·사용자 페이지): `python3 orchestrator/server.py` 실행 후 `http://localhost:8788` — `web/index.html`이 실제 모드로 열린다. 초대코드(`.env`의 `INVITE_CODE`) → 월 선택 → 파일 업로드(`uploads/inbox/`) → 실행 → 결과·다운로드까지 한 흐름. 상세는 [web/README.md](../web/README.md)
 - 파이프라인 실행 (웹·대시보드): 같은 서버의 `http://localhost:8788/screen.html` — 가공 현황 탭에서 대상 월을 골라 실행하면 같은 실행기가 돌고(수집 원천은 sample_data), 단계별 진행·확인 필요 건·실행 로그가 화면에 흐른다. 리포트 탭에서 최종 요약과 통합 산출물(엑셀·PDF)을 받는다

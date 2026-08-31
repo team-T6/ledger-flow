@@ -1,13 +1,13 @@
 """지휘(orchestrator) 파이프라인 실행기.
 
-수집 → 가공 → 검증 1·2(병렬) → 통합을 순서대로 진행시키고, 각 단계의 결과 보고
+수집 → 가공 → 분류/기간·금액 검증(병렬) → 통합을 순서대로 진행시키고, 각 단계의 결과 보고
 (envelope JSON)만 읽어 다음 진행을 판단한다 — 판단 규칙은 단계 문서
 (.claude/agents/orchestrator.md) 확정 그대로. 산출물 내용은 열어보지 않는다.
 
 단계 실행 방식 (단계 문서 "도구·코드" 확정):
 - 수집·통합: 칸의 실행 코드(collect/collect.py · merge/build_result.py)를 직접 호출
   — 결과 보고도 그 코드가 만들어 반환한다
-- 가공·검증 1·검증 2: 그 단계 문서를 시스템 프롬프트로 하는 API 단발 호출.
+- 가공·분류/기간·금액 검증: 그 단계 문서를 시스템 프롬프트로 하는 API 단발 호출.
   응답을 구조화 출력(JSON 스키마)으로 강제해 산출물 CSV(artifact_csv)와 결과 보고
   (report)를 함께 받고, 산출물은 지휘가 그 칸의 result.csv로 써 준다 — 형식 위반은
   호출 실패 (임시 — 담당자 실행 코드가 생기면 직접 호출로 대체)
@@ -46,7 +46,7 @@ LOGS_DIR = os.path.join(REPO_ROOT, "logs")
 SUMMARY_PATH = os.path.join(BASE_DIR, "result-summary.md")
 
 # 판단형 단계 모델 (단계 문서 "도구·코드" 확정) — 가공은 sonnet(effort medium),
-# 검증 1·2·3은 기준 대조 위주의 기계적 판정이라 haiku. Haiku 4.5는 effort 파라미터
+# 분류/기간·금액/부정 사용 검증은 기준 대조 위주의 기계적 판정이라 haiku. Haiku 4.5는 effort 파라미터
 # 미지원이라 STAGE_EFFORT에 넣지 않는다 (넣으면 API가 400을 돌려준다)
 STAGE_MODELS = {"refine": "claude-sonnet-5",
                 "verify1": "claude-haiku-4-5", "verify2": "claude-haiku-4-5",
@@ -54,8 +54,8 @@ STAGE_MODELS = {"refine": "claude-sonnet-5",
 STAGE_EFFORT = {"refine": "medium"}
 MAX_TOKENS = 32000
 
-STAGE_LABELS = {"collect": "수집", "refine": "가공", "verify1": "검증 1",
-                "verify2": "검증 2", "verify3": "검증 3", "verify": "검증",
+STAGE_LABELS = {"collect": "수집", "refine": "가공", "verify1": "분류 검증",
+                "verify2": "기간·금액 검증", "verify3": "부정 사용 검증", "verify": "검증",
                 "merge": "통합", "summary": "최종 결과 요약", "archive": "보관"}
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")  # 월별 산출물 보관 — gitignore가 커밋 차단
 
@@ -686,7 +686,7 @@ def apply_verify_fixes(fixes):
                 if key in CONFIRM_EDITABLE["verify"] and key in row:
                     row[key] = value
             _tag_user_confirmed(row)
-            # 검증 3의 확인 요청은 "업무 사용 확정" 입력이 같은 방식으로 통과 처리한다
+            # 부정 사용 검증의 확인 요청은 "업무 사용 확정" 입력이 같은 방식으로 통과 처리한다
             if row.get(f"{stage}_result") == flag_value:
                 row[f"{stage}_result"] = "통과"
                 row[f"{stage}_reason"] = "사용자 확인"
@@ -848,7 +848,7 @@ def stage_row(stage, envelope):
 
 
 def summary_stages(run):
-    """요약·집계에 쓸 단계 목록 — 검증 3은 토글을 켠 실행(보고 존재)에만 싣는다."""
+    """요약·집계에 쓸 단계 목록 — 부정 사용 검증은 토글을 켠 실행(보고 존재)에만 싣는다."""
     stages = ["collect", "refine", "verify1", "verify2"]
     if "verify3" in run.envelopes:
         stages.append("verify3")
@@ -907,7 +907,7 @@ def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None, fraud_c
     (없으면 기존 sample_data 경로 — CLI·대시보드 하위 호환).
     on_confirm이 있으면(웹 실행 경로) 확인 지점(수집·가공 직후, 통합 직전)에서
     파이프라인을 일시정지하고 사용자 입력을 받아 반영한다 — run_confirmation 참고.
-    fraud_check(부정 사용 감지 토글, 기본 꺼짐)를 켜면 검증 스테이지에 검증 3을
+    fraud_check(부정 사용 감지 토글, 기본 꺼짐)를 켜면 검증 스테이지에 부정 사용 검증을
     함께 병렬 실행한다 (interface-spec §실행 파라미터 확정).
     예외로 중단돼도 요약(run.log·result-summary.md)은 남기고, on_event에는
     반드시 종결 이벤트(state: 종료/오류)가 마지막으로 흐른다.
@@ -931,7 +931,7 @@ def run_pipeline(month, on_event=None, upload_dir=None, on_confirm=None, fraud_c
 def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False):
     run.notes.append(f"대상 월: {month}")
     if fraud_check:
-        run.notes.append("부정 사용 감지 토글: 켬 (검증 3 실행)")
+        run.notes.append("부정 사용 감지 토글: 켬 (부정 사용 검증 실행)")
     if upload_dir:
         upload_count = sum(1 for e in os.scandir(upload_dir) if e.is_file())
         run.notes.append(f"수집 원천: 웹 업로드 파일 {upload_count}건")
@@ -1004,10 +1004,10 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
         verify_envs = {stage: f.result() for stage, f in futures.items()}
     v1_env, v2_env = verify_envs["verify1"], verify_envs["verify2"]
 
-    # 중단 판단은 검증 1·2 기준 (확정 — 검증 3 편측 실패는 "미완"으로 진행)
+    # 중단 판단은 분류/기간·금액 검증 기준 (확정 — 부정 사용 검증 편측 실패는 "미완"으로 진행)
     v_failed = [env for env in (v1_env, v2_env) if env["status"] == "failed"]
     if len(v_failed) == 2:
-        run.notes.append("검증 1·2 모두 실패 — 중단 (검증 없는 장부는 만들지 않는다)")
+        run.notes.append("분류/기간·금액 검증 모두 실패 — 중단 (검증 없는 장부는 만들지 않는다)")
         if all(any(k in env["message"] for k in ENV_PROBLEM_KEYWORDS) for env in v_failed):
             run.warnings.append("검증 실패 원인이 환경 문제로 보임 — 환경 조치 후 재실행 권고")
         finish()

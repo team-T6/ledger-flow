@@ -1,6 +1,6 @@
-# 검증 3 산출물 모양 견본 (stub)
+# 부정 사용 검증 산출물 모양 견본 (stub)
 
-> 진짜 산출물은 `verify3/result.csv` — 입력 거래 표의 각 행 뒤에 `verify3_result`(`통과`/`확인 요청`)·`verify3_reason` 두 열을 덧붙인 CSV다 ([interface-spec.md](../docs/interface-spec.md) 검증 3 행). 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
+> 진짜 산출물은 `verify3/result.csv` — 입력 거래 표의 각 행 뒤에 `verify3_result`(`통과`/`확인 요청`)·`verify3_reason` 두 열을 덧붙인 CSV다 ([interface-spec.md](../docs/interface-spec.md) 부정 사용 검증 행). 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
 
 [input-sample.md](input-sample.md) 견본을 처리하면 이 모양이 된다 (지면상 판정 열 앞 컬럼은 일부 생략):
 

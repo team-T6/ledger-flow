@@ -2,7 +2,7 @@
 
 > 가공이 내놓는 것은 **가맹점·카테고리가 붙은 거래 표(CSV)** — `refine/result.csv`. 컬럼은 받은 것([input-sample.md](input-sample.md), 거래 표 스키마 v1) 그대로이고, **컬럼을 늘리거나 줄이지 않는다**. 채우는 것은 `결제처`(정규화)와 `카테고리` 둘뿐이다 ([단계 문서](../.claude/agents/refine.md) "내놓는 모양").
 >
-> 카테고리 명칭은 [categories.md](../docs/categories.md) 확정 체계의 것을 그대로 쓴다 — 통용 표현(`식비`·`카페` 등)을 만들어 쓰면 검증 1이 반려한다.
+> 카테고리 명칭은 [categories.md](../docs/categories.md) 확정 체계의 것을 그대로 쓴다 — 통용 표현(`식비`·`카페` 등)을 만들어 쓰면 분류 검증이 반려한다.
 
 ## 산출물 규칙
 

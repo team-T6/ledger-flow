@@ -1,6 +1,6 @@
 # 통합 받는 재료 견본 (input-sample)
 
-> merge가 받는 것은 **가공(refine)의 산출물**(거래 표) + **검증1·검증2의 판정 결과**, 이렇게 세 가지다. 아래 값은 [verify2/input-sample.md](../verify2/input-sample.md)·[verify2/result.md](../verify2/result.md)에 이미 있는 값을 그대로 가져왔다. verify1 판정만 이 견본을 위해 새로 가정했다 (실제 verify1 산출물이 아직 없음) — 전부 연습용 가짜 견본, 실데이터 아님.
+> merge가 받는 것은 **가공(refine)의 산출물**(거래 표) + **분류/기간·금액 검증의 판정 결과**, 이렇게 세 가지다. 아래 값은 [verify2/input-sample.md](../verify2/input-sample.md)·[verify2/result.md](../verify2/result.md)에 이미 있는 값을 그대로 가져왔다. verify1 판정만 이 견본을 위해 새로 가정했다 (실제 verify1 산출물이 아직 없음) — 전부 연습용 가짜 견본, 실데이터 아님.
 
 ## 1. 가공(refine) 산출물 — 거래 표
 
@@ -14,7 +14,7 @@
 | `tx_260301_01` | 2026-03-01 | -29,432 | 올리브영 | 기타물품 | 포인트 적립 589원 | 하나카드 | 개인결제 |
 | `tx_260215_01` | 2026-02-15 | | 교촌치킨 | 식대 | | 하나카드 | 개인결제 |
 
-## 2. 검증 1(verify1) 결과 — 분류 관점
+## 2. 분류 검증(verify1) 결과 — 분류 관점
 
 카테고리가 전부 [categories.md](../docs/categories.md) 체계에 있다고 가정해 전부 통과로 뒀다.
 
@@ -26,7 +26,7 @@
 | `tx_260301_01` 올리브영 | 통과 | |
 | `tx_260215_01` 교촌치킨 | 통과 | |
 
-## 3. 검증 2(verify2) 결과 — 기간·금액 관점
+## 3. 기간·금액 검증(verify2) 결과 — 기간·금액 관점
 
 [verify2/input-sample.md](../verify2/input-sample.md) 견본을 스키마 v1 기준으로 판정한 결과 (실행 산출물 [verify2/result.md](../verify2/result.md)는 구스키마 시절 것이라 다음 실행 때 갱신된다).
 

@@ -1,11 +1,11 @@
-# 검증 1 (verify1) — 이 칸의 약속
+# 분류 검증 (verify1) — 이 칸의 약속
 
 > 담당: 김윤덕 · 분류 관점 검증 · 상태: 초안
 > 계약의 정본은 [인터페이스 정의서](../docs/interface-spec.md), 단계 문서(설계+실행 지시의 단일 정본)는 [.claude/agents/verify1.md](../.claude/agents/verify1.md).
 
 ## 하는 일
 
-가공(refine)이 붙인 카테고리가 [categories.md](../docs/categories.md)의 회계 계정과목 체계에 맞는지 항목별로 판정한다. 검증 2와 **같은 입력을 동시에** 받는 병렬 구조이고, 이 칸은 **분류 관점**만 본다 (기간·금액은 [verify2/](../verify2/) 몫).
+가공(refine)이 붙인 카테고리가 [categories.md](../docs/categories.md)의 회계 계정과목 체계에 맞는지 항목별로 판정한다. 기간·금액 검증과 **같은 입력을 동시에** 받는 병렬 구조이고, 이 칸은 **분류 관점**만 본다 (기간·금액은 [verify2/](../verify2/) 몫).
 
 ## 받는 것 / 내놓는 것
 

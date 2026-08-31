@@ -323,8 +323,8 @@ document.querySelectorAll(".tab").forEach(function (tab) {
 const PIPELINE_STAGES = [
   { key: "collect", label: "수집",   parallel: false },
   { key: "refine",  label: "가공",   parallel: false },
-  { key: "verify1", label: "검증 1", parallel: true  },
-  { key: "verify2", label: "검증 2", parallel: true  },
+  { key: "verify1", label: "분류 검증", parallel: true  },
+  { key: "verify2", label: "기간·금액 검증", parallel: true  },
   { key: "merge",   label: "통합",   parallel: false },
 ];
 
@@ -493,8 +493,8 @@ loadSummary(); // 이전 실행의 요약이 남아 있으면 바로 보여준�
 const STAGES = [
   { key: "collect", label: "수집", output: "collect/202608_transactions.csv", total: 128, flagType: "오류", flagReason: "OCR 금액 인식 실패", failMessage: "카드사 원본 파일 형식을 인식하지 못함" },
   { key: "refine", label: "가공", output: "refine/result.xlsx", total: 128, flagType: "확인 필요", flagReason: "가맹점 식별 불가", failMessage: "카테고리 체계 파일 로드 실패" },
-  { key: "verify1", label: "검증 1", output: "verify1/result.xlsx", total: 128, flagType: "반려", flagReason: "카테고리 체계와 불일치", failMessage: "카테고리 체계 파일을 찾을 수 없음" },
-  { key: "verify2", label: "검증 2", output: "verify2/result.xlsx", total: 128, flagType: "반려", flagReason: "해외결제 환율 적용 오류", failMessage: "기준 환율 파일 누락" },
+  { key: "verify1", label: "분류 검증", output: "verify1/result.xlsx", total: 128, flagType: "반려", flagReason: "카테고리 체계와 불일치", failMessage: "카테고리 체계 파일을 찾을 수 없음" },
+  { key: "verify2", label: "기간·금액 검증", output: "verify2/result.xlsx", total: 128, flagType: "반려", flagReason: "해외결제 환율 적용 오류", failMessage: "기준 환율 파일 누락" },
   { key: "merge", label: "통합", output: ["merge/result.xlsx", "merge/result.pdf"], total: 128, flagType: "미완", flagReason: "검증 반려 건 미해결로 확인 필요 처리", failMessage: "장부 템플릿 파일 손상" }
 ];
 

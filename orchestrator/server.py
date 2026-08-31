@@ -11,7 +11,7 @@
 - POST /uploads/delete      : 업로드 파일 1건 삭제 / POST /uploads/clear : 전체 삭제
 - POST /runs                : 파이프라인 실행 시작 (run-pipeline.py를 백그라운드 스레드로)
                               body.source가 "uploads"면 업로드 파일로 수집한다
-                              body.fraud_check가 참이면 검증 3(부정 사용 감지)을 함께 실행한다
+                              body.fraud_check가 참이면 부정 사용 검증(부정 사용 감지)을 함께 실행한다
 - GET  /categories          : 분류 기준(docs/categories.md) 원문 + 최종 업데이트 일시
 - POST /categories          : 분류 기준 저장 — 원문을 통째로 받아 최종 업데이트 일시를 찍어 쓴다
 - POST /drive/import        : Google Drive 가져오기 — claude CLI headless + .mcp.json의 Drive MCP로
@@ -206,7 +206,7 @@ def read_categories():
 def write_categories(content):
     """분류 기준 저장 — 최종 업데이트 일시를 지금 시각으로 찍어 쓴다 (설정 화면 저장 경로).
 
-    가공·검증 1은 실행 시점의 이 파일을 읽으므로(확정) 저장 즉시 다음 실행부터 반영된다.
+    가공·분류 검증은 실행 시점의 이 파일을 읽으므로(확정) 저장 즉시 다음 실행부터 반영된다.
     """
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     stamp = f"> 최종 업데이트: {now}"

@@ -2,7 +2,7 @@
 
 입력은 앞 단계의 실제 산출물 — 가공 거래 표 refine/result.csv(거래 표 스키마 v1)와
 두 검증 결과 verify1/result.csv·verify2/result.csv(입력 행 + verify{n}_result·verify{n}_reason,
-interface-spec.md 검증 1·2 행 확정). 행 대조 키는 transaction_id.
+interface-spec.md 분류/기간·금액 검증 행 확정). 행 대조 키는 transaction_id.
 가공 산출물이 없으면 취합 불가라 failed로 보고하고, 검증 결과가 없으면 그 자리는
 "미완" 표시 + 사유를 남기고 나머지를 정상 진행한다 (단계 문서 "못 할 때").
 
@@ -57,8 +57,8 @@ VERIFY_CSVS = {
     "verify1": os.path.join(REPO_ROOT, "verify1", "result.csv"),
     "verify2": os.path.join(REPO_ROOT, "verify2", "result.csv"),
 }
-# 검증 3(법인카드 부정 사용 감지)은 토글 옵트인 — 파일이 없으면 "미완"이 아니라 정상 생략
-# (interface-spec.md 검증 3 행 · 2026-08-31 확정 로그)
+# 부정 사용 검증(법인카드 부정 사용 감지)은 토글 옵트인 — 파일이 없으면 "미완"이 아니라 정상 생략
+# (interface-spec.md 부정 사용 검증 행 · 2026-08-31 확정 로그)
 VERIFY3_CSV = os.path.join(REPO_ROOT, "verify3", "result.csv")
 
 # 엑셀 회계장부 컬럼 — 거래 표 스키마 (확정 v1)와 동일 (interface-spec.md "산출물 양식")
@@ -127,7 +127,7 @@ def load_transactions():
                 for v in csv.DictReader(f)
             }
 
-    # 검증 3은 토글을 켠 실행에만 존재 — 파일이 있으면 같은 방식으로 판정을 붙인다
+    # 부정 사용 검증은 토글을 켠 실행에만 존재 — 파일이 있으면 같은 방식으로 판정을 붙인다
     verify3 = None
     if os.path.exists(VERIFY3_CSV):
         with open(VERIFY3_CSV, encoding="utf-8-sig", newline="") as f:
@@ -156,9 +156,9 @@ def load_transactions():
 
 def split_transactions(transactions):
     """verify1·verify2 중 하나라도 반려면 확인 필요 목록으로 뺀다 (재시도 없음).
-    검증 3(있으면)의 확인 요청 건은 **장부·집계에서 빼지 않고** 확인 필요 목록에만
+    부정 사용 검증(있으면)의 확인 요청 건은 **장부·집계에서 빼지 않고** 확인 필요 목록에만
     함께 싣는다 — 데이터는 정상이고 업무 사용 여부만 확인 대상이라서다
-    (단계 문서 merge.md · interface-spec.md 검증 3 확정 로그). 그래서 이 건은
+    (단계 문서 merge.md · interface-spec.md 부정 사용 검증 확정 로그). 그래서 이 건은
     ok_rows와 flagged_rows 양쪽에 들어간다 — 보고 counts.ok는 build_envelope가
     total - flagged로 계산해 문제 건으로 센다.
     flagged_rows에는 지휘 보고의 flags[].row로 쓸 1-기준 행 번호(row)를 함께 담는다."""
@@ -213,7 +213,7 @@ def build_envelope(total, ok_rows, flagged_rows, failed=False, message="", incom
         output = OUTPUT_PATHS
 
     flags = [{"row": 0, "type": "미완", "reason": reason} for reason in incomplete]
-    # 검증 3의 확인 요청 건은 유형을 보존한다 (장부에는 실리고 확인 목록에만 표시)
+    # 부정 사용 검증의 확인 요청 건은 유형을 보존한다 (장부에는 실리고 확인 목록에만 표시)
     flags += [{"row": r["row"],
                "type": "확인 요청" if r.get("type") == "확인 요청" else "확인 필요",
                "reason": r["reason"]} for r in flagged_rows]

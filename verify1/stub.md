@@ -1,4 +1,4 @@
-# 검증 1 산출물 모양 견본 (stub)
+# 분류 검증 산출물 모양 견본 (stub)
 
 > verify1이 내놓는 것은 **판정이 붙은 거래 표**(CSV)다. [input-sample.md](input-sample.md)의 견본을 그대로 판정한 결과이며, 값은 `sample_data/hana_card/`의 더미 데이터 기반 — 실데이터 아님.
 >

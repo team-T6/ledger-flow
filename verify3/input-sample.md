@@ -1,12 +1,12 @@
-# 검증 3 받는 재료 견본 (input-sample)
+# 부정 사용 검증 받는 재료 견본 (input-sample)
 
-> verify3가 받는 것은 **가공(refine)의 산출물** — 가맹점이 정규화되고 카테고리가 채워진 거래 표(CSV, [interface-spec.md](../docs/interface-spec.md) 기준)다. 검증 1·2와 **동일 입력**을 받되, 판정 대상은 `결제구분`=`법인결제` 행뿐이다.
+> verify3가 받는 것은 **가공(refine)의 산출물** — 가맹점이 정규화되고 카테고리가 채워진 거래 표(CSV, [interface-spec.md](../docs/interface-spec.md) 기준)다. 분류/기간·금액 검증과 **동일 입력**을 받되, 판정 대상은 `결제구분`=`법인결제` 행뿐이다.
 >
 > 아래 값은 `sample_data/` 기반의 **연습용 가짜 견본**이다 — 실데이터 아님. 컬럼은 interface-spec.md "거래 표 스키마 (확정 v1)"를 따르며, 지면상 `source_type`·`collect_status`·`원거래통화`·`원거래금액`(전부 국내 결제라 빈칸)을 생략했다.
 
 ## 견본 데이터 (결산 대상 월: 2026-02 · 부정 사용 감지 토글 켬)
 
-검증 3 판단 기준([fraud-rules.md](../docs/fraud-rules.md))을 실습해볼 수 있도록 일부러 걸리는 줄을 섞었다.
+부정 사용 검증 판단 기준([fraud-rules.md](../docs/fraud-rules.md))을 실습해볼 수 있도록 일부러 걸리는 줄을 섞었다.
 
 | transaction_id | 날짜 | 금액 | 결제처 | 카테고리 | 비고 | 결제수단 | 결제구분 | 구매항목 |
 |---|---|---:|---|---|---|---|---|---|

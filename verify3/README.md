@@ -1,11 +1,11 @@
-# 검증 3 (verify3) — 법인카드 부정 사용 감지
+# 부정 사용 검증 (verify3) — 법인카드 부정 사용 감지
 
 > 상태: 초안 · 담당: 김규은
-> 설계·실행 지시의 단일 정본은 [.claude/agents/verify3.md](../.claude/agents/verify3.md), 감지 기준의 정본은 [docs/fraud-rules.md](../docs/fraud-rules.md), 단계 간 계약은 [docs/interface-spec.md](../docs/interface-spec.md) 검증 3 행. 이 README는 사람용 메타(담당·상태·테스트 방법·협의 메모)만 담는다.
+> 설계·실행 지시의 단일 정본은 [.claude/agents/verify3.md](../.claude/agents/verify3.md), 감지 기준의 정본은 [docs/fraud-rules.md](../docs/fraud-rules.md), 단계 간 계약은 [docs/interface-spec.md](../docs/interface-spec.md) 부정 사용 검증 행. 이 README는 사람용 메타(담당·상태·테스트 방법·협의 메모)만 담는다.
 
 ## 이 칸이 하는 일
 
-부정 사용 감지 토글을 켠 실행에서, 가공된 거래 표의 법인결제 행을 부정 사용 감지 기준으로 점검해 행별 `통과`/`확인 요청`을 판정한다. 검증 1(분류)·검증 2(기간·금액)와 같은 입력을 동시에 받는 병렬 구조의 세 번째 검증기다. 부정 사용을 단정하지 않고 사용자 확인으로 넘기는 것이 원칙이다.
+부정 사용 감지 토글을 켠 실행에서, 가공된 거래 표의 법인결제 행을 부정 사용 감지 기준으로 점검해 행별 `통과`/`확인 요청`을 판정한다. 분류 검증(분류)·기간·금액 검증(기간·금액)와 같은 입력을 동시에 받는 병렬 구조의 세 번째 검증기다. 부정 사용을 단정하지 않고 사용자 확인으로 넘기는 것이 원칙이다.
 
 ## 폴더 구성
 
@@ -16,7 +16,7 @@
 
 ## 테스트 방법
 
-- CLI: `python3 orchestrator/run-pipeline.py <YYYY-MM> --fraud-check` — 검증 스테이지에 검증 3이 함께 돈다
+- CLI: `python3 orchestrator/run-pipeline.py <YYYY-MM> --fraud-check` — 검증 스테이지에 부정 사용 검증이 함께 돈다
 - 웹: 자료 넣기 화면의 "법인카드 부정 사용 감지" 토글을 켜고 결산 시작 → 검증 카드에 "부정" 축이 추가되고, 확인 요청 건은 검증 직후 중간 확인에 표시된다
 - 연습 대조: `input-sample.md` 기준 → `stub.md` 모양
 

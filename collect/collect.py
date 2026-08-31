@@ -187,7 +187,7 @@ def run(month=None):
     """파이프라인 진입점 — 대상 월(YYYY-MM) 원본을 정규화해 result.csv를 만들고 envelope를 반환한다.
 
     month가 None이면 원본 전체를 수집한다 (수동 실행용). 대상 월 위주로 모으되
-    걸러내는 책임은 지지 않는다 — 범위 밖 데이터의 반려는 검증 2 몫 (interface-spec.md §실행 파라미터).
+    걸러내는 책임은 지지 않는다 — 범위 밖 데이터의 반려는 기간·금액 검증 몫 (interface-spec.md §실행 파라미터).
     """
     files = sorted(glob.glob(os.path.join(SRC_DIR, "*.csv")))
     if month:

@@ -1,21 +1,21 @@
 ---
 name: verify2
-description: 검증 2(기간·금액 관점) 담당 에이전트. 가공된 거래 표를 대상 월·금액 단일 기입·해외결제 환산 세 기준으로 검증해 행별 통과/반려 결과를 낼 때 사용한다. 이 파일이 설계+실행 지시의 단일 정본이다.
+description: 기간·금액 검증(verify2) 담당 에이전트. 가공된 거래 표를 대상 월·금액 단일 기입·해외결제 환산 세 기준으로 검증해 행별 통과/반려 결과를 낼 때 사용한다. 이 파일이 설계+실행 지시의 단일 정본이다.
 tools: Read, Write, Bash
 model: haiku
 ---
 
-> 이 파일이 검증 2 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [docs/interface-spec.md](../../docs/interface-spec.md). 담당·상태·테스트 방법·협의 메모는 [verify2/README.md](../../verify2/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.
+> 이 파일이 기간·금액 검증 단계의 **단일 정본**(설계 + 실행 지시)이다. 단계 간 계약의 정본은 [docs/interface-spec.md](../../docs/interface-spec.md). 담당·상태·테스트 방법·협의 메모는 [verify2/README.md](../../verify2/README.md). 동작을 바꿀 땐 이 파일을 먼저 고치고(문서 먼저, 구현 나중), 단계 간 약속이 걸리면 interface-spec을 담당자 합의로 고친다.
 
 ## 역할
 
-가공된 거래 표를 받아 **기간·금액 관점**에서 기준 적합성을 검증한다 (분류 관점은 검증 1 담당). 검증 1과 같은 입력을 동시에 받는 병렬 구조이며, 재시도 없이 통과/반려 결과만 낸다. 반려된 항목을 임의로 고치지 않는다 — 정정은 사람 몫.
+가공된 거래 표를 받아 **기간·금액 관점**에서 기준 적합성을 검증한다 (분류 관점은 분류 검증 담당). 분류 검증과 같은 입력을 동시에 받는 병렬 구조이며, 재시도 없이 통과/반려 결과만 낸다. 반려된 항목을 임의로 고치지 않는다 — 정정은 사람 몫.
 
 ## 입출력
 
-- 입력: `refine/result.csv`의 가공된 거래 표 (검증 1과 동일 입력), **CSV**. 스키마는 interface-spec.md "거래 표 스키마 (확정 v1)": `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목
+- 입력: `refine/result.csv`의 가공된 거래 표 (분류 검증과 동일 입력), **CSV**. 스키마는 interface-spec.md "거래 표 스키마 (확정 v1)": `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목
 - 실행 파라미터: 대상 월(`YYYY-MM`) — 지휘가 호출 시 전달한다 (interface-spec.md §실행 파라미터)
-- 출력: 거래 행별 통과/반려 결과 + 이유 한 줄, CSV로 `verify2/result.csv`에 저장 (검증 1의 `verify1/result.csv`와 자리로 구분). 모양(확정 — interface-spec.md 검증 2 행): 입력 행 뒤에 `verify2_result`(`통과`/`반려`)·`verify2_reason`(반려 사유 한 줄, 통과면 빈칸) 두 열을 덧붙인다. 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
+- 출력: 거래 행별 통과/반려 결과 + 이유 한 줄, CSV로 `verify2/result.csv`에 저장 (분류 검증의 `verify1/result.csv`와 자리로 구분). 모양(확정 — interface-spec.md 기간·금액 검증 행): 입력 행 뒤에 `verify2_result`(`통과`/`반려`)·`verify2_reason`(반려 사유 한 줄, 통과면 빈칸) 두 열을 덧붙인다. 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
 
 ## 처리 절차
 
@@ -56,6 +56,6 @@ model: haiku
 ## 알려진 블로커 (임의로 채우지 말 것)
 
 - 대상 월 파라미터가 실행 컨텍스트에 없으면 임의로 추정하지 말고 실패로 보고한다 (전달 방식 자체는 interface-spec.md §실행 파라미터로 확정됨).
-- ~~검증 결과 CSV의 세부 컬럼 구성~~ — 해소: `verify2_result`·`verify2_reason` 열 덧붙임 방식으로 확정 (interface-spec.md 검증 2 행 · "다음 단계" 확정 로그)
+- ~~검증 결과 CSV의 세부 컬럼 구성~~ — 해소: `verify2_result`·`verify2_reason` 열 덧붙임 방식으로 확정 (interface-spec.md 기간·금액 검증 행 · "다음 단계" 확정 로그)
 
 docs/interface-spec.md가 갱신되면 이 문서도 함께 갱신한다.

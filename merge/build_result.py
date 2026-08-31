@@ -19,6 +19,8 @@ import os
 import re
 
 from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 from reportlab.graphics.charts.barcharts import HorizontalBarChart, VerticalBarChart
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.linecharts import HorizontalLineChart
@@ -228,6 +230,12 @@ def build_envelope(total, ok_rows, flagged_rows, failed=False, message="", incom
     }
 
 
+def _cell_width(value):
+    """열 너비 산정용 표시 폭 — 한글 등 전각 문자는 반각의 2배로 센다."""
+    text = "" if value is None else str(value)
+    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+
+
 def build_ledger(ok_rows, xlsx_path):
     wb = Workbook()
     ws = wb.active
@@ -235,6 +243,20 @@ def build_ledger(ok_rows, xlsx_path):
     ws.append(LEDGER_COLUMNS)
     for row in ok_rows:
         ws.append([row.get(col) for col in LEDGER_COLUMNS])
+
+    # 스타일 — docs/design-guide.md §5: 헤더 = accent 채움 + 종이색 굵은 글자,
+    # 열 너비 = 내용 길이에 맞춰 사전 지정 (열면 바로 읽히게, 수동 조정 불필요)
+    header_fill = PatternFill("solid", start_color="1E5B45")
+    header_font = Font(bold=True, color="FAF7F2")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+    for idx, col in enumerate(LEDGER_COLUMNS, start=1):
+        widest = max(
+            [_cell_width(col)] + [_cell_width(row.get(col)) for row in ok_rows]
+        )
+        ws.column_dimensions[get_column_letter(idx)].width = min(widest + 4, 44)
+
     wb.save(xlsx_path)
 
 

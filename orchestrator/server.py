@@ -23,7 +23,8 @@
 - GET  /summary             : orchestrator/result-summary.md 원문 (?month=YYYY-MM이면 보관본)
 - GET  /result-data         : 결산 결과 화면용 통계 JSON (merge 집계 함수 재사용, 읽기 전용)
 - GET  /months              : 월별 보관함 목록 (archive/<월>/summary.json 배열)
-- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기 (?month=YYYY-MM이면 보관본)
+- GET  /artifacts/...       : merge/result.xlsx · result.pdf 내려받기 (?month=YYYY-MM이면 보관본,
+                              저장 파일명은 {월}_{report|ledger}_{생성일시}.{확장자}로 지어 준다)
 - POST /call-agent          : (기존) 결과 보고 확인 — call-agent.py 호출
 실행 상태·이벤트는 메모리에만 둔다. 영구 기록은 logs/run_*/ 규약과, 결산 정상 종료 시
 파이프라인이 archive/<YYYY-MM>/에 남기는 월별 산출물 보관본(웹 보관함용 — gitignore 차단)뿐.
@@ -71,6 +72,21 @@ ARTIFACTS = {  # 내려받기 허용 목록 — 경로 조작 방지를 위해 �
     "/artifacts/result.pdf": (os.path.join(REPO_ROOT, "merge", "result.pdf"),
                               "application/pdf"),
 }
+
+
+def _download_name(file_path, month):
+    """내려받기 파일명 — {대상월}_{report|ledger}_{생성일시}.{확장자}.
+
+    디스크 경로(merge/result.* · archive/<월>/result.*)는 단계 간 약속(인터페이스 정의서)이라
+    그대로 두고, 사용자에게 저장되는 이름만 알아보기 쉽게 짓는다. 생성일시는 파일 수정 시각.
+    대상 월을 모르면(서버 재시작 직후의 최신본 등) 원래 파일명을 그대로 쓴다."""
+    base = os.path.basename(file_path)
+    if not month or not os.path.exists(file_path):
+        return base
+    ext = os.path.splitext(base)[1]
+    doc = "ledger" if ext == ".xlsx" else "report"
+    ts = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y%m%d-%H%M")
+    return f"{month}_{doc}_{ts}{ext}"
 
 
 def _load_module(name, path):
@@ -420,13 +436,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ARTIFACTS:
             file_path, content_type = ARTIFACTS[path]
+            month = month_match.group(1) if month_match else run_state.month
             if month_match:
                 file_path = os.path.join(ARCHIVE_DIR, month_match.group(1),
                                          os.path.basename(file_path))
             # inline=1 — 브라우저 안에서 바로 보여준다 (화면 PDF 미리보기용). 없으면 내려받기
             inline = re.search(r"(?:^|&)inline=1(?:&|$)", query) is not None
             self._send_file(file_path, content_type,
-                            download_name=None if inline else os.path.basename(file_path))
+                            download_name=None if inline else _download_name(file_path, month))
             return
 
         self._send_json(404, {"error": "not found"})

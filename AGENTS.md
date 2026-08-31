@@ -46,11 +46,11 @@
 
 ## 9. Reference Documents
 
-문서 위계: `docs/PRD.md` → `docs/interface-spec.md` · `docs/categories.md` → `.claude/agents/*.md` (+ 각 칸 `README.md`)
+문서 위계: `docs/PRD.md` → `docs/interface-spec.md` · `docs/categories.md` · `docs/design-guide.md` → `.claude/agents/*.md` (+ 각 칸 `README.md`)
 
 - [MUST] 문서를 고치면 **위계상 상·하위 문서에 연쇄 수정할 것이 있는지 점검해 함께 갱신**한다 (AGENTS_COM.md §8 공통 규칙의 이 프로젝트 위계)
 - [MUST] **에이전트 동작 변경은 spec-first (문서 먼저, 구현 나중)** — 실행 코드를 바로 고치지 않고, 관련 문서를 먼저 수정한 뒤 그 문서를 바탕으로 반영한다. 단계 내부 동작 → `.claude/agents/<단계>.md`(단계 문서 — 이 파일 자체가 설계이자 실행 지시라 고치면 에이전트에 바로 반영되고, 별도 실행 코드가 있으면 문서 수정 후 코드에 반영), 단계 간 약속 → `interface-spec.md`(관련 담당자 합의), 분류 기준 → `categories.md`
-- 작업별 참조: 파이프라인 범위·역할 → PRD / 단계 입출력·스키마·산출물 양식 → interface-spec / 분류 기준 → categories / 단계 내부 설계·실행 지시 → `.claude/agents/<단계영어명>.md` / 담당·테스트·협의 메모 → 각 칸 README
+- 작업별 참조: 파이프라인 범위·역할 → PRD / 단계 입출력·스키마·산출물 양식 → interface-spec / 분류 기준 → categories / 브랜드·색·서체·산출물 스타일 → design-guide / 단계 내부 설계·실행 지시 → `.claude/agents/<단계영어명>.md` / 담당·테스트·협의 메모 → 각 칸 README
 - [MUST] **본문 규칙에 날짜 도장을 찍지 않는다** — 규칙 옆에는 확정/미정 상태만 표기하고(예: `(확정)`), 결정 날짜·이력은 `interface-spec.md` "다음 단계"의 확정 로그 한 곳에만 남긴다 (언제 바뀌었는지는 git history가 정본). 예외: 아직 공식 반영 전인 구두 합의를 추적하는 표기는 날짜를 남겨도 된다 — 어느 합의가 최신인지가 날짜로만 구분되는 경우
 
 ## 10. Branch & PR Rules — [MUST]

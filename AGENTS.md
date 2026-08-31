@@ -6,7 +6,8 @@
 
 ## 1. Tech Stack
 
-- Python (버전·패키지 매니저·프레임워크 미정)
+- Python 3 — 웹 서버는 표준 라이브러리 `http.server`(프레임워크 없음), 의존성은 `requirements.txt`(`anthropic`·`openpyxl`·`reportlab`·`pypdf`)를 `pip`로 설치
+- 에이전트 호출: `anthropic` SDK — `.env`의 `ANTHROPIC_API_KEY`, 없으면 `claude` CLI 로그인 세션 폴백
 
 ## 2. Project Structure
 
@@ -20,12 +21,14 @@
 
 ## 3. Architecture Pattern
 
-- (미정)
+- **순차 파이프라인 + 병렬 검증 스테이지**: 지휘(`orchestrator/run-pipeline.py`)가 수집 → 가공 → 검증(분류/기간·금액, 토글 시 부정 사용 — 병렬) → 통합을 순서대로 호출한다. 단계 간 데이터는 파일(CSV, 최종 산출물만 바이너리)로 흐르고, 계약은 `docs/interface-spec.md`가 정본
+- 각 단계는 독립 에이전트 — 판단형 단계(가공·검증)는 단계 문서(`.claude/agents/*.md`)를 프롬프트로 주입해 AI 호출, 기계형 처리(수집 파싱·통합 변환)는 칸 폴더의 파이썬 코드
+- 웹은 정적 단일 페이지(`web/index.html`) + 로컬 서버(`orchestrator/server.py`) — 서버 유무로 데모/실제 모드 자동 전환
 
 ## 4. Coding Conventions
 
 - 공통 컨벤션은 AGENTS_COM.md §3을 따른다. 프로젝트 고유 컨벤션은 확정 시 여기에 추가.
-- 커밋 scope 어휘: 미정 — 폴더 구조 확정 시 모듈명 기준으로 정의한다. 그 전까지는 **scope 생략을 기본**으로 한다 (AI가 임의 scope를 만들지 않는다).
+- 커밋 scope 어휘: **칸 폴더명 + `web`** (`collect`·`refine`·`verify1`·`verify2`·`verify3`·`merge`·`orchestrator`·`web`). 변경이 한 칸에 국한될 때만 붙이고, 여러 칸에 걸치거나 문서·설정이면 **scope 생략** (AI가 이 어휘 밖 scope를 만들지 않는다).
 - [MUST] **파일·폴더명은 영어로 한다** (문서 포함). 단계명 대응: 수집 `collect` · 가공 `refine` · 검증 `verify1`/`verify2`/`verify3` · 통합 `merge` · 지휘 `orchestrator`. 문서 본문·제목은 한국어 그대로.
 
 ## 5. Error Handling — Project Specific
@@ -38,7 +41,10 @@
 
 ## 7. Build & Run
 
-- (미정 — 실행·테스트 명령 확정 시 기입)
+- 웹 포함 실행: `python3 orchestrator/server.py` → http://localhost:8788 (초대코드는 `.env`의 `INVITE_CODE`)
+- 파이프라인만: `python3 orchestrator/run-pipeline.py <YYYY-MM>` — 수집 원천은 `sample_data/`
+- 데모 화면만: `python3 -m http.server 8090 --directory web` (연출 모드, 파이프라인 미실행)
+- 테스트는 항상 `sample_data/` 가짜 데이터로만 한다 (실데이터 금지 — §8)
 
 ## 8. Do NOT — Project Specific
 

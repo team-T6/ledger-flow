@@ -1,4 +1,15 @@
-# 렛저 Ledger Flow · 월말결산 비서 (ledger-flow)
+<div align="center">
+<img src="web/favicon.svg" alt="렛저 Ledger Flow 로고" width="72" height="72">
+
+# 렛저 Ledger Flow
+### 월말결산 비서
+
+[![데모 보기](https://img.shields.io/badge/데모-team--t6.github.io-1E5B45?style=flat-square)](https://team-t6.github.io/ledger-flow/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1E5B45.svg?style=flat-square)](LICENSE)
+[![Python 3](https://img.shields.io/badge/Python-3-1E5B45?style=flat-square)](requirements.txt)
+[![Claude API](https://img.shields.io/badge/Agent-Claude%20API-1E5B45?style=flat-square)](https://docs.anthropic.com/)
+
+</div>
 
 카드를 여러 장 쓰다 보면 결제 내역이 카드사 엑셀, 영수증 사진, 결제 문자로 흩어집니다.
 월말마다 이걸 한데 모아 장부를 만드는 일은 생각보다 손이 많이 가고, 매달 똑같이 반복됩니다.
@@ -9,6 +20,8 @@ ledger-flow는 이 월말결산을 대신해 주는 도구입니다. 카드 내�
 
 **데모**: https://team-t6.github.io/ledger-flow/ — 설치 없이 브라우저에서 결산 흐름을 체험해 볼 수 있습니다.
 
+<img src="docs/assets/readme/landing.png" alt="렛저 랜딩 화면 — 흩어진 카드 내역이, 한 권의 장부가 됩니다" width="100%">
+
 ## 무엇이 나오나요
 
 카드사 CSV와 영수증·결제 문자 이미지를 넣으면 두 가지 파일이 나옵니다.
@@ -16,29 +29,56 @@ ledger-flow는 이 월말결산을 대신해 주는 도구입니다. 카드 내�
 - **엑셀 회계장부** — 전체 거래 내역을 카드(명의)별로 구분하고, 회계 계정과목을 번안한 카테고리로 분류해 정리한 것
 - **PDF 결산 리포트** — 한 달 지출을 카테고리별 금액과 비중, 전월 대비 추이로 요약하고, 확인이 필요한 건을 따로 모아 둔 것
 
+결산이 끝난 달은 "장부"가 되어 **결산 서고**에 꽂힙니다. 지난 결산을 다시 볼 땐 이 서고에서 꺼내 보면 됩니다.
+
+<img src="docs/assets/readme/archive.png" alt="결산 서고 화면 — 결산이 끝난 달이 장부로 제본되어 선반에 꽂힌 모습" width="100%">
+
+장부를 펼치면 그 달의 총지출·거래 건수·확인 필요 건수와 지출 추이, 카테고리별 지출을 한 화면에서 볼 수 있습니다.
+
+<img src="docs/assets/readme/result.png" alt="결산 결과 화면 — 총지출·거래 건수·확인 필요, 지출 추이 그래프와 카테고리별 지출" width="100%">
+
 ## 어떻게 동작하나요
 
 결산 과정을 단계로 나누고, 단계마다 독립된 Claude 에이전트가 일합니다.
 오케스트레이터가 순서를 챙기고 단계 사이에서 데이터가 빠지지 않았는지 확인합니다.
 
-```
-수집(collect) → 가공(refine) → 분류/기간·금액(+부정 사용) 검증 (병렬) → 통합(merge)
-                     ↑ 오케스트레이터(orchestrator)가 흐름을 지휘
+```mermaid
+flowchart TD
+    ORCH["<div style='text-align:left;min-width:920px'><b style='color:#FAF7F2'>ORCHESTRATOR(지휘)</b><br/><span style='white-space:nowrap;color:#FAF7F2'>① 대상 월 확정 → ② 단계 순차 호출(수집 → 가공 → 검증 → 통합) → ③ 결과 보고 확인 → ④ 최종 결과 요약·전달</span></div>"]
+
+    subgraph PIPELINE["월말결산 파이프라인"]
+        direction LR
+        COLLECT["<div style='text-align:left'><b style='color:#1E5B45'>COLLECT(수집)</b><br/><span style='color:#1C1917'>카드사 내역·영수증·문자·수기 입력을 표준 거래 표로 정리</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 카드사 엑셀/PDF·영수증/문자 이미지·수기 입력<br/>OUT: 표준 거래 표(CSV)</span></div>"]
+        REFINE["<div style='text-align:left'><b style='color:#1E5B45'>REFINE(가공)</b><br/><span style='color:#1C1917'>PG사 표기 속 가맹점명은 정규화 (예: NHN KCP/김밥천국)<br/>특정 불가 시 원문 유지 + 카테고리 부여</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 표준 거래 표<br/>OUT: 가맹점·카테고리 채운 거래 표</span></div>"]
+        subgraph VERIFY["병렬 검증"]
+            direction TB
+            V1["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY1(분류 검증)</b><br/><span style='color:#1C1917'>붙인 카테고리가 분류 체계에<br/>맞는지 검사</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 가공된 거래 표<br/>OUT: 통과/반려 (분류 관점)</span></div>"]
+            V2["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY2(기간·금액 검증)</b><br/><span style='color:#1C1917'>대상 월 거래인지, 금액 기입·해외결제 환산이 맞는지 검사</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 가공된 거래 표<br/>OUT: 통과/반려 (기간·금액 관점)</span></div>"]
+            V3["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY3(부정 사용 검증)</b><br/><span style='color:#1C1917'>법인카드 결제를 부정 사용 감지 기준으로 점검</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 법인결제 행<br/>OUT: 통과/확인 요청</span></div>"]
+            V1 ~~~ V2 ~~~ V3
+        end
+        MERGE["<div style='text-align:left'><b style='color:#1E5B45'>MERGE(통합)</b><br/><span style='color:#1C1917'>반려 건만 제외하고 장부·리포트 작성<br/>(확인 요청 건은 장부에 남기고 별도 표시)</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 거래 표 + 검증 결과<br/>OUT: 엑셀 장부 + PDF 리포트</span></div>"]
+
+        COLLECT --> REFINE --> VERIFY --> MERGE
+    end
+
+    ORCH <-->|"단계별 결과 보고</br>(JSON, 공통규격)"| PIPELINE
+
+    classDef stage fill:#F5F1E8,stroke:#1E5B45,stroke-width:1px,color:#1C1917,text-align:left;
+    classDef orch fill:#1E5B45,stroke:#1E5B45,stroke-width:1px,color:#FAF7F2;
+    class COLLECT,REFINE,V1,V2,V3,MERGE stage;
+    class ORCH orch;
+    style VERIFY fill:#FAF7F2,stroke:#1E5B45,stroke-width:1px,color:#1C1917;
+    style PIPELINE fill:none,stroke:#1E5B45,stroke-width:1.5px,stroke-dasharray: 5 4,color:#1C1917;
 ```
 
-| 단계 | 하는 일 |
-| --- | --- |
-| 수집 | 카드사 엑셀을 읽고 영수증·문자 이미지를 OCR로 인식해 하나의 거래 표(CSV)로 만듭니다 |
-| 가공 | "네이버페이" 같은 결제대행사 이름 뒤에 숨은 실제 가맹점을 찾아내고 카테고리를 붙입니다 |
-| 분류 검증 | 붙인 카테고리가 정해진 분류 체계에 맞는지 검사합니다 |
-| 기간·금액 검증 | 대상 월의 거래인지, 금액 부호와 해외결제 환산이 맞는지 검사합니다 |
-| 부정 사용 검증 | 법인카드 결제를 부정 사용 감지 기준으로 점검합니다 (부정 사용 감지 옵션을 켠 실행만) |
-| 통합 | 검증을 통과한 데이터로 엑셀 장부와 PDF 리포트를 만듭니다 |
+- **데이터는 공통 "거래 표" 규격 하나로 흐릅니다.** 수집이 만든 스키마(`transaction_id`·날짜·금액·결제처·카테고리 등)를 가공·검증·통합이 그대로 이어받고, 검증 단계는 그 표에 판정 열(`verify1_result` 등)만 덧붙입니다 — 행을 지우거나 순서를 바꾸지 않습니다.
+- **오케스트레이터와 각 단계는 정해진 규격으로만 소통합니다.** 모든 단계는 처리 결과를 `stage`/`status`/`output`/`counts`/`flags`/`message`로 이루어진 동일한 JSON(결과 보고)으로 돌려주고, 오케스트레이터는 산출물 내용을 직접 열어보지 않고 이 보고만 보고 다음 단계 호출·중단을 판단합니다.
 
 설계할 때 정한 원칙이 두 가지 있습니다.
 
-- **검증들은 동시에 돕니다.** 보는 관점(분류 / 기간·금액 / 부정 사용)이 서로 겹치지 않아서 순서를 기다릴 이유가 없고, 오류도 한 번에 모아서 알려 줄 수 있습니다.
-- **애매한 건은 사람에게 넘깁니다.** 검증에서 걸린 거래를 에이전트가 알아서 고치거나 다시 시도하지 않습니다. 결산 도중에는 중간 확인 화면에서 바로 고칠 수 있고, 그대로 둔 건은 리포트의 "확인 필요" 목록에 사유와 함께 실립니다 — 결산이 끝난 뒤에도 결과 화면에서 확정해 재결산할 수 있습니다.
+- **돈과 관련된 판단은 렛저가 끝맺지 않습니다.** 검증에서 걸린 거래를 에이전트가 알아서 고치거나, 스스로 다시 시도해 판정을 뒤집지 않습니다. 분류·기간·금액이 걸리면 "확인 필요"로, 부정 사용 소지가 있으면 (단정하지 않고) "확인 요청"으로 표시해 반드시 사람의 확인을 거치게 합니다. 결산 도중에는 중간 확인 화면에서 바로 고칠 수 있고, 그대로 둔 건은 리포트의 "확인 필요" 목록에 사유와 함께 실립니다 — 결산이 끝난 뒤에도 결과 화면에서 확정해 재결산할 수 있습니다.
+- **검증들은 동시에 돕니다.** 보는 관점(분류 / 기간·금액 / 부정 사용)이 서로 겹치지 않아서 순서를 기다릴 이유가 없고, 사람이 확인해야 할 건도 한 번에 모아서 보여줄 수 있습니다.
 
 ## 직접 실행해 보기
 

@@ -91,12 +91,14 @@ def _append_unique(names, seen, name):
 
 
 def load_category_sets():
-    """docs/categories.md "지출"(개인카드 카테고리·법인카드 카테고리 열)·"수익" 표를 읽어
+    """docs/categories.md "지출 — 개인카드"·"지출 — 법인카드"·"수익" 표를 읽어
     결제구분별로 대조할 카테고리 명칭 목록을 만든다 — 판정 기준의 정본.
 
-    지출은 결제구분에 따라 대조할 열이 다르다(개인결제 → 개인카드 카테고리, 법인결제 →
-    법인카드 카테고리, .claude/agents/verify1.md 판단 규칙). 수익은 열이 하나뿐이라
-    양쪽 결제구분에 공통으로 쓴다.
+    지출은 개인/법인 카드가 각자 별도 2열 표(카테고리 | 포함 범위)로 분리돼 있다
+    (2026-08-31 확정 — 설정 화면의 독립 편집에 맞춘 개편). 결제구분에 따라 대조할
+    표가 다르다(개인결제 → 지출 — 개인카드, 법인결제 → 지출 — 법인카드,
+    .claude/agents/verify1.md 판단 규칙). 수익은 표가 하나뿐이라 양쪽 결제구분에
+    공통으로 쓴다.
     """
     with open(CATEGORIES_PATH, encoding="utf-8") as f:
         content = f.read()
@@ -106,8 +108,11 @@ def load_category_sets():
     section = None
     for line in content.splitlines():
         stripped = line.strip()
-        if stripped.startswith("## 지출"):
-            section = "지출"
+        if stripped.startswith("## 지출 — 개인카드"):
+            section = "개인"
+            continue
+        if stripped.startswith("## 지출 — 법인카드"):
+            section = "법인"
             continue
         if stripped.startswith("## 수익"):
             section = "수익"
@@ -118,15 +123,17 @@ def load_category_sets():
         if not stripped.startswith("|"):
             continue
         cells = [c.strip() for c in stripped.strip("|").split("|")]
-        if not cells or not cells[0] or cells[0] in ("카테고리", "개인카드 카테고리"):
+        if not cells or not cells[0] or cells[0] == "카테고리":
             continue
         if set(cells[0]) <= {"-"}:  # 표 구분선(|---|---|) 걸러내기
             continue
-        if section == "지출" and len(cells) >= 3:
-            _append_unique(personal, personal_seen, cells[0].strip("*").strip())
-            _append_unique(corporate, corporate_seen, cells[2].strip("*").strip())
-        elif section == "수익" and cells[0]:
-            _append_unique(income, income_seen, cells[0].strip("*").strip())
+        name = cells[0].strip("*").strip()
+        if section == "개인":
+            _append_unique(personal, personal_seen, name)
+        elif section == "법인":
+            _append_unique(corporate, corporate_seen, name)
+        elif section == "수익":
+            _append_unique(income, income_seen, name)
 
     personal_categories = personal + income
     corporate_categories = corporate + income
@@ -183,12 +190,33 @@ def classify_rows(rows, personal_categories, corporate_categories):
     return results, needs_guess
 
 
-def guess_intended_categories(rows_needing_guess):
-    """체계에 없는 명칭이 어느 카테고리를 의도했는지, AI 판단이 필요한 부분만 Claude에게 묻는다."""
+def _default_call_model(system_prompt, user_message, schema):
+    """독립 실행(CLI) 기본 호출 — API 키로 직접 Anthropic을 부른다.
+
+    run-pipeline.py 등 호출자가 있는 환경에서는 그쪽의 client/CLI-폴백 호출을
+    call_model로 주입해 쓴다 (API 키 없이 claude CLI 세션으로도 동작해야 하므로).
+    """
+    client = Anthropic(api_key=load_api_key())
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+        output_config={"format": {"type": "json_schema", "schema": schema}},
+    )
+    return next(block.text for block in response.content if block.type == "text")
+
+
+def guess_intended_categories(rows_needing_guess, call_model=None):
+    """체계에 없는 명칭이 어느 카테고리를 의도했는지, AI 판단이 필요한 부분만 Claude에게 묻는다.
+
+    call_model(system_prompt, user_message, schema) -> 응답 텍스트(JSON 문자열)를 주입받는다
+    (호출자의 API/CLI-폴백 방식을 그대로 쓰기 위함) — 없으면 이 파일 단독 실행용 기본 호출을 쓴다.
+    """
     if not rows_needing_guess:
         return {}
 
-    client = Anthropic(api_key=load_api_key())
+    call_model = call_model or _default_call_model
     lines = []
     for row, candidates in rows_needing_guess:
         lines.append(
@@ -205,14 +233,7 @@ def guess_intended_categories(rows_needing_guess):
         "각 건마다 그 건의 '대조할 명칭 목록' 중 의도로 보이는 것을 하나씩 골라 transaction_id와 짝지어 돌려줘.\n\n"
         + "\n".join(lines)
     )
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=load_role_instruction(),
-        messages=[{"role": "user", "content": instruction}],
-        output_config={"format": {"type": "json_schema", "schema": GUESS_SCHEMA}},
-    )
-    text = next(block.text for block in response.content if block.type == "text")
+    text = call_model(load_role_instruction(), instruction, GUESS_SCHEMA)
     guesses = json.loads(text)["guesses"]
     return {g["transaction_id"]: g["guess"] for g in guesses}
 
@@ -262,8 +283,12 @@ def _failed_result(message):
     return {"csv": "", "report": report}
 
 
-def run_verify1(input_text: str) -> dict:
-    """verify1을 실행해 result.csv를 쓰고, 지휘에게 보낼 결과 보고를 돌려준다."""
+def run_verify1(input_text: str, call_model=None) -> dict:
+    """verify1을 실행해 result.csv를 쓰고, 지휘에게 보낼 결과 보고를 돌려준다.
+
+    call_model은 guess_intended_categories로 그대로 전달한다 (호출자의 API/CLI-폴백
+    방식 주입용 — 없으면 이 파일 단독 실행용 기본 호출을 쓴다).
+    """
     input_text = (input_text or "").strip()
     if not input_text:
         return _write_empty_result()
@@ -282,7 +307,7 @@ def run_verify1(input_text: str) -> dict:
 
     personal_categories, corporate_categories = load_category_sets()
     results, needs_guess = classify_rows(rows, personal_categories, corporate_categories)
-    guesses = guess_intended_categories(needs_guess)
+    guesses = guess_intended_categories(needs_guess, call_model)
 
     for row, result in zip(rows, results):
         if result["reason"] is None:

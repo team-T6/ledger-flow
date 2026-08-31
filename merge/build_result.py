@@ -106,9 +106,11 @@ def _parse_amount(value):
         return None
 
 
-def load_transactions():
-    """가공 거래 표(스키마 v1)에 두 검증 판정을 transaction_id로 붙여 돌려준다.
+def load_transactions(fraud_check=False):
+    """가공 거래 표(스키마 v1)에 검증 판정을 transaction_id로 붙여 돌려준다.
 
+    fraud_check: 이번 실행의 부정 사용 감지 토글 값 — 켠 실행인데 verify3/result.csv가
+    없으면(검증 실패) 토글을 끈 실행과 구분해 "미완"으로 남긴다.
     반환: (rows, incomplete) — incomplete는 검증 결과가 통째로 없는 쪽의 "미완" 사유 목록.
     화면(screen.html)이 아직 쓰는 구 필드(지출/수익/결제자)는 금액·결제구분에서 파생해 채운다.
     """
@@ -128,7 +130,9 @@ def load_transactions():
                 for v in csv.DictReader(f)
             }
 
-    # 부정 사용 검증은 토글을 켠 실행에만 존재 — 파일이 있으면 같은 방식으로 판정을 붙인다
+    # 부정 사용 검증은 토글을 켠 실행에만 존재 — 파일이 있으면 같은 방식으로 판정을 붙인다.
+    # 토글을 켠 실행인데 파일이 없으면(검증 실패) 토글 끈 실행과 구분해 "미완"으로 남긴다
+    # (orchestrator.md "판단 규칙" — 검증 편측 실패는 통합에 미완으로 전달, verify1·2와 동일 취급)
     verify3 = None
     if os.path.exists(VERIFY3_CSV):
         with open(VERIFY3_CSV, encoding="utf-8-sig", newline="") as f:
@@ -136,6 +140,8 @@ def load_transactions():
                 v["transaction_id"]: (v.get("verify3_result", ""), v.get("verify3_reason", ""))
                 for v in csv.DictReader(f)
             }
+    elif fraud_check:
+        incomplete.append(f"verify3 결과 없음 ({os.path.relpath(VERIFY3_CSV, REPO_ROOT)}) — 미완 처리")
 
     for row in rows:
         amount = _parse_amount(row.get("금액"))
@@ -932,11 +938,12 @@ def build_report(ok_rows, flagged_rows, summary, pdf_path, month=None, incomplet
     doc.build(story, onFirstPage=_paint_page_background, onLaterPages=_paint_page_background)
 
 
-def run(month=None):
+def run(month=None, fraud_check=False):
     """xlsx·pdf를 실제로 만들고, 화면 미리보기·지휘 보고에 쓸 결과를 함께 돌려준다.
 
     month: 지휘가 전달하는 대상 월(YYYY-MM, 실행 파라미터) — 리포트 개요에 싣는다.
     미전달(단독 실행·화면 경로)이면 데이터에서 파생해 추정 표기한다.
+    fraud_check: 이번 실행의 부정 사용 감지 토글 값 — load_transactions()로 그대로 전달한다.
     """
     if not os.path.exists(REFINE_CSV):
         failed_envelope = build_envelope(
@@ -945,7 +952,7 @@ def run(month=None):
         )
         return {"ok_rows": [], "flagged_rows": [], "summary": summarize([]), "envelope": failed_envelope}
 
-    transactions, incomplete = load_transactions()
+    transactions, incomplete = load_transactions(fraud_check=fraud_check)
     total = len(transactions)
     if total == 0:
         empty_envelope = build_envelope(0, [], [], message="확인 대상 없음")

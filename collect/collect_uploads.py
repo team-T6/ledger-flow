@@ -180,6 +180,56 @@ def promote_foreign(row):
         return
 
 
+def _norm_for_match(text):
+    return re.sub(r"\s+", "", (text or "")).lower()
+
+
+def dedupe_receipt_matches(rows):
+    """영수증·문자 캡처 행이 카드사 내역 행과 같은 거래면 병합해 이중 계상을 막는다
+    (collect.md "하는 단계" 4-6, "판단 기준" 날짜+금액+결제처+결제수단 매칭).
+
+    날짜·금액·결제수단이 같고 결제처도 같으면(정규화 후 정확 일치 — 일반 코드) 같은
+    거래로 보고, 영수증의 구매항목만 카드 내역 행에 옮긴 뒤 영수증 행은 버린다(카드
+    내역이 금액의 정본). 날짜·금액·결제수단은 같은데 결제처만 다르면 확신할 수 없어
+    자동 병합하지 않고 두 행 모두 확인 필요로 낮춰 사람이 review하게 한다
+    (§ 못 할 때 "영수증-카드내역 매칭이 불확실하면 반려 대신 review").
+    """
+    card_rows = [r for r in rows if r.get("source_type") == "card_excel"]
+    receipt_rows = [r for r in rows if r.get("source_type") == "receipt"]
+    other_rows = [r for r in rows if r.get("source_type") not in ("card_excel", "receipt")]
+    if not card_rows or not receipt_rows:
+        return rows
+
+    def match_key(r):
+        try:
+            amount = round(float(r.get("금액") or 0), 2)
+        except (TypeError, ValueError):
+            amount = r.get("금액")
+        return (r.get("날짜"), amount, _norm_for_match(r.get("결제수단")))
+
+    card_by_key = {}
+    for r in card_rows:
+        card_by_key.setdefault(match_key(r), []).append(r)
+
+    kept_receipts = []
+    for rec in receipt_rows:
+        candidates = card_by_key.get(match_key(rec), [])
+        exact = [c for c in candidates if _norm_for_match(c["결제처"]) == _norm_for_match(rec["결제처"])]
+        if exact:
+            target = exact[0]
+            if rec.get("구매항목") and not target.get("구매항목"):
+                target["구매항목"] = rec["구매항목"]
+            continue  # 카드 내역이 정본 — 영수증 행은 흡수하고 버린다 (이중 계상 방지)
+        if candidates:  # 날짜·금액·결제수단은 같은데 결제처가 다름 — 불확실, review로 남긴다
+            for c in candidates:
+                c["collect_status"] = "확인 필요"
+            rec["collect_status"] = "확인 필요"
+            kept_receipts.append(rec)
+        else:
+            kept_receipts.append(rec)
+    return other_rows + card_rows + kept_receipts
+
+
 def map_table_row(r):
     """call_agent_convert_table 출력 행 → 거래 표 스키마 v1 (transaction_id는 나중에 부여)."""
     income = r.get("수익") or 0
@@ -397,6 +447,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         if tempdir:
             shutil.rmtree(tempdir, ignore_errors=True)
 
+    rows = dedupe_receipt_matches(rows)  # 영수증-카드내역 같은 거래 병합 (이중 계상 방지)
     for r in rows:  # 통화 표기 승격 안전망 — 원천(정형·AI 변환·영수증) 공통, 채워진 값은 유지
         promote_foreign(r)
     assign_ids(rows, month)

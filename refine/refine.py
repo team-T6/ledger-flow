@@ -14,6 +14,7 @@ CSV 읽기/쓰기·스키마 유지·이미 알려진 가맹점/PG 매핑 규칙
 
 import csv
 import io
+import json
 import os
 import re
 import sys
@@ -87,6 +88,122 @@ def classify(merchant, items, memo):
             if any(k in text for k in keywords):
                 return category
     return CONFIRM_NEEDED
+
+
+CLASSIFY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "classifications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "transaction_id": {"type": "string"},
+                    "category": {
+                        "type": "string",
+                        "description": "결제구분에 해당하는 categories.md 표의 카테고리 명칭 하나, "
+                                       "식별·분류가 불가하면 \"확인 필요\"",
+                    },
+                },
+                "required": ["transaction_id", "category"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["classifications"],
+    "additionalProperties": False,
+}
+
+
+def run_refine_hybrid(input_text, categories_text, role_instruction, call_model):
+    """가공을 실행해 result.csv 텍스트와 결과 보고를 돌려준다 — 오케스트레이터가 호출하는 자리.
+
+    단계 문서(refine.md)의 "AI 판단 / 일반 코드 구분"을 그대로 따른다: PG사 표기 정규화는
+    normalize_merchant()(일반 코드)가 맡고, 정규화된 가맹점의 카테고리 분류만 call_model로
+    Claude에 묻는다 (categories.md 전문을 근거로 동봉). PG/플랫폼 단독 표기라 실가맹점을
+    특정할 수 없는 행은 AI에 묻지 않고 바로 "확인 필요"로 남긴다 (§ 못 할 때).
+    """
+    input_text = (input_text or "").strip()
+    if not input_text:
+        return {"csv": "", "report": {
+            "stage": "refine", "status": "empty", "output": "",
+            "counts": {"total": 0, "ok": 0, "flagged": 0}, "flags": [],
+            "message": "수집 대상 없음",
+        }}
+
+    reader = csv.DictReader(io.StringIO(input_text))
+    fieldnames = reader.fieldnames or []
+    rows = list(reader)
+    for required in ("transaction_id", "결제처", "카테고리", "구매항목", "비고", "결제구분"):
+        if required not in fieldnames:
+            return {"csv": "", "report": {
+                "stage": "refine", "status": "failed", "output": "",
+                "counts": {"total": 0, "ok": 0, "flagged": 0}, "flags": [],
+                "message": f"입력에 {required} 컬럼이 없습니다 — 거래 표 스키마를 확인하세요",
+            }}
+    if not rows:
+        return {"csv": "", "report": {
+            "stage": "refine", "status": "empty", "output": "",
+            "counts": {"total": 0, "ok": 0, "flagged": 0}, "flags": [],
+            "message": "수집 대상 없음",
+        }}
+
+    needs_classification = []
+    resolved_ids = set()
+    for row in rows:
+        merchant, resolved = normalize_merchant(row.get("결제처", ""))
+        if resolved:
+            row["결제처"] = merchant
+            resolved_ids.add(row.get("transaction_id", ""))
+            needs_classification.append(row)
+        else:
+            row["카테고리"] = CONFIRM_NEEDED  # 결제처는 원문 유지 — PG/플랫폼 단독 표기
+
+    categories = {}
+    if needs_classification:
+        lines = [
+            f"- transaction_id={r.get('transaction_id', '')} "
+            f"결제처=\"{r.get('결제처', '')}\" 결제구분={r.get('결제구분', '')} "
+            f"구매항목={r.get('구매항목', '')} 비고={r.get('비고', '')}"
+            for r in needs_classification
+        ]
+        instruction = (
+            "아래 거래마다 결제구분(개인결제/법인결제)에 해당하는 카테고리 체계 표에서 "
+            "결제처·구매항목·비고를 근거로 알맞은 카테고리를 하나씩 골라라. "
+            "식별·분류가 애매하면 임의로 배정하지 말고 \"확인 필요\"로 답하라.\n\n"
+            + "\n".join(lines)
+            + "\n\n카테고리 체계 문서(categories.md) 전문:\n\n" + categories_text
+        )
+        text = call_model(role_instruction, instruction, CLASSIFY_SCHEMA)
+        for item in json.loads(text)["classifications"]:
+            categories[item["transaction_id"]] = item["category"]
+
+    flags = []
+    flagged = 0
+    for i, row in enumerate(rows, start=1):
+        tx_id = row.get("transaction_id", "")
+        if tx_id in resolved_ids:
+            row["카테고리"] = categories.get(tx_id, CONFIRM_NEEDED)
+        if row["카테고리"] == CONFIRM_NEEDED:
+            flagged += 1
+            flags.append({"row": i, "type": "확인 필요", "reason": "가맹점 식별 또는 카테고리 분류 불가"})
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    csv_text = buf.getvalue()
+
+    total = len(rows)
+    report = {
+        "stage": "refine",
+        "status": "ok" if not flags else "partial",
+        "output": "refine/result.csv",
+        "counts": {"total": total, "ok": total - flagged, "flagged": flagged},
+        "flags": flags,
+        "message": "",
+    }
+    return {"csv": csv_text, "report": report}
 
 
 def load_csv_text(input_path):

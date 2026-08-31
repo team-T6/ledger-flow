@@ -7,12 +7,19 @@
 단계 실행 방식 (단계 문서 "도구·코드" 확정):
 - 수집·통합: 칸의 실행 코드(collect/collect.py · merge/build_result.py)를 직접 호출
   — 결과 보고도 그 코드가 만들어 반환한다
-- 가공·분류/기간·금액 검증: 그 단계 문서를 시스템 프롬프트로 하는 API 단발 호출.
-  응답을 구조화 출력(JSON 스키마)으로 강제해 산출물 CSV(artifact_csv)와 결과 보고
-  (report)를 함께 받고, 산출물은 지휘가 그 칸의 result.csv로 써 준다 — 형식 위반은
-  호출 실패 (임시 — 담당자 실행 코드가 생기면 직접 호출로 대체)
-- 인증 폴백: .env에 ANTHROPIC_API_KEY가 없으면 같은 프롬프트를 claude CLI 헤드리스
-  (claude -p, CLI 로그인 세션)로 실행한다. JSON-only 지시 + 코드 재검증으로 형식을 지킨다
+- 가공·분류 검증: 각 단계 문서의 "AI 판단 / 일반 코드 구분"을 그대로 따르는 하이브리드
+  실행 — 명칭 문자열 대조·PG사 정규화 같은 결정론적 부분은 그 칸의 코드
+  (refine/refine.py의 run_refine_hybrid · verify1/call-agent.py의 run_verify1)가 코드로
+  처리하고, 애매한 것만 make_call_model()로 만든 콜백을 통해 Claude에 묻는다
+  (run_refine_hybrid · run_verify1_hybrid)
+- 기간·금액/부정 사용 검증: 담당자 실행 코드가 아직 없어 그 단계 문서를 시스템 프롬프트로
+  하는 API 단발 호출로 처리한다 (make_llm_stage). 응답을 구조화 출력(JSON 스키마)으로
+  강제해 산출물 CSV(artifact_csv)와 결과 보고(report)를 함께 받고, 산출물은 지휘가 그
+  칸의 result.csv로 써 준다 — 형식 위반은 호출 실패 (임시 — 담당자 실행 코드가 생기면
+  하이브리드 방식으로 대체)
+- 인증 폴백: .env에 ANTHROPIC_API_KEY가 없으면 하이브리드·단발 호출 모두 같은 프롬프트를
+  claude CLI 헤드리스(claude -p, CLI 로그인 세션)로 실행한다. JSON-only 지시 + 코드
+  재검증으로 형식을 지킨다
 
 중간 확인 (웹 실행 한정): on_confirm 훅이 있으면 수집·가공 직후와 통합 직전에
 확인 필요·반려 행을 사용자에게 보여 수정·확인을 받아 반영한다 — run_confirmation 참고.
@@ -77,6 +84,8 @@ LLM_STAGE_REFERENCES = {
 }
 
 STATUS_VOCAB = {"ok", "empty", "partial", "failed"}
+# interface-spec "단계 결과 보고" flags[].type 어휘 고정
+FLAG_TYPE_VOCAB = {"확인 필요", "반려", "확인 요청", "오류", "미완"}
 
 # interface-spec.md "단계 결과 보고" 규격 — 판단형 단계 응답에 구조화 출력으로 강제한다
 ENVELOPE_SCHEMA = {
@@ -97,9 +106,7 @@ ENVELOPE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {"row": {"type": "integer"},
-                               # interface-spec "단계 결과 보고" flags[].type 어휘 고정
-                               "type": {"type": "string",
-                                        "enum": ["확인 필요", "반려", "확인 요청", "오류", "미완"]},
+                               "type": {"type": "string", "enum": sorted(FLAG_TYPE_VOCAB)},
                                "reason": {"type": "string"}},
                 "required": ["row", "type", "reason"],
                 "additionalProperties": False,
@@ -269,6 +276,14 @@ def failed_envelope(stage, message):
             "message": message}
 
 
+def empty_envelope(stage, message="확인 대상 없음"):
+    """입력 표가 없거나 비어 있을 때 — 재시도 없이 바로 확정한다 (verify2.md·verify3.md
+    "오류·예외 처리": "입력 표가 없거나 비어 있으면 → status: empty ... 재시도 없음")."""
+    return {"stage": stage, "status": "empty", "output": "",
+            "counts": {"total": 0, "ok": 0, "flagged": 0}, "flags": [],
+            "message": message}
+
+
 def validate_envelope(env, stage):
     """받은 보고가 규격에 맞는지 코드로 재검증한다 — 어긋나면 사유 목록을 돌려준다."""
     problems = []
@@ -288,6 +303,11 @@ def validate_envelope(env, stage):
         problems.append("counts 형식 위반 (total·ok·flagged 정수 필요)")
     if not isinstance(env["flags"], list):
         problems.append("flags가 배열이 아님")
+    else:
+        for i, f in enumerate(env["flags"]):
+            if not (isinstance(f, dict) and isinstance(f.get("row"), int)
+                    and f.get("type") in FLAG_TYPE_VOCAB and isinstance(f.get("reason"), str)):
+                problems.append(f"flags[{i}] 형식 위반 (row 정수·type 어휘·reason 문자열 필요)")
     return problems
 
 
@@ -385,6 +405,12 @@ class Run:
 
         if envelope["status"] == "failed" and not envelope["message"]:
             envelope["message"] = "사유 미기재 실패"
+        if envelope["status"] == "failed" and stage in ("refine", "verify1", "verify2", "verify3"):
+            # 실패 확정 전 attempt에서 산출물 CSV를 먼저 쓴 경우가 있을 수 있다 — 남아 있으면
+            # 통합이 "성공한 산출물"로 오인하니 지운다 (그 자리는 통합이 "미완"으로 처리)
+            stale = os.path.join(REPO_ROOT, stage, "result.csv")
+            if os.path.exists(stale):
+                os.remove(stale)
         state = "실패" if envelope["status"] == "failed" else "완료"
         self.log(stage, state, envelope["counts"], envelope["message"], envelope=envelope)
         self.envelopes[stage] = envelope
@@ -412,9 +438,74 @@ def run_collect(month, upload_dir=None, on_progress=None):
     return mod.run(month)["envelope"]
 
 
-def run_merge(month=None):
+def run_merge(month=None, fraud_check=False):
     mod = load_module("merge_stage", os.path.join(REPO_ROOT, "merge", "build_result.py"))
-    return mod.run(month)["envelope"]
+    return mod.run(month, fraud_check=fraud_check)["envelope"]
+
+
+def make_call_model(client, model):
+    """단계 문서 "AI 판단 / 일반 코드 구분"을 따르는 하이브리드 단계(가공·분류 검증)가 쓰는
+    call_model(system_prompt, user_message, schema) — 애매한 판단만 골라 물을 때 호출한다.
+
+    client가 있으면 API로, 없으면 claude CLI 로그인 세션 폴백으로 부른다 (make_llm_stage와
+    같은 인증 폴백 원칙).
+    """
+    def call_model(system_prompt, user_message, schema):
+        if client is not None:
+            response = client.messages.create(
+                model=model, max_tokens=MAX_TOKENS,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+                output_config={"format": {"type": "json_schema", "schema": schema}},
+            )
+            return next(b.text for b in response.content if b.type == "text")
+        cli_message = (
+            f"{user_message}\n\n"
+            "출력 형식(반드시 지켜라): 설명·인사·코드펜스 없이, 아래 JSON 스키마를 따르는 "
+            "단일 JSON 객체만 출력한다.\n"
+            f"{json.dumps(schema, ensure_ascii=False)}"
+        )
+        return extract_json_text(call_claude_cli(model, system_prompt, cli_message))
+    return call_model
+
+
+def run_refine_hybrid(client, month, on_progress=None):
+    """가공(refine) 하이브리드 실행 — PG사 정규화는 코드로, 카테고리 분류만 AI에 묻는다
+    (refine.md "AI 판단 / 일반 코드 구분" 확정, refine/refine.py의 run_refine_hybrid)."""
+    def call():
+        input_path = LLM_STAGE_INPUTS["refine"]
+        if not os.path.exists(input_path):
+            # refine.md "못 할 때": 입력 거래 표가 비어 있으면 처리 대상 없음(empty) — 재시도 없음
+            return empty_envelope("refine", f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
+        with open(input_path, encoding="utf-8-sig") as f:
+            input_csv = f.read()
+        with open(LLM_STAGE_REFERENCES["refine"][0], encoding="utf-8") as f:
+            categories_text = f.read()
+        mod = load_module("refine_stage_hybrid", os.path.join(REPO_ROOT, "refine", "refine.py"))
+        call_model = make_call_model(client, STAGE_MODELS["refine"])
+        result = mod.run_refine_hybrid(input_csv, categories_text, load_stage_doc("refine"), call_model)
+        if result["csv"]:
+            with open(os.path.join(REPO_ROOT, "refine", "result.csv"), "w", encoding="utf-8-sig", newline="") as f:
+                f.write(result["csv"])
+        return result["report"]
+    return call
+
+
+def run_verify1_hybrid(client, month, on_progress=None):
+    """분류 검증(verify1) 하이브리드 실행 — 명칭 문자열 대조는 코드로, 체계에 없는 명칭이
+    어느 카테고리를 의도했는지 추정만 AI에 묻는다 (verify1.md "AI 판단 / 일반 코드 구분"
+    확정, verify1/call-agent.py의 run_verify1)."""
+    def call():
+        input_path = LLM_STAGE_INPUTS["verify1"]
+        if not os.path.exists(input_path):
+            return failed_envelope("verify1", f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
+        with open(input_path, encoding="utf-8-sig") as f:
+            input_csv = f.read()
+        mod = load_module("verify1_stage_hybrid", os.path.join(REPO_ROOT, "verify1", "call-agent.py"))
+        call_model = make_call_model(client, STAGE_MODELS["verify1"])
+        result = mod.run_verify1(input_csv, call_model=call_model)
+        return result["report"]
+    return call
 
 
 def make_llm_stage(client, stage, month, on_progress=None):
@@ -427,7 +518,9 @@ def make_llm_stage(client, stage, month, on_progress=None):
     def call():
         input_path = LLM_STAGE_INPUTS[stage]
         if not os.path.exists(input_path):
-            return failed_envelope(stage, f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
+            # verify2.md·verify3.md "오류·예외 처리": 입력 표가 없거나 비어 있으면
+            # empty로 바로 확정 — 재시도 없음
+            return empty_envelope(stage, f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
         with open(input_path, encoding="utf-8-sig") as f:
             input_csv = f.read()
         total_rows = max(0, len(list(csv.reader(io.StringIO(input_csv)))) - 1)
@@ -872,7 +965,7 @@ def write_summary(run):
     lines += ["## 2. 확인 필요 목록", ""]
     if flags:
         lines += ["| 행 번호 | 단계 | 유형 | 사유 |", "|---|---|---|---|"]
-        lines += [f"| {f['row'] or '-'} | {STAGE_LABELS[stage]} | {f['type']} | {f['reason']} |"
+        lines += [f"| {f.get('row') or '-'} | {STAGE_LABELS[stage]} | {f.get('type', '?')} | {f.get('reason', '')} |"
                   for stage, f in flags]
     else:
         lines.append("없음")
@@ -945,6 +1038,14 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
             os.remove(stale)
 
     def finish():
+        # 대량 반려 경고 (partial 임계 50% 초과) — 어느 단계에서 중단되든 그때까지 쌓인
+        # envelope을 기준으로 매번 검사한다 (orchestrator.md "판단 규칙" — 조기 종료
+        # 경로도 예외 없음)
+        for stage in summary_stages(run):
+            env = run.envelopes.get(stage)
+            if env and env["status"] == "partial" and env["counts"]["total"] > 0:
+                if env["counts"]["flagged"] / env["counts"]["total"] > 0.5:
+                    run.warnings.append(f"대량 반려 — 원인 점검 필요 ({STAGE_LABELS[stage]} flagged {env['counts']['flagged']}/{env['counts']['total']})")
         run.log("summary", "시작")
         write_summary(run)
         run.log("summary", "완료", memo=os.path.relpath(SUMMARY_PATH, REPO_ROOT))
@@ -984,7 +1085,7 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
         refine_env = run.call_stage("refine", lambda: failed_envelope(
             "refine", f"API 클라이언트 준비 실패: {client_error} (claude CLI 폴백도 불가 — CLI 미설치)"))
     else:
-        refine_env = run.call_stage("refine", make_llm_stage(client, "refine", month, on_progress=run.progress))
+        refine_env = run.call_stage("refine", run_refine_hybrid(client, month, on_progress=run.progress))
     if refine_env["status"] == "failed":
         run.notes.append(f"가공 실패로 중단: {refine_env['message']}")
         finish()
@@ -996,11 +1097,17 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
     run_confirmation(run, on_confirm, "refine")
 
     # 3. 검증 스테이지 병렬 — 기본 1·2, 부정 사용 감지 토글을 켠 실행은 3도 함께
+    # verify1은 하이브리드(명칭 대조는 코드, 추정만 AI) — verify2·3은 아직 담당자 실행
+    # 코드가 없어 API 단발 호출(임시, run-pipeline.py 상단 docstring 참고)
     verify_stages = ["verify1", "verify2"] + (["verify3"] if fraud_check else [])
     with ThreadPoolExecutor(max_workers=len(verify_stages)) as pool:
-        futures = {stage: pool.submit(run.call_stage, stage,
-                                      make_llm_stage(client, stage, month, on_progress=run.progress))
-                   for stage in verify_stages}
+        futures = {}
+        for stage in verify_stages:
+            if stage == "verify1":
+                fn = run_verify1_hybrid(client, month, on_progress=run.progress)
+            else:
+                fn = make_llm_stage(client, stage, month, on_progress=run.progress)
+            futures[stage] = pool.submit(run.call_stage, stage, fn)
         verify_envs = {stage: f.result() for stage, f in futures.items()}
     v1_env, v2_env = verify_envs["verify1"], verify_envs["verify2"]
 
@@ -1023,18 +1130,11 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
     run_confirmation(run, on_confirm, "verify")
 
     # 4. 통합
-    merge_env = run.call_stage("merge", lambda: run_merge(month))
+    merge_env = run.call_stage("merge", lambda: run_merge(month, fraud_check=fraud_check))
     if merge_env["status"] == "failed":
         run.notes.append(f"통합 실패 — 최종 산출물 없음: {merge_env['message']}")
     elif merge_env["counts"]["total"] != refine_env["counts"]["total"]:
         run.warnings.append(f"거래 행 유실 의심 — 가공 {refine_env['counts']['total']}건 → 통합 {merge_env['counts']['total']}건")
-
-    # 대량 반려 경고 (partial 임계 50% 초과)
-    for stage in summary_stages(run):
-        env = run.envelopes.get(stage)
-        if env and env["status"] == "partial" and env["counts"]["total"] > 0:
-            if env["counts"]["flagged"] / env["counts"]["total"] > 0.5:
-                run.warnings.append(f"대량 반려 — 원인 점검 필요 ({STAGE_LABELS[stage]} flagged {env['counts']['flagged']}/{env['counts']['total']})")
 
     run.notes.append("전 단계 counts.total 대조 완료" + (" — 유실 의심 있음 (경고 참고)" if any("유실" in w for w in run.warnings) else " — 유실 없음"))
     finish()
@@ -1160,7 +1260,10 @@ def run_refix(month, resolutions, on_event=None):
         run.log("verify", "확인 반영", memo=memo)
         run.notes.append(memo)
 
-        merge_env = run.call_stage("merge", lambda: run_merge(month))
+        # 재결산은 fraud_check를 인자로 받지 않는다 — 그 결산 때 verify3 보고가 있었는지로
+        # 토글 여부를 되짚는다(load_stage_envelopes가 위에서 이미 채워둔 값)
+        refix_fraud_check = "verify3" in run.envelopes
+        merge_env = run.call_stage("merge", lambda: run_merge(month, fraud_check=refix_fraud_check))
         if merge_env["status"] == "failed":
             run.notes.append(f"통합 실패 — 최종 산출물 없음: {merge_env['message']}")
 

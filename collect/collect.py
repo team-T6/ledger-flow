@@ -35,8 +35,6 @@ OUT_FIELDS = ["transaction_id", "날짜", "금액", "결제처", "카테고리",
               "결제수단", "결제구분", "원거래통화", "원거래금액",
               "source_type", "collect_status", "구매항목"]
 
-# stub.md 예시가 참조하는 거래는 확인됨으로 고정한다 — 견본 문서와 값이 어긋나지 않게.
-PINNED_VERIFIED = {"tx_260202_01", "tx_260224_01", "tx_260210_01"}
 
 ITEM_POOL = {
     "스타벅스 강남점": ["아메리카노", "카페라떼", "아메리카노, 크루아상", "카페라떼, 베이글"],
@@ -123,22 +121,14 @@ def normalize(files, default_month=None):
 
 
 def assign_status_and_items(rows, seed=7):
-    """collect_status 절반을 확인 필요로 바꾸고, 확인됨 건에만 구매항목을 채운다.
+    """확인됨 건(핵심 값을 실제로 읽은 거래)에 구매항목을 채운다 (collect.md "하는 단계" 1).
 
-    PINNED_VERIFIED(stub.md 예시가 참조하는 거래)는 확인됨으로 유지한다.
+    hana_card 표본은 날짜·금액·결제처를 전부 읽어내므로 collect_status는 파싱 시점에
+    이미 확인됨으로 채워져 있다 — 여기서 상태를 임의로 뒤집지 않는다.
     """
-    rng = random.Random(seed)
-    ids = sorted({r["transaction_id"] for r in rows} - PINNED_VERIFIED)
-    rng.shuffle(ids)
-    review_ids = set(ids[: len(ids) // 2])
-
     item_rng = random.Random(seed)
     for r in rows:
-        if r["transaction_id"] in review_ids:
-            r["collect_status"] = "확인 필요"
-            r["구매항목"] = ""
-        else:
-            r["collect_status"] = "확인됨"
+        if r["collect_status"] == "확인됨":
             pool = ITEM_POOL.get(r["결제처"])
             r["구매항목"] = item_rng.choice(pool) if pool else ""
 

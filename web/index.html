@@ -75,8 +75,9 @@
   .brand { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 21px; line-height: 1.2; }
   .brand-sub { font-size: 14px; color: var(--muted); }
   .header-right { display: flex; align-items: center; gap: 18px; }
+  .header-right nav { display: flex; align-items: center; gap: 10px; }
   .nav-link {
-    display: inline-block; font-size: 14px; font-weight: 700;
+    display: inline-block; font-size: 14px; font-weight: 700; white-space: nowrap;
     padding: 8px 18px; border-radius: var(--radius);
     background: var(--accent); color: var(--accent-contrast);
     text-decoration: none; transition: opacity 0.15s ease;
@@ -610,6 +611,11 @@
     transition: opacity 0.2s ease, transform 0.2s ease; max-width: 90vw;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.actionable { pointer-events: auto; }
+  .toast .toast-act {
+    font: inherit; font-size: 13.5px; font-weight: 700; border: none; background: none;
+    color: var(--bg); text-decoration: underline; cursor: pointer; margin-left: 12px; padding: 0;
+  }
 
   /* ---------- 부정 사용 감지 토글 (자료 넣기 화면) ---------- */
   .nav-link.quiet { background: var(--soft); color: var(--ink); }
@@ -625,29 +631,41 @@
   .cat-page { padding: 120px 24px 80px; min-height: 100svh; }
   .cat-page .wrap { max-width: 760px; margin: 0 auto; }
   .cat-updated { font-size: 13px; color: var(--muted); margin-top: 4px; }
-  .cat-tabs { display: flex; gap: 8px; margin: 24px 0 14px; }
+  .cat-toolbar {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-top: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .cat-tabs { display: flex; gap: 4px; }
   .cat-tab {
-    font: inherit; font-size: 14px; font-weight: 700; padding: 8px 18px;
-    border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--soft); color: var(--ink); cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 700; color: var(--muted);
+    background: none; border: none; cursor: pointer; padding: 10px 4px; margin-right: 16px;
+    border-bottom: 2px solid transparent; transform: translateY(1px);
   }
-  .cat-tab.on { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
-  .cat-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  .cat-table th, .cat-table td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+  .cat-tab:hover { color: var(--ink); }
+  .cat-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .cat-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cat-actions { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+  .cat-actions .btn { font-size: 13px; padding: 7px 16px; }
+  .cat-page .hint { margin-top: 10px; }
+  .cat-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px; }
+  .cat-table th, .cat-table td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
   .cat-table th { background: var(--soft); font-size: 13px; }
-  .cat-table td:first-child { width: 32%; }
+  .cat-table td:first-child { width: 28%; }
   .cat-table td:last-child { width: 52px; text-align: center; }
-  .cat-table input {
-    width: 100%; border: none; background: transparent;
-    font: inherit; font-size: 14px; padding: 2px 0; color: var(--ink);
+  .cat-table textarea {
+    display: block; width: 100%; border: none; background: transparent;
+    resize: none; overflow: hidden;
+    font: inherit; font-size: 14px; line-height: 1.5; padding: 2px 0; color: var(--ink);
   }
-  .cat-table input:disabled { color: var(--ink); opacity: 1; }
+  .cat-table textarea:focus { outline: none; }
+  .cat-table textarea:disabled { color: var(--ink); opacity: 1; -webkit-text-fill-color: var(--ink); }
   .cat-table .cat-del {
-    font: inherit; font-size: 12.5px; border: none; background: none;
-    color: var(--red); cursor: pointer; padding: 2px 4px;
+    border: none; background: none; color: var(--red); cursor: pointer;
+    padding: 5px; line-height: 0; border-radius: 6px;
   }
-  .cat-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
-  .cat-actions .hint { margin-top: 0; }
+  .cat-table .cat-del:hover { background: rgba(166, 58, 46, 0.1); }
+  .cat-table .cat-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .cat-note { margin-top: 26px; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
 
   /* ---------- 등장 애니메이션 ---------- */
@@ -1014,16 +1032,18 @@
     <h2>카테고리 관리</h2>
     <p class="lead">가공(분류)과 검증 1(적합성 확인)이 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다 — 개인결제는 개인카드 표, 법인결제는 법인카드 표.</p>
     <div class="cat-updated" id="cat-updated"></div>
-    <div class="cat-tabs">
-      <button type="button" class="cat-tab on" data-cattab="personal">개인카드</button>
-      <button type="button" class="cat-tab" data-cattab="corporate">법인카드</button>
+    <div class="cat-toolbar">
+      <div class="cat-tabs" role="tablist">
+        <button type="button" role="tab" class="cat-tab on" data-cattab="personal">개인카드</button>
+        <button type="button" role="tab" class="cat-tab" data-cattab="corporate">법인카드</button>
+      </div>
+      <div class="cat-actions">
+        <button class="btn btn-ghost" id="cat-add" type="button">행 추가</button>
+        <button class="btn" id="cat-save" type="button">저장</button>
+      </div>
     </div>
+    <div class="hint" id="cat-hint"></div>
     <table class="cat-table" id="cat-table"></table>
-    <div class="cat-actions">
-      <button class="btn btn-ghost" id="cat-add" type="button">행 추가</button>
-      <button class="btn" id="cat-save" type="button">저장</button>
-      <span class="hint" id="cat-hint"></span>
-    </div>
     <div class="cat-note">저장하면 최종 업데이트 일시가 갱신되고, <strong>다음 결산 실행부터</strong> 새 기준이 적용됩니다. 수익 카테고리와 운영 규칙은 이 화면에서 다루지 않습니다 — 정본 문서(docs/categories.md)의 해당 절에서 직접 관리합니다.</div>
   </div>
 </section>
@@ -1087,11 +1107,25 @@
   /* 토스트 */
   var toastEl = document.getElementById("toast");
   var toastTimer = null;
-  function showToast(msg) {
+  function showToast(msg, actionLabel, onAction) {
     toastEl.textContent = msg;
+    toastEl.classList.toggle("actionable", !!onAction);
+    if (onAction) {
+      var act = document.createElement("button");
+      act.type = "button";
+      act.className = "toast-act";
+      act.textContent = actionLabel;
+      act.addEventListener("click", function () {
+        toastEl.classList.remove("show", "actionable");
+        clearTimeout(toastTimer);
+        onAction();
+      });
+      toastEl.appendChild(act);
+    }
     toastEl.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show", "actionable"); },
+                            onAction ? 5000 : 2200); // 액션이 있으면 누를 시간을 더 준다
   }
   document.querySelectorAll(".inert").forEach(function (b) {
     b.addEventListener("click", function () {
@@ -1179,7 +1213,8 @@
       if (canOpen) openMonth(mk);
       else showShelf();
     }
-    if (isCat) loadCategories();
+    // 저장 안 한 편집이 있으면 정본을 다시 불러 덮지 않는다 — 다른 화면에 다녀와도 편집 유지
+    if (isCat) { if (catData && catDirty) renderCategories(); else loadCategories(); }
     window.scrollTo(0, 0);
     if (isApp && INVITE_CODE_ENABLED && !invited) openInviteModal();
     else closeInviteModal();
@@ -2703,7 +2738,6 @@
 
   /* ---- 분류 기준 관리 (정본: docs/categories.md — 실제 모드는 서버 GET/POST /categories) ---- */
   var CAT_SECTIONS = { personal: "## 지출 — 개인카드", corporate: "## 지출 — 법인카드" };
-  var CAT_TAB_LABEL = { personal: "개인카드", corporate: "법인카드" };
   // 데모 스냅숏 — 정본(docs/categories.md)의 표를 그대로 옮긴 보기 전용 사본 (DEMO_MONTHS와 같은 결)
   var DEMO_CATEGORIES = {
     updated: "2026-08-31 12:24",
@@ -2767,8 +2801,10 @@
     if (!catData) return;
     var rows = [];
     document.querySelectorAll("#cat-table tr[data-idx]").forEach(function (tr) {
-      var inputs = tr.querySelectorAll("input");
-      rows.push([inputs[0].value.trim(), inputs[1].value.trim()]);
+      var inputs = tr.querySelectorAll("textarea");
+      // 붙여넣기 등으로 들어온 줄바꿈은 공백으로 — 마크다운 표 한 행에 실리는 값이다
+      rows.push([inputs[0].value.replace(/\s*\n\s*/g, " ").trim(),
+                 inputs[1].value.replace(/\s*\n\s*/g, " ").trim()]);
     });
     catData[catTab] = rows;
   }
@@ -2785,17 +2821,41 @@
     });
     return lines.join("\n");
   }
+  function fitCatCell(el) {
+    // 자동 높이 — 내용이 접히도록 셀 textarea 높이를 내용 길이에 맞춘다
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+  var CAT_DEL_ICO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+  function setCatDirty(v) {
+    // 더티 상태가 저장 버튼·안내 문구를 이끈다 — 변경 없으면 저장 비활성
+    catDirty = v;
+    document.getElementById("cat-save").disabled = !REAL || !catData || !catDirty;
+    document.getElementById("cat-hint").textContent = !REAL
+      ? "데모에서는 보기만 가능합니다 — 편집·저장은 로컬 실행 모드에서 됩니다"
+      : catDirty
+        ? "저장 안 된 변경이 있습니다 — 저장해야 정본 문서(docs/categories.md)에 반영됩니다"
+        : "저장은 정본 문서(docs/categories.md)에 바로 반영됩니다";
+  }
+  window.addEventListener("beforeunload", function (e) {
+    if (catDirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+  window.addEventListener("resize", function () {
+    if (!viewCategories.classList.contains("hidden"))
+      document.querySelectorAll("#cat-table textarea").forEach(fitCatCell);
+  });
   function renderCategories() {
     document.getElementById("cat-updated").textContent =
       catData && catData.updated ? "최종 업데이트: " + catData.updated : "";
     document.querySelectorAll(".cat-tab").forEach(function (b) {
       b.classList.toggle("on", b.dataset.cattab === catTab);
+      b.setAttribute("aria-selected", b.dataset.cattab === catTab ? "true" : "false");
     });
     var editable = REAL;
     var table = document.getElementById("cat-table");
     table.innerHTML = "";
     var head = document.createElement("tr");
-    ["카테고리 (" + CAT_TAB_LABEL[catTab] + ")", "포함 범위", ""].forEach(function (h) {
+    ["카테고리", "포함 범위", ""].forEach(function (h) {
       var th = document.createElement("th");
       th.textContent = h;
       head.appendChild(th);
@@ -2804,13 +2864,20 @@
     (catData ? catData[catTab] : []).forEach(function (row, idx) {
       var tr = document.createElement("tr");
       tr.dataset.idx = idx;
-      row.forEach(function (value) {
+      row.forEach(function (value, col) {
         var td = document.createElement("td");
-        var input = document.createElement("input");
-        input.type = "text";
+        var input = document.createElement("textarea");
+        input.rows = 1;
         input.value = value;
         input.disabled = !editable;
-        input.addEventListener("input", function () { catDirty = true; });
+        input.setAttribute("aria-label", (row[0] || "새 행") + " — " + (col ? "포함 범위" : "카테고리"));
+        input.addEventListener("input", function () {
+          // "|"는 정본 마크다운 표의 구분자라 셀 값에 쓸 수 없다
+          if (input.value.indexOf("|") >= 0) input.value = input.value.replace(/\|/g, "");
+          setCatDirty(true);
+          fitCatCell(input);
+        });
+        input.addEventListener("keydown", function (e) { if (e.key === "Enter") e.preventDefault(); });
         td.appendChild(input);
         tr.appendChild(td);
       });
@@ -2819,24 +2886,29 @@
         var del = document.createElement("button");
         del.type = "button";
         del.className = "cat-del";
-        del.textContent = "삭제";
+        del.innerHTML = CAT_DEL_ICO;
+        del.title = "삭제";
+        del.setAttribute("aria-label", (row[0] || "행") + " 삭제");
         del.addEventListener("click", function () {
           collectCatTable();
-          catData[catTab].splice(idx, 1);
-          catDirty = true;
+          var removed = catData[catTab].splice(idx, 1)[0];
+          var removedTab = catTab;
+          setCatDirty(true);
           renderCategories();
+          showToast('"' + (removed[0] || "이름 없는 행") + '" 행을 삭제했습니다', "되돌리기", function () {
+            catData[removedTab].splice(idx, 0, removed);
+            setCatDirty(true);
+            if (catTab === removedTab) renderCategories();
+          });
         });
         tdDel.appendChild(del);
       }
       tr.appendChild(tdDel);
       table.appendChild(tr);
     });
-    var saveBtn = document.getElementById("cat-save");
-    var addBtn = document.getElementById("cat-add");
-    saveBtn.disabled = addBtn.disabled = !editable;
-    document.getElementById("cat-hint").textContent = editable
-      ? "저장은 정본 문서(docs/categories.md)에 바로 반영됩니다"
-      : "데모에서는 보기만 가능합니다 — 편집·저장은 로컬 실행 모드에서 됩니다";
+    table.querySelectorAll("textarea").forEach(fitCatCell);
+    document.getElementById("cat-add").disabled = !editable;
+    setCatDirty(catDirty);
   }
   function loadCategories() {
     if (!REAL) {
@@ -2867,22 +2939,44 @@
     if (!REAL || !catData) return;
     collectCatTable();
     catData[catTab].push(["", ""]);
-    catDirty = true;
+    setCatDirty(true);
     renderCategories();
+    // 새 행이 표 아래에 붙으므로 보이는 곳으로 데려가 바로 입력하게 한다
+    var rows = document.querySelectorAll("#cat-table tr[data-idx]");
+    var last = rows[rows.length - 1];
+    last.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    last.querySelector("textarea").focus({ preventScroll: true });
   });
   document.getElementById("cat-save").addEventListener("click", function () {
     if (!REAL || !catData) return;
     collectCatTable();
+    // 이름 중복은 분류 모호성으로 이어지므로 막고, 이름 없는 행은 버려짐을 알린다
+    var dropped = 0, dupes = [];
+    ["personal", "corporate"].forEach(function (key) {
+      var seen = {};
+      catData[key].forEach(function (row) {
+        if (!row[0]) { if (row[1]) dropped++; return; }
+        if (seen[row[0]] && dupes.indexOf(row[0]) < 0) dupes.push(row[0]);
+        seen[row[0]] = true;
+      });
+    });
+    if (dupes.length) { showToast("중복된 카테고리 이름이 있습니다: " + dupes.join(", ")); return; }
+    if (dropped && !confirm("카테고리 이름이 빈 행 " + dropped + "개는 저장되지 않습니다. 계속할까요?")) return;
+    var saveBtn = document.getElementById("cat-save");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "저장 중…";
+    function restoreSaveBtn() { saveBtn.textContent = "저장"; saveBtn.disabled = false; }
     apiJson("categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: serializeCategories() })
     }).then(function (res) {
-      if (!res.ok) { showToast(res.data.error || "저장에 실패했습니다"); return; }
-      catDirty = false;
+      if (!res.ok) { restoreSaveBtn(); showToast(res.data.error || "저장에 실패했습니다"); return; }
+      saveBtn.textContent = "저장";
+      setCatDirty(false);
       showToast("분류 기준을 저장했습니다 — 다음 결산 실행부터 반영됩니다");
       loadCategories(); // 정본 재로드 — 서버가 찍은 최종 업데이트 일시를 그대로 보여준다
-    }).catch(function () { showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
+    }).catch(function () { restoreSaveBtn(); showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
   });
 
   /* ---- 실제 모드 켜기 ---- */
@@ -2961,6 +3055,9 @@
 
     // 업로드 목록은 빈 상태로 시작 — 월 선택 시 서버 업로드함도 비워서 표시와 실제를 맞춘다
     renderFileList([]);
+
+    // 분류 기준 화면이 서버 감지보다 먼저 데모로 그려졌으면 정본을 다시 불러온다
+    if (!viewCategories.classList.contains("hidden")) loadCategories();
   }
 
   probeServer().then(function (ok) { if (ok) enableRealMode(); });

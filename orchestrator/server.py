@@ -20,6 +20,12 @@
                               중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담는다
 - POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
                               (대기 상한 10분 — 초과하면 파이프라인이 전부 유지로 진행)
+- GET  /refix/pending?month=YYYY-MM : 결산 완료 후 남은 확인 필요 건 목록 (재결산 화면용 —
+                              중간 확인과 같은 payload 모양. 칸 산출물의 달이 아니면 보관본
+                              archive/<월>/stages/에서 읽고, 그것도 없으면 409)
+- POST /runs/refix          : 재결산 — {month, resolutions}를 받아 확인 반영 후 통합만 재실행
+                              (run-pipeline.py의 run_refix — 보관된 월이면 stages/에서 단계
+                              산출물을 복원해 진행. 진행은 /runs/current로 관찰)
 - GET  /summary             : orchestrator/result-summary.md 원문 (?month=YYYY-MM이면 보관본)
 - GET  /result-data         : 결산 결과 화면용 통계 JSON (merge 집계 함수 재사용, 읽기 전용)
 - GET  /months              : 월별 보관함 목록 (archive/<월>/summary.json 배열)
@@ -281,6 +287,32 @@ class RunState:
         thread.start()
         return True
 
+    def start_refix(self, month, resolutions):
+        """재결산 시작 — 결산 완료 후 확인 반영 (통합만 재실행, run_refix). 일반 실행과 동시 불가."""
+        with self.lock:
+            if self.running:
+                return False
+            self.running = True
+            self.month = month
+            self.events = []
+            self.error = None
+            self.confirm = None
+            self.confirm_result = None
+            self.confirm_ready.clear()
+        thread = threading.Thread(target=self._work_refix, args=(month, resolutions), daemon=True)
+        thread.start()
+        return True
+
+    def _work_refix(self, month, resolutions):
+        try:
+            pipeline.run_refix(month, resolutions, on_event=self.on_event)
+        except Exception as e:
+            with self.lock:
+                self.error = str(e)
+        finally:
+            with self.lock:
+                self.running = False
+
     def _work(self, month, upload_dir, fraud_check):
         # 월별 보관(archive/<월>/)은 파이프라인이 종료 직전에 직접 수행한다 — 실행 경로 무관
         try:
@@ -416,6 +448,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, data)
             return
 
+        if path == "/refix/pending":
+            # 결산 완료 후 남은 확인 필요 건 — 중간 확인(검증 시점)과 같은 payload 모양으로 준다
+            month_q = re.search(r"(?:^|&)month=(\d{4}-\d{2})(?:&|$)", query)
+            month = month_q.group(1) if month_q else ""
+            if run_state.running:
+                self._send_json(409, {"error": "결산이 실행 중입니다 — 끝난 뒤 다시 시도해 주세요"})
+                return
+            if not month or not pipeline.can_refix(month):
+                self._send_json(409, {"error": f"재결산 대상({month})의 단계 산출물이 없습니다 "
+                                               "(재결산 도입 전 보관본) — 자료를 올려 처음부터 결산해 주세요"})
+                return
+            # 칸 산출물이 그 달 것이면 작업 칸에서, 아니면 보관본(stages/)에서 읽기 전용으로 만든다
+            rows = (pipeline.build_verify_pending()
+                    if pipeline.current_workspace_month() == month
+                    else pipeline.archive_pending(month))
+            self._send_json(200, {"month": month, "stage": "verify",
+                                  "editable": pipeline.CONFIRM_EDITABLE["verify"],
+                                  "rows": rows})
+            return
+
         if path == "/runs/current":
             since = 0
             match = re.search(r"(?:^|&)since=(\d+)", query)
@@ -475,6 +527,31 @@ class Handler(BaseHTTPRequestHandler):
             if run_state.start(month, upload_dir=upload_dir, fraud_check=fraud_check):
                 self._send_json(200, {"started": True, "month": month, "source": source,
                                       "fraud_check": fraud_check})
+            else:
+                self._send_json(409, {"error": f"이미 실행 중입니다 (대상 월 {run_state.month})"})
+            return
+
+        if self.path == "/runs/refix":
+            try:
+                body = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                body = {}
+            month = body.get("month", "")
+            resolutions = body.get("resolutions")
+            if not re.fullmatch(r"\d{4}-\d{2}", month or ""):
+                self._send_json(400, {"error": "month는 YYYY-MM 형식이어야 합니다"})
+                return
+            if not isinstance(resolutions, list) or not resolutions:
+                self._send_json(400, {"error": "반영할 확인 건이 없습니다 — 행을 체크해 주세요"})
+                return
+            # 대상 검증은 실행기(run_refix)가 한 번 더 한다 — 여기선 즉시 안내용 선검사만
+            # (칸 산출물이 다른 달 것이면 실행기가 보관본 stages/에서 복원한 뒤 진행한다)
+            if not pipeline.can_refix(month):
+                self._send_json(409, {"error": f"재결산 대상({month})의 단계 산출물이 없습니다 "
+                                               "(재결산 도입 전 보관본) — 자료를 올려 처음부터 결산해 주세요"})
+                return
+            if run_state.start_refix(month, resolutions):
+                self._send_json(200, {"started": True, "month": month, "refix": True})
             else:
                 self._send_json(409, {"error": f"이미 실행 중입니다 (대상 월 {run_state.month})"})
             return

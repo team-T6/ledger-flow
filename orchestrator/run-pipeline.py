@@ -617,15 +617,18 @@ def apply_stage_fixes(stage, fixes):
 VERIFY_FLAG_VALUES = {"verify1": "반려", "verify2": "반려", "verify3": "확인 요청"}
 
 
-def build_verify_pending():
-    """검증 확인 지점(통합 직전) — 검증 CSV들의 반려·확인 요청 행을 transaction_id로 합쳐 만든다."""
-    refine_path = LLM_STAGE_INPUTS["verify1"]  # refine/result.csv — 장부 값의 정본
+def build_verify_pending(refine_path=None, verify_paths=None):
+    """검증 확인 지점(통합 직전) — 검증 CSV들의 반려·확인 요청 행을 transaction_id로 합쳐 만든다.
+
+    경로 인자를 주면 그 파일들로 만든다 — 보관본(archive/<월>/stages/)을 복원 없이
+    읽기 전용으로 볼 때 쓴다 (기본은 작업 칸의 result.csv들)."""
+    refine_path = refine_path or LLM_STAGE_INPUTS["verify1"]  # refine/result.csv — 장부 값의 정본
     refine_by_tid = {}
     if os.path.exists(refine_path):
         refine_by_tid = {_tid(r): r for r in read_csv_rows(refine_path)[0]}
     pending = {}
     for stage, flag_value in VERIFY_FLAG_VALUES.items():
-        path = os.path.join(REPO_ROOT, stage, "result.csv")
+        path = (verify_paths or {}).get(stage) or os.path.join(REPO_ROOT, stage, "result.csv")
         if not os.path.exists(path):
             continue
         for row in read_csv_rows(path)[0]:
@@ -762,10 +765,20 @@ def run_confirmation(run, on_confirm, point):
 
 # ---------- 월별 보관 ----------
 
-def archive_outputs(month):
+# 재결산 복원 대상 단계 — 보관 시 이 단계들의 result.csv와 단계 보고를 stages/에 같이 남긴다
+REFIX_STAGES = ("collect", "refine", "verify1", "verify2", "verify3")
+
+
+def archive_stages_dir(month):
+    return os.path.join(ARCHIVE_DIR, month, "stages")
+
+
+def archive_outputs(month, run_dir=None):
     """최종 산출물을 archive/<월>/에 보관한다 — 웹 보관함(months API)의 데이터 원천.
 
     어떤 실행 경로(웹 서버·CLI·직접 호출)로 결산해도 정상 종료면 보관되도록 파이프라인이 맡는다.
+    보관된 월의 재결산(확인 반영) 복원용으로 단계 산출물과 단계 보고(run_dir의
+    report-*.json)를 stages/에 함께 남긴다 (단계 문서 "재결산" 확정).
     실거래 정보라 archive/는 커밋이 차단되어 있다.
     """
     dest = os.path.join(ARCHIVE_DIR, month)
@@ -775,6 +788,22 @@ def archive_outputs(month):
                       (SUMMARY_PATH, "result-summary.md")):
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(dest, name))
+    stages_dir = archive_stages_dir(month)
+    os.makedirs(stages_dir, exist_ok=True)
+    for stage in REFIX_STAGES:
+        src = os.path.join(REPO_ROOT, stage, "result.csv")
+        stage_dst = os.path.join(stages_dir, f"{stage}.csv")
+        if os.path.exists(src):
+            shutil.copy2(src, stage_dst)
+        elif os.path.exists(stage_dst):
+            os.remove(stage_dst)  # 이번 실행에 없는 단계(예: 토글 끈 verify3)의 옛 보관 잔재 제거
+    if run_dir and os.path.isdir(run_dir):
+        for name in os.listdir(stages_dir):
+            if name.startswith("report-") and name.endswith(".json"):
+                os.remove(os.path.join(stages_dir, name))  # 보고는 이번 실행 것으로 통째 교체
+        for name in os.listdir(run_dir):
+            if name.startswith("report-") and name.endswith(".json"):
+                shutil.copy2(os.path.join(run_dir, name), os.path.join(stages_dir, name))
     # 보관함 화면용 집계 수치 — merge의 집계 함수를 읽기 전용으로 재사용한다
     merge_mod = load_module("merge_stage_summary",
                             os.path.join(REPO_ROOT, "merge", "build_result.py"))
@@ -1013,10 +1042,148 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
     # 5. 보관 — 정상 산출된 결산만 월별 보관함에 남긴다 (요약까지 쓴 뒤라 finish() 다음)
     if merge_env["status"] in ("ok", "partial"):
         try:
-            dest = archive_outputs(month)
+            dest = archive_outputs(month, run_dir=run.run_dir)
             run.log("archive", "완료", memo=f"월별 보관함에 저장 — {dest}/")
         except Exception as e:
             run.log("archive", "실패", memo=f"보관 실패: {e}")
+
+
+# ---------- 재결산 (결산 완료 후 확인 반영 — 웹 실행 경로 한정, 단계 문서 "재결산" 확정) ----------
+
+SUMMARY_MONTH_RE = re.compile(r"^# 최종 결과 요약 \((\d{4}-\d{2}) 결산\)")
+
+
+def current_workspace_month():
+    """지금 칸 산출물이 어느 달 결산 것인지 — 최종 결과 요약 머리글에서 읽는다."""
+    if not os.path.exists(SUMMARY_PATH):
+        return None
+    with open(SUMMARY_PATH, encoding="utf-8") as f:
+        match = SUMMARY_MONTH_RE.match(f.readline().strip())
+    return match.group(1) if match else None
+
+
+def archive_pending(month):
+    """보관본의 단계 산출물로 확인 필요 목록을 만든다 — 복원 없는 읽기 전용 (재결산 화면용)."""
+    stages_dir = archive_stages_dir(month)
+    return build_verify_pending(
+        refine_path=os.path.join(stages_dir, "refine.csv"),
+        verify_paths={s: os.path.join(stages_dir, f"{s}.csv") for s in VERIFY_FLAG_VALUES})
+
+
+def can_refix(month):
+    """이 달을 재결산할 수 있는지 — 칸 산출물이 그 달 것이거나, 복원 가능한 보관본이 있으면 참."""
+    return current_workspace_month() == month or \
+        os.path.exists(os.path.join(archive_stages_dir(month), "refine.csv"))
+
+
+def restore_stage_outputs(month):
+    """보관본의 단계 산출물을 작업 칸으로 복원한다 — 보관된 월 재결산의 진입 단계."""
+    stages_dir = archive_stages_dir(month)
+    if not os.path.exists(os.path.join(stages_dir, "refine.csv")):
+        raise RuntimeError(f"{month} 보관본에 단계 산출물이 없어 재결산할 수 없습니다 "
+                           "(재결산 도입 전 보관본) — 자료를 올려 처음부터 결산해 주세요")
+    for stage in REFIX_STAGES:
+        src = os.path.join(stages_dir, f"{stage}.csv")
+        dst = os.path.join(REPO_ROOT, stage, "result.csv")
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+        elif os.path.exists(dst):
+            os.remove(dst)  # 그 달 실행에 없던 단계의 잔재가 통합에 섞이지 않게 지운다
+
+
+def load_stage_envelopes(run, month):
+    """그 달 결산의 단계 보고를 되읽어 run.envelopes에 채운다 (재결산 요약의 단계 표용).
+
+    우선순위: 보관본(archive/<월>/stages/) → report-merge.json이 있는 가장 최근 logs/run_*.
+    재시도 보고(-retry)가 있으면 그쪽이 확정 보고다. 되읽은 보고는 이번 run 디렉터리에도
+    다시 아카이브해 자립시킨다.
+    """
+    source_dir = None
+    stages_dir = archive_stages_dir(month)
+    if os.path.exists(os.path.join(stages_dir, "report-merge.json")):
+        source_dir = stages_dir
+    elif os.path.isdir(LOGS_DIR):
+        for name in sorted(os.listdir(LOGS_DIR), reverse=True):
+            prev_dir = os.path.join(LOGS_DIR, name)
+            if prev_dir != run.run_dir and name.startswith("run_") \
+                    and os.path.exists(os.path.join(prev_dir, "report-merge.json")):
+                source_dir = prev_dir
+                break
+    if source_dir is None:
+        return None
+    for stage in ("collect", "refine", "verify1", "verify2", "verify3", "merge"):
+        retry_path = os.path.join(source_dir, f"report-{stage}-retry.json")
+        base_path = os.path.join(source_dir, f"report-{stage}.json")
+        path = retry_path if os.path.exists(retry_path) else base_path
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                envelope = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue  # 깨진 아카이브는 건너뛴다 — 그 단계만 요약에 미실행으로 남는다
+        if not validate_envelope(envelope, stage):
+            run.envelopes[stage] = envelope
+            run.archive(stage, envelope)
+    return os.path.relpath(source_dir, REPO_ROOT)
+
+
+def run_refix(month, resolutions, on_event=None):
+    """결산 완료 후 확인 반영 재결산 — 검증 시점 수정과 같은 효력으로 반영하고 통합만 재실행한다.
+
+    칸 산출물이 그 달 것이 아니면 보관본(archive/<월>/stages/)에서 복원한 뒤 진행한다 —
+    복원할 보관본도 없으면(재결산 도입 전 보관본 등) 처음부터 실행하도록 거절한다.
+    """
+    restored = current_workspace_month() != month
+    if restored:
+        restore_stage_outputs(month)  # 복원 불가면 여기서 거절된다
+    if not os.path.exists(LLM_STAGE_INPUTS["verify1"]):
+        raise RuntimeError("가공 산출물(refine/result.csv)이 없습니다 — 처음부터 결산해 주세요")
+
+    run = Run(month, on_event=on_event)
+    try:
+        run.notes.append(f"대상 월: {month}")
+        if restored:
+            run.notes.append(f"보관본에서 단계 산출물 복원 — archive/{month}/stages/")
+        prev_name = load_stage_envelopes(run, month)
+        run.notes.append("재결산 — 결산 완료 후 확인 필요 건 사용자 확인 반영, 통합만 재실행"
+                         + (f" (그 결산의 단계 보고: {prev_name}/)" if prev_name else ""))
+
+        fixes = clean_resolutions(resolutions)
+        applied = apply_verify_fixes(fixes)
+        for stage in VERIFY_FLAG_VALUES:
+            env = run.envelopes.get(stage)
+            if env and env["status"] != "failed":
+                drop_resolved_flags(env, stage, applied)
+                run.archive(stage, env)  # 갱신된 counts·flags로 아카이브도 맞춘다
+        memo = f"재결산 — 사용자 확인 반영 {len(applied)}건"
+        run.log("verify", "확인 반영", memo=memo)
+        run.notes.append(memo)
+
+        merge_env = run.call_stage("merge", lambda: run_merge(month))
+        if merge_env["status"] == "failed":
+            run.notes.append(f"통합 실패 — 최종 산출물 없음: {merge_env['message']}")
+
+        run.log("summary", "시작")
+        write_summary(run)
+        run.log("summary", "완료", memo=os.path.relpath(SUMMARY_PATH, REPO_ROOT))
+
+        if merge_env["status"] in ("ok", "partial"):
+            try:
+                dest = archive_outputs(month, run_dir=run.run_dir)
+                run.log("archive", "완료", memo=f"월별 보관함에 저장 — {dest}/")
+            except Exception as e:
+                run.log("archive", "실패", memo=f"보관 실패: {e}")
+        run.log("run", "종료", memo="정상 종결 (재결산)")
+    except Exception as e:
+        run.notes.append(f"실행기 오류로 중단: {e}")
+        try:
+            write_summary(run)
+        except Exception:
+            pass
+        run.log("run", "오류", memo=str(e))
+        raise
+    return run
 
 
 def main():

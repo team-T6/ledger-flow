@@ -1888,6 +1888,10 @@
     if (!REAL && (!detail.by_category || !detail.by_category.length)) {
       detail = demoBreakdown(entry);
     }
+
+    // 재결산 패널 — 보관된 결산에 확인 필요 건이 남아 있으면 여기서 정리해 다시 만든다
+    appendMonthRefixPanel(monthDetailEl, entry, detail);
+
     var tabsWrap = document.createElement("div");
     tabsWrap.className = "rtabs";
     tabsWrap.innerHTML =
@@ -2823,24 +2827,48 @@
     document.getElementById("refix-title").textContent = "확인 필요 거래 " + count + "건 정리";
   }
 
-  function demoRefixPending() {
-    // 데모 — 결과 데이터의 확인 필요 행으로 중간 확인(검증 시점)과 같은 payload를 만든다
-    var rows = [];
-    (lastResultData.rows || []).forEach(function (r, idx) {
+  function demoRefixPending(rows) {
+    // 데모 — 거래 목록의 확인 필요 행으로 중간 확인(검증 시점)과 같은 payload를 만든다
+    var pending = [];
+    (rows || []).forEach(function (r, idx) {
       if (!r.flagged) return;
-      rows.push({
+      pending.push({
         transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
         data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
                 "결제처": r["결제처"], "카테고리": r["카테고리"] }
       });
     });
-    return { editable: ["날짜", "금액", "카테고리"], rows: rows };
+    return { editable: ["날짜", "금액", "카테고리"], rows: pending };
+  }
+
+  /* 데모 — 사용자 입력을 거래 목록에 반영한다. 확인된 건은 집계 제외였다가 합산에 들어오므로
+     새로 합산될 지출 합(added)을 함께 돌려준다 */
+  function applyDemoFixes(rows, resolutions) {
+    var applied = 0, added = 0;
+    resolutions.forEach(function (fix) {
+      var idx = parseInt(String(fix.transaction_id).replace("demo-", ""), 10);
+      var row = (rows || [])[idx];
+      if (!row || !row.flagged) return;
+      if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
+      if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
+      var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
+      if (!isNaN(amt) && amt < 0) row["지출"] = -amt;
+      row.flagged = false;
+      row.reason = "사용자 확인";
+      added += row["지출"] || 0;
+      applied++;
+    });
+    return { applied: applied, added: added };
+  }
+  function demoRemainingFlags(rows) {
+    return rows.filter(function (r) { return r.flagged; })
+      .map(function (r, i) { return { row: i + 1, "결제처": r["결제처"], reason: r.reason || "" }; });
   }
 
   function updateRefixPanel(data) {
     if (!data.flagged_count) { hideRefixPanel(); return; }
     if (!REAL) {
-      var pending = demoRefixPending();
+      var pending = demoRefixPending(lastResultData.rows);
       if (!pending.rows.length) { hideRefixPanel(); return; }
       setRefixTitle(pending.rows.length);
       fillConfirmTable(refixTable, pending.rows, pending.editable);
@@ -2857,57 +2885,51 @@
     }).catch(hideRefixPanel);
   }
 
-  function pollRefix() {
+  /* 실제 모드 — 재결산 요청 후 실행이 끝날 때까지 폴링. onDone(errOrNull)로 마무리를 넘긴다 */
+  function pollRefixUntilDone(onDone) {
     fetch("runs/current?since=0", { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.running) { setTimeout(pollRefix, POLL_MS); return; }
-        setRefixBusy(false);
-        if (data.error) { showToast("재결산 실패: " + data.error); return; }
-        apiJson("result-data").then(function (res) {
-          if (!res.ok) { showToast(res.data.error || "결과 집계에 실패했습니다"); return; }
-          renderResult(res.data);
-          showToast("재결산이 끝났습니다 — 결과가 갱신되었습니다");
-        });
+        if (data.running) { setTimeout(function () { pollRefixUntilDone(onDone); }, POLL_MS); return; }
+        onDone(data.error || null);
       })
-      .catch(function () { setTimeout(pollRefix, POLL_MS); });
+      .catch(function () { setTimeout(function () { pollRefixUntilDone(onDone); }, POLL_MS); });
+  }
+  function requestRefix(month, resolutions, onFail, onDone) {
+    apiJson("runs/refix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: month, resolutions: resolutions })
+    }).then(function (res) {
+      if (!res.ok) { onFail(res.data.error || "재결산 요청에 실패했습니다"); return; }
+      pollRefixUntilDone(function (err) {
+        if (err) onFail("재결산 실패: " + err);
+        else onDone();
+      });
+    }).catch(function () { onFail("서버에 연결하지 못했습니다 — orchestrator/server.py 확인"); });
   }
 
   function demoRefixRun(resolutions) {
     setRefixBusy(true);
     var data = lastResultData;
     setTimeout(function () {
-      var applied = 0, addedExpense = 0;
-      resolutions.forEach(function (fix) {
-        var idx = parseInt(String(fix.transaction_id).replace("demo-", ""), 10);
-        var row = (data.rows || [])[idx];
-        if (!row || !row.flagged) return;
-        if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
-        if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
-        var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
-        if (!isNaN(amt) && amt < 0) row["지출"] = -amt;
-        row.flagged = false;
-        row.reason = "사용자 확인";
-        addedExpense += row["지출"] || 0; // 확인 필요 건은 집계 제외였다가 확인되며 합산에 들어온다
-        applied++;
-      });
-      if (applied) {
+      var r = applyDemoFixes(data.rows, resolutions);
+      if (r.applied) {
         var agg = demoAggregate(data.rows);
         data.by_category = agg.by_category;
         data.by_payer = agg.by_payer;
         data.top_spenders = agg.top_spenders;
-        data.total_expense = (data.total_expense || 0) + addedExpense;
+        data.total_expense = (data.total_expense || 0) + r.added;
         data.net = (data.total_income || 0) - data.total_expense;
-        data.flagged_count = Math.max(0, (data.flagged_count || 0) - applied);
-        data.flags = (data.rows || []).filter(function (r) { return r.flagged; })
-          .map(function (r, i) { return { row: i + 1, "결제처": r["결제처"], reason: r.reason || "" }; });
+        data.flagged_count = Math.max(0, (data.flagged_count || 0) - r.applied);
+        data.flags = demoRemainingFlags(data.rows);
         data.summaryText = demoSummaryText({ month: data.month, tx_count: data.tx_count,
                                              flagged_count: data.flagged_count });
       }
       setRefixBusy(false);
       renderResult(data);
-      showToast(applied ? "재결산이 끝났습니다 — 사용자 확인 " + applied + "건이 장부에 반영되었습니다"
-                        : "반영된 행이 없습니다");
+      showToast(r.applied ? "재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건이 장부에 반영되었습니다"
+                          : "반영된 행이 없습니다");
     }, REDUCED ? 0 : 1200);
   }
 
@@ -2916,22 +2938,103 @@
     if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
     if (!REAL) { demoRefixRun(resolutions); return; }
     setRefixBusy(true);
-    apiJson("runs/refix", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: refixMonth, resolutions: resolutions })
-    }).then(function (res) {
-      if (!res.ok) {
-        setRefixBusy(false);
-        showToast(res.data.error || "재결산 요청에 실패했습니다");
+    requestRefix(refixMonth, resolutions,
+      function (msg) { setRefixBusy(false); showToast(msg); },
+      function () {
+        apiJson("result-data").then(function (res) {
+          setRefixBusy(false);
+          if (!res.ok) { showToast(res.data.error || "결과 집계에 실패했습니다"); return; }
+          renderResult(res.data);
+          showToast("재결산이 끝났습니다 — 결과가 갱신되었습니다");
+        });
+      });
+  });
+
+  /* ---- 보관월 상세의 재결산 패널 — 보관된 결산도 확인 필요 건을 정리해 다시 만든다 ----
+     실제 모드는 보관본 stages/(단계 산출물)를 서버가 복원해 같은 재결산을 돌리고,
+     데모는 보관 entry의 근사 데이터를 굳혀서(entry에 저장) 그 위에 연출한다 */
+  function buildRefixPanelEl() {
+    var el = document.createElement("div");
+    el.className = "confirm-panel";
+    el.innerHTML =
+      '<div class="cp-head"><b class="rfx-title">확인 필요 거래 정리</b>' +
+      '<span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>' +
+      '<div class="cp-scroll"><table class="cp-table"></table></div>' +
+      '<div class="cp-actions"><button class="btn rfx-apply" type="button">수정 반영해 다시 결산</button>' +
+      '<span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span></div>';
+    return el;
+  }
+  function setPanelBusy(panel, busy) {
+    var btn = panel.querySelector(".rfx-apply");
+    btn.disabled = busy;
+    btn.textContent = busy ? "재결산 중…" : "수정 반영해 다시 결산";
+  }
+
+  function demoRefixArchived(entry, panel) {
+    var resolutions = collectResolutions(panel.querySelector(".cp-table"));
+    if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
+    setPanelBusy(panel, true);
+    setTimeout(function () {
+      // 근사 구성 보관본이면 먼저 entry에 굳힌다 — 수정이 화면 전환 후에도 유지되게
+      if (!entry.by_category || !entry.by_category.length) {
+        var d = demoBreakdown(entry);
+        Object.keys(d).forEach(function (k) { entry[k] = d[k]; });
+      }
+      var r = applyDemoFixes(entry.rows || [], resolutions);
+      if (!r.applied) {
+        setPanelBusy(panel, false);
+        showToast("반영된 행이 없습니다");
         return;
       }
-      pollRefix();
-    }).catch(function () {
-      setRefixBusy(false);
-      showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
-    });
-  });
+      var agg = demoAggregate(entry.rows);
+      entry.by_category = agg.by_category;
+      entry.by_payer = agg.by_payer;
+      entry.top_spenders = agg.top_spenders;
+      entry.total_expense = (entry.total_expense || 0) + r.added;
+      entry.flagged_count = entry.rows.filter(function (x) { return x.flagged; }).length;
+      entry.flags = demoRemainingFlags(entry.rows);
+      entry.incomplete = [];
+      renderVault(archivedList, vaultReal);
+      showMonthDetail(entry, archivedList);
+      showToast("재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건이 장부에 반영되었습니다");
+    }, REDUCED ? 0 : 1200);
+  }
+
+  function appendMonthRefixPanel(host, entry, detail) {
+    var panel = buildRefixPanelEl();
+    var table = panel.querySelector(".cp-table");
+    if (!REAL) {
+      var pending = demoRefixPending(detail.rows);
+      if (!pending.rows.length) return;
+      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + pending.rows.length + "건 정리";
+      fillConfirmTable(table, pending.rows, pending.editable);
+      panel.querySelector(".rfx-apply").addEventListener("click", function () {
+        demoRefixArchived(entry, panel);
+      });
+      host.appendChild(panel);
+      return;
+    }
+    // 실제 모드 — 자리만 잡아 두고 보관본 pending이 오면 보인다 (없으면 자리 제거)
+    panel.classList.add("hidden");
+    host.appendChild(panel);
+    apiJson("refix/pending?month=" + entry.month).then(function (res) {
+      if (!res.ok || !(res.data.rows || []).length) { panel.remove(); return; }
+      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + res.data.rows.length + "건 정리";
+      fillConfirmTable(table, res.data.rows, res.data.editable || []);
+      panel.classList.remove("hidden");
+      panel.querySelector(".rfx-apply").addEventListener("click", function () {
+        var resolutions = collectResolutions(table);
+        if (!resolutions.length) { showToast("반영할 행을 체크해 주세요"); return; }
+        setPanelBusy(panel, true);
+        requestRefix(entry.month, resolutions,
+          function (msg) { setPanelBusy(panel, false); showToast(msg); },
+          function () {
+            loadVault(); // 보관 목록과 열려 있는 상세를 서버 기준으로 다시 그린다
+            showToast("재결산이 끝났습니다 — 보관본이 갱신되었습니다");
+          });
+      });
+    }).catch(function () { panel.remove(); });
+  }
 
   /* 결산 단계 스텝·이전/다음 이동 */
   document.querySelectorAll("#dash-steps .dstep").forEach(function (b) {

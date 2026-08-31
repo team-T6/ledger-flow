@@ -10,7 +10,7 @@
 
 ## 2. Project Structure
 
-- **단계별 "칸 폴더"가 repo 최상위에 있다**: `collect/` `refine/` `verify1/` `verify2/` `merge/` `orchestrator/` — 담당자별 1칸
+- **단계별 "칸 폴더"가 repo 최상위에 있다**: `collect/` `refine/` `verify1/` `verify2/` `verify3/` `merge/` `orchestrator/` — 담당자별 1칸
   - 각 칸 구성: `README.md`(그 칸의 약속) · `input-sample.md`(받는 재료 견본) · `stub.md`(산출물 모양 견본) · `result.*`(진짜 산출물, 실행 시 생성) · 필요 시 생성 코드
   - [MUST] 칸 폴더를 옮기지 않고, 기존 파일을 지우지 않는다. 새 산출물은 견본 옆에 만든다
 - `.claude/agents/<단계>.md` = **단계 문서** — 설계(역할·절차·판단 규칙·블로커)와 에이전트 실행 지시를 한 파일에 담는 **단일 정본**이다 (구 `docs/agents/` 명세서를 병합해 폐지 — §9 spec-first는 이 파일 안에서 유지)
@@ -26,7 +26,7 @@
 
 - 공통 컨벤션은 AGENTS_COM.md §3을 따른다. 프로젝트 고유 컨벤션은 확정 시 여기에 추가.
 - 커밋 scope 어휘: 미정 — 폴더 구조 확정 시 모듈명 기준으로 정의한다. 그 전까지는 **scope 생략을 기본**으로 한다 (AI가 임의 scope를 만들지 않는다).
-- [MUST] **파일·폴더명은 영어로 한다** (문서 포함). 단계명 대응: 수집 `collect` · 가공 `refine` · 검증 `verify1`/`verify2` · 통합 `merge` · 지휘 `orchestrator`. 문서 본문·제목은 한국어 그대로.
+- [MUST] **파일·폴더명은 영어로 한다** (문서 포함). 단계명 대응: 수집 `collect` · 가공 `refine` · 검증 `verify1`/`verify2`/`verify3` · 통합 `merge` · 지휘 `orchestrator`. 문서 본문·제목은 한국어 그대로.
 
 ## 5. Error Handling — Project Specific
 

@@ -309,8 +309,6 @@
   .trend-line .pt:hover .tv, .trend-line .pt:focus .tv { opacity: 1; }
   .trend-line .pt { outline: none; }
   .trend-line .hit { fill: transparent; }
-  .d-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
-  .d-actions .btn { font-size: 12.5px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
   .btn-quiet { background: transparent; color: var(--muted); }
 
   /* ---------- 결산 화면(#app) — 스크롤 없이 화면 전환 (결산 서고 → 대시보드) ---------- */
@@ -387,8 +385,20 @@
   .dash-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
   /* 보관월 상세(book) — 제목을 가운데 두고 좌우 화살표로 이웃 장부로 장을 넘긴다 */
   .dash-top.book { justify-content: center; }
+  /* 헤더 액션 — 본문 흐름(카드→차트→탭)을 끊지 않도록 헤더에 둔다.
+     book 모드: 산출물 액션은 왼쪽 끝, 상태 칩은 오른쪽 끝, 제목은 가운데 */
+  .dash-top-right { display: flex; align-items: center; gap: 10px; flex: none; }
+  .dash-top.book .dash-top-right { display: contents; }
+  .dash-top.book .dash-actions { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); }
   .dash-top.book .chip { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); }
-  @media (max-width: 720px) { .dash-top.book .chip { display: none; } }
+  .dash-actions { display: flex; align-items: center; gap: 8px; }
+  .dash-actions .btn { font-size: 12.5px; padding: 8px 16px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  @media (max-width: 1250px) {
+    /* 좁은 화면 — 액션을 제목 아랫줄로 내려 겹침을 막고 칩은 숨긴다 */
+    .dash-top.book { flex-wrap: wrap; }
+    .dash-top.book .dash-actions { position: static; transform: none; flex-wrap: wrap; width: 100%; order: 2; }
+    .dash-top.book .chip { display: none; }
+  }
   .book-arrow {
     font: inherit; font-size: 17px; font-weight: 700; cursor: pointer;
     width: 30px; height: 30px; border-radius: var(--radius);
@@ -427,11 +437,9 @@
   .dstep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dstep:disabled { opacity: 0.5; }
 
-  /* 결과 머리줄 — 제목 왼쪽, 다운로드 버튼 오른쪽 */
+  /* 결과 머리줄 — 산출물 버튼은 헤더(dash-actions)로 옮겨 제목만 남는다 */
   .result-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .result-head h2 { margin: 0; }
-  .result-head .downloads { margin-top: 0; }
-  .result-head .downloads .btn { font-size: 13px; padding: 9px 18px; display: inline-flex; align-items: center; gap: 7px; }
 
   /* 보관 확인 — 결산 결과를 서고에 넣을지 묻는다 */
   .save-bar {
@@ -440,8 +448,6 @@
     display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
   }
   .save-bar b { font-size: 14.5px; }
-  .save-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .save-actions .btn { font-size: 13px; padding: 9px 18px; }
 
   /* 결산 완료 안내 — 진행 화면에서 결과로 넘어갈지 묻는다 (자동 전환 없음) */
   .run-done {
@@ -726,8 +732,6 @@
     width: 100%; height: 480px; border: 1px solid var(--line);
     border-radius: var(--radius); background: #FFFFFF;
   }
-  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
-
   /* ---------- 푸터 ---------- */
   /* 푸터가 짧아 바닥이 마지막 화면 스냅 지점으로 되돌아가지 않도록, 바닥 자체를 스냅 지점으로 둔다 */
   footer { border-top: 1px solid var(--line); padding: 40px 24px 64px; font-size: 13px; color: var(--muted); scroll-snap-align: end; }
@@ -953,7 +957,10 @@
         <h2 id="dash-title">결산 서고</h2>
         <button class="book-arrow hidden" id="book-next" type="button" aria-label="다음 달 장부">›</button>
       </div>
-      <span class="chip hidden" id="dash-chip"></span>
+      <div class="dash-top-right">
+        <div class="dash-actions hidden" id="dash-actions"></div>
+        <span class="chip hidden" id="dash-chip"></span>
+      </div>
     </div>
     <div class="dash-steps hidden" id="dash-steps">
       <button type="button" class="dstep" data-pane="upload-sec"><span class="n">1</span>자료 넣기</button>
@@ -1087,17 +1094,10 @@
     <div class="eyebrow">결산 결과</div>
     <div class="result-head">
       <h2 id="r-title">2026년 8월 결산이 끝났습니다</h2>
-      <div class="downloads" id="downloads">
-        <a class="btn btn-ghost" href="demo/2026-08_report_20260831-1535.pdf" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>분석 리포트</a>
-        <a class="btn btn-ghost" href="demo/2026-08_ledger_20260831-1535.xlsx" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>회계장부</a>
-      </div>
     </div>
 
     <div class="save-bar hidden" id="save-bar">
       <div><b>이 달 장부가 결산 서고에 꽂혔습니다</b><div class="hint">서고에서 언제든 다시 펼쳐 볼 수 있습니다</div></div>
-      <div class="save-actions">
-        <button class="btn btn-ghost" id="r-rerun" type="button">다시 결산하기</button>
-      </div>
     </div>
 
     <div class="report-block">
@@ -1313,6 +1313,17 @@
     renderShelf();
     showShelf();
   }
+  /* 헤더 액션(산출물 버튼) — 보관월 상세·결산 결과가 채우고, 그 화면일 때만 보인다 */
+  var dashActionsPane = null;
+  function beginDashActions(paneId) {
+    dashActionsPane = paneId;
+    var actions = document.getElementById("dash-actions");
+    actions.innerHTML = "";
+    // 지금 떠 있는 화면이 소유 화면일 때만 바로 보인다 — 아니면 showPane이 그 화면에서 켠다
+    var cur = document.querySelector("#dash-sec .dash-pane.on");
+    actions.classList.toggle("hidden", !cur || cur.id !== paneId);
+    return actions;
+  }
   function showPane(id) {
     shelfSec.classList.add("hidden");
     dashSec.classList.remove("hidden");
@@ -1320,6 +1331,8 @@
       p.classList.toggle("on", p.id === id);
     });
     document.querySelector("#dash-sec .dash-body").scrollTop = 0;
+    // 헤더 액션은 채워 둔 화면에서만 보인다 — 단계 스텝으로 다른 화면에 가면 숨긴다
+    document.getElementById("dash-actions").classList.toggle("hidden", id !== dashActionsPane);
     renderSteps(id);
   }
 
@@ -1353,6 +1366,12 @@
     var chip = document.getElementById("dash-chip");
     chip.textContent = chipText || "";
     chip.className = "chip" + (chipCls ? " " + chipCls : "") + (chipText ? "" : " hidden");
+    chip.removeAttribute("title");
+    // 헤더 액션은 보관월 상세·결산 결과 전용 — 기본은 비우고, 각 화면이 다시 채운다
+    dashActionsPane = null;
+    var hdrActions = document.getElementById("dash-actions");
+    hdrActions.innerHTML = "";
+    hdrActions.classList.add("hidden");
     // 장 넘김 화살표는 보관월 상세 전용 — 기본은 끄고, showMonthDetail이 다시 켠다
     document.querySelector("#dash-sec .dash-top").classList.remove("book");
     document.getElementById("book-prev").classList.add("hidden");
@@ -1629,7 +1648,11 @@
       sideYear = monthYear(key);
       renderSideMonths();
       if (jobPhase === "run") { setDashTop(monthTitle(key), "결산 중", "run"); showPane("run-sec"); }
-      else if (jobPhase === "result") { setDashTop(monthTitle(key), "결산 완료", "ok"); showPane("result-sec"); }
+      else if (jobPhase === "result") {
+        setDashTop(monthTitle(key), "결산 완료", "ok");
+        renderResultActions(key, lastResultData && lastResultData.pdfUrl);
+        showPane("result-sec");
+      }
       else { setDashTop(monthTitle(key), "자료 대기", ""); showPane("upload-sec"); }
       setBookNav(key);
       return;
@@ -2082,8 +2105,9 @@
     history.replaceState(null, "", "#app/" + entry.month);
     sideYear = monthYear(entry.month);
     renderSideMonths();
-    setDashTop(monthTitle(entry.month),
-               entry.completed_at ? entry.completed_at + " 완료" : "서고 보관", "ok");
+    setDashTop(monthTitle(entry.month), entry.completed_at ? "완료" : "서고 보관", "ok");
+    // 결산 일시는 칩 툴팁으로 낮춘다 — 헤더에 액션이 들어와 긴 텍스트를 줄인다
+    if (entry.completed_at) document.getElementById("dash-chip").title = entry.completed_at + " 완료";
 
     setBookNav(entry.month);
 
@@ -2152,6 +2176,48 @@
       detail = demoBreakdown(entry);
     }
 
+    // 산출물 버튼 — 본문 흐름(카드→차트→탭)을 끊지 않도록 헤더 우측(상태 칩 옆)에 둔다
+    var actions = beginDashActions("month-sec");
+    if (REAL) {
+      if (!entry.files || entry.files.pdf) {
+        var pdf = document.createElement("a");
+        pdf.className = "btn";
+        pdf.innerHTML = OPEN_ICO + "분석 리포트";
+        pdf.href = "artifacts/result.pdf?month=" + entry.month + "&inline=1";
+        pdf.target = "_blank";
+        pdf.rel = "noopener";
+        actions.appendChild(pdf);
+      }
+      if (!entry.files || entry.files.xlsx) {
+        var xlsx = document.createElement("a");
+        xlsx.className = "btn btn-ghost";
+        xlsx.innerHTML = DL_ICO + "회계장부";
+        xlsx.href = "artifacts/result.xlsx?month=" + entry.month;
+        actions.appendChild(xlsx);
+      }
+    } else {
+      // 데모 — 샘플 산출물(web/demo/)을 열고 내려받는다
+      var demoPdf = document.createElement("a");
+      demoPdf.className = "btn";
+      demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
+      demoPdf.href = demoFile(entry.month, "pdf");
+      demoPdf.target = "_blank";
+      demoPdf.rel = "noopener";
+      actions.appendChild(demoPdf);
+      var demoXlsx = document.createElement("a");
+      demoXlsx.className = "btn btn-ghost";
+      demoXlsx.innerHTML = DL_ICO + "회계장부";
+      demoXlsx.href = demoFile(entry.month, "xlsx");
+      demoXlsx.setAttribute("download", "");
+      actions.appendChild(demoXlsx);
+    }
+    var rerun = document.createElement("button");
+    rerun.className = "btn btn-quiet";
+    rerun.type = "button";
+    rerun.textContent = "다시 결산하기";
+    rerun.addEventListener("click", function () { selectRunMonth(entry.month); });
+    actions.appendChild(rerun);
+
     var tabsWrap = document.createElement("div");
     tabsWrap.className = "rtabs";
     tabsWrap.innerHTML =
@@ -2202,48 +2268,6 @@
       renderSummaryDoc(docHost, demoSummaryText(entry));
     }
 
-    var actions = document.createElement("div");
-    actions.className = "d-actions";
-    if (REAL) {
-      if (!entry.files || entry.files.pdf) {
-        var pdf = document.createElement("a");
-        pdf.className = "btn";
-        pdf.innerHTML = OPEN_ICO + "분석 리포트";
-        pdf.href = "artifacts/result.pdf?month=" + entry.month + "&inline=1";
-        pdf.target = "_blank";
-        pdf.rel = "noopener";
-        actions.appendChild(pdf);
-      }
-      if (!entry.files || entry.files.xlsx) {
-        var xlsx = document.createElement("a");
-        xlsx.className = "btn btn-ghost";
-        xlsx.innerHTML = DL_ICO + "회계장부";
-        xlsx.href = "artifacts/result.xlsx?month=" + entry.month;
-        actions.appendChild(xlsx);
-      }
-    } else {
-      // 데모 — 샘플 산출물(web/demo/)을 열고 내려받는다
-      var demoPdf = document.createElement("a");
-      demoPdf.className = "btn";
-      demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
-      demoPdf.href = demoFile(entry.month, "pdf");
-      demoPdf.target = "_blank";
-      demoPdf.rel = "noopener";
-      actions.appendChild(demoPdf);
-      var demoXlsx = document.createElement("a");
-      demoXlsx.className = "btn btn-ghost";
-      demoXlsx.innerHTML = DL_ICO + "회계장부";
-      demoXlsx.href = demoFile(entry.month, "xlsx");
-      demoXlsx.setAttribute("download", "");
-      actions.appendChild(demoXlsx);
-    }
-    var rerun = document.createElement("button");
-    rerun.className = "btn btn-quiet";
-    rerun.type = "button";
-    rerun.textContent = "다시 결산하기";
-    rerun.addEventListener("click", function () { selectRunMonth(entry.month); });
-    actions.appendChild(rerun);
-    monthDetailEl.appendChild(actions);
     showPane("month-sec");
   }
 
@@ -3158,8 +3182,12 @@
     document.getElementById("r-pdf-frame").src = data.pdfUrl || "artifacts/result.pdf?inline=1";
 
     jobPhase = "result";
-    setDashTop(monthTitle(month), "결산 완료", "ok");
-    setBookNav(month);
+    if (viewKey === month) {
+      // 다른 달을 보는 중에 결산이 끝났으면 그 화면의 머리글을 덮지 않는다 — 그 달을 열 때 openMonth가 채운다
+      setDashTop(monthTitle(month), "결산 완료", "ok");
+      setBookNav(month);
+      renderResultActions(month, data.pdfUrl);
+    }
     renderCompare(month, data);
     // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
     lastResult = { month: month, total_expense: data.total_expense || 0,
@@ -3233,10 +3261,31 @@
   /* 결산 결과 화면 탭 — 고정 HTML이라 한 번만 초기화한다 (보관 상세는 매번 새로 그려 그때그때 초기화) */
   initTabs(document.getElementById("r-tabs"));
 
-  /* 다시 결산하기 */
-  document.getElementById("r-rerun").addEventListener("click", function () {
-    if (selectedMonth) selectRunMonth(selectedMonth);
-  });
+  /* 결산 결과 헤더 액션 — 보관월 상세와 같은 구성(분석 리포트·회계장부·다시 결산하기) */
+  function renderResultActions(month, pdfUrl) {
+    var actions = beginDashActions("result-sec");
+    var pdf = document.createElement("a");
+    pdf.className = "btn";
+    pdf.innerHTML = OPEN_ICO + "분석 리포트";
+    pdf.href = pdfUrl || (REAL ? "artifacts/result.pdf?inline=1" : demoFile(month, "pdf"));
+    pdf.target = "_blank";
+    pdf.rel = "noopener";
+    actions.appendChild(pdf);
+    var xlsx = document.createElement("a");
+    xlsx.className = "btn btn-ghost";
+    xlsx.innerHTML = DL_ICO + "회계장부";
+    xlsx.href = REAL ? "artifacts/result.xlsx" : demoFile(month, "xlsx");
+    if (!REAL) xlsx.setAttribute("download", "");
+    actions.appendChild(xlsx);
+    var rerun = document.createElement("button");
+    rerun.className = "btn btn-quiet";
+    rerun.type = "button";
+    rerun.textContent = "다시 결산하기";
+    rerun.addEventListener("click", function () {
+      if (selectedMonth) selectRunMonth(selectedMonth);
+    });
+    actions.appendChild(rerun);
+  }
 
   /* ---- 재결산 — 결산 완료 후 남은 확인 필요 건 수정·확정 (데모·실제 공용 패널) ----
      실제 모드는 서버가 확인 반영 후 통합만 재실행하고(GET /refix/pending → POST /runs/refix),
@@ -3860,12 +3909,6 @@
       e.preventDefault();
       uploadFiles(e.dataTransfer.files);
     });
-
-    // 다운로드 버튼 — 실제 산출물 링크로 교체
-    var downloads = document.getElementById("downloads");
-    downloads.innerHTML =
-      '<a class="btn btn-ghost" href="artifacts/result.pdf">' + DL_ICO + '분석 리포트</a>' +
-      '<a class="btn btn-ghost" href="artifacts/result.xlsx">' + DL_ICO + '회계장부</a>';
 
     // 업로드 목록은 빈 상태로 시작 — 월 선택 시 서버 업로드함도 비워서 표시와 실제를 맞춘다
     renderFileList([]);

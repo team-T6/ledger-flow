@@ -35,7 +35,7 @@ MAX_TOKENS = 4096
 DEFAULT_COLUMNS = [
     "transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
     "결제수단", "결제구분", "원거래통화", "원거래금액",
-    "source_type", "collect_status", "구매항목",
+    "source_type", "source_file", "collect_status", "구매항목",
 ]
 
 GUESS_SCHEMA = {

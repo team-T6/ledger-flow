@@ -255,7 +255,7 @@ def dedupe_receipt_matches(rows):
     return other_rows + card_rows + kept_receipts
 
 
-def map_table_row(r):
+def map_table_row(r, source_file=""):
     """call_agent_convert_table 출력 행 → 거래 표 스키마 v1 (transaction_id는 나중에 부여)."""
     income = r.get("수익") or 0
     expense = r.get("지출") or 0
@@ -278,12 +278,13 @@ def map_table_row(r):
         "원거래통화": (r.get("원거래통화") or "").strip(),
         "원거래금액": foreign_amount if foreign_amount else "",
         "source_type": "card_excel",
+        "source_file": r.get("출처파일") or source_file,
         "collect_status": "확인됨" if r.get("확인됨") else "확인 필요",
         "구매항목": r.get("구매항목") or "",
     }
 
 
-def map_receipt(r):
+def map_receipt(r, source_file=""):
     """call_agent_with_image 출력 → 거래 표 스키마 v1 한 행."""
     amount = r.get("금액") or 0
     return {
@@ -298,6 +299,7 @@ def map_receipt(r):
         "원거래통화": "",
         "원거래금액": "",
         "source_type": "receipt",
+        "source_file": source_file,
         "collect_status": "확인됨" if r.get("확인됨") else "확인 필요",
         "구매항목": r.get("구매항목") or "",
     }
@@ -361,6 +363,7 @@ def map_manual_entry(m):
         "원거래통화": "",
         "원거래금액": "",
         "source_type": "manual",
+        "source_file": "",
         "collect_status": "확인됨",
         "구매항목": "",
     }
@@ -375,7 +378,7 @@ def process_image(path):
     try:
         ext = os.path.splitext(name)[1].lower()
         data = call_agent.call_agent_with_image(open(path, "rb").read(), IMAGE_MEDIA_TYPES[ext])
-        return [map_receipt(data)], None
+        return [map_receipt(data, source_file=name)], None
     except Exception as e:
         return [], f"{name}: 처리 실패 — {e}"
 
@@ -407,10 +410,13 @@ def process_table_batch(paths):
     if not sections:
         return [], errors
     combined = ("아래에 여러 파일의 표가 '=== 파일: 이름 ===' 구분선으로 이어진다. "
-                "구분선은 데이터가 아니니 행으로 변환하지 않는다.\n\n" + "\n\n".join(sections))
+                "구분선은 데이터가 아니니 행으로 변환하지 않는다. 각 행에는 그 행이 나온 "
+                "파일 이름을 `출처파일` 필드로 함께 넣는다.\n\n" + "\n\n".join(sections))
+    # 파일이 하나뿐이면 모델 응답과 무관하게 그 파일명을 붙인다 (모델이 빠뜨려도 안전망)
+    only_file = os.path.basename(paths[0]) if len(paths) == 1 else ""
     try:
         rows = call_agent.call_agent_convert_table(combined)
-        return [map_table_row(r) for r in rows], errors
+        return [map_table_row(r, source_file=only_file) for r in rows], errors
     except Exception as e:
         names = ", ".join(os.path.basename(p) for p in paths)
         return [], errors + [f"{names}: 일괄 변환 실패 — {e}"]

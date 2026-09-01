@@ -65,7 +65,7 @@ VERIFY3_CSV = os.path.join(REPO_ROOT, "verify3", "result.csv")
 # 엑셀 회계장부 컬럼 — 거래 표 스키마 (확정 v1)와 동일 (interface-spec.md "산출물 양식")
 LEDGER_COLUMNS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
                   "결제수단", "결제구분", "원거래통화", "원거래금액",
-                  "source_type", "collect_status", "구매항목"]
+                  "source_type", "source_file", "collect_status", "구매항목"]
 
 # 데모(web/index.html) "장부 에디토리얼" 테마와 톤을 맞춘 팔레트
 PAGE_BG = colors.HexColor("#FAF7F2")

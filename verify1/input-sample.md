@@ -4,7 +4,7 @@
 >
 > 아래 값은 [collect/result.csv](../collect/result.csv)(하나카드 더미 데이터 기반)의 행에 가공 단계가 채울 `카테고리`를 더해 **가정으로 채운 견본**이다 — 실데이터 아님.
 >
-> 컬럼명은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마" 기준 한글을 쓰고, 단계 내부 필드(`transaction_id`·`source_type`·`collect_status`)만 영문으로 둔다 — 수집 칸([collect/stub.md](../collect/stub.md))과 같은 규칙이다.
+> 컬럼명은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마" 기준 한글을 쓰고, 단계 내부 필드(`transaction_id`·`source_type`·`source_file`·`collect_status`)만 영문으로 둔다 — 수집 칸([collect/stub.md](../collect/stub.md))과 같은 규칙이다.
 
 ## 컬럼
 
@@ -23,6 +23,7 @@
 | 원거래통화 | 해외결제면 통화 코드(예: `USD`), 국내는 빈칸 | 수집 |
 | 원거래금액 | 해외결제면 원통화 금액, 국내는 빈칸 | 수집 |
 | `source_type` | `receipt` / `card_excel` / `manual` | 수집 |
+| `source_file` | 원본 업로드 파일명 — 직접 입력은 빈칸 | 수집 |
 | `collect_status` | `대기` / `확인됨` / `확인 필요` | 수집 |
 | 구매항목 | 실제 구매 물품. **`collect_status`가 `확인됨`인 건만 채우고, `확인 필요`는 빈칸** — 결제처만으론(예: 쿠팡·GS25) 뭘 샀는지 알 수 없어 가공의 카테고리 판단을 보완하는 필드 | 수집 |
 

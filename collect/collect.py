@@ -39,7 +39,7 @@ SHINHAN_NAME_HINT = "신한법인카드"
 # interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로
 OUT_FIELDS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
               "결제수단", "결제구분", "원거래통화", "원거래금액",
-              "source_type", "collect_status", "구매항목"]
+              "source_type", "source_file", "collect_status", "구매항목"]
 
 
 ITEM_POOL = {
@@ -119,6 +119,7 @@ def normalize(files, default_month=None):
                     "원거래통화": "",   # 국내 결제 — 해외결제 여부는 이 컬럼 유무로 판별
                     "원거래금액": "",
                     "source_type": "card_excel",
+                    "source_file": fname,
                     "collect_status": "확인됨",
                     "구매항목": "",
                 })
@@ -136,6 +137,7 @@ def parse_shinhan(files):
     """
     rows = []
     for path in files:
+        fname = os.path.basename(path)
         with open(path, encoding="utf-8-sig", newline="") as f:
             for row in csv.DictReader(f):
                 date, time_part = row["승인일시"].split(" ")
@@ -159,6 +161,7 @@ def parse_shinhan(files):
                     "원거래통화": currency if is_foreign else "",
                     "원거래금액": row["해외이용금액"].strip() if is_foreign else "",
                     "source_type": "card_excel",
+                    "source_file": fname,
                     "collect_status": "확인됨",
                     "구매항목": "",
                 })

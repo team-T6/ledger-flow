@@ -4,7 +4,7 @@
 >
 > 아래 값은 [sample_data/2026-02/](../sample_data/2026-02/)의 더미 하나카드 데이터를 기반으로, 가공 단계가 붙일 `카테고리`를 가정해 채운 **연습용 가짜 견본**이다 — 실데이터 아님.
 >
-> 컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)"를 따른다: `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목. 아래 표는 지면상 `source_type`·`collect_status`와, 전부 국내 결제라 빈칸인 `원거래통화`·`원거래금액`을 생략했다.
+> 컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)"를 따른다: `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`source_file`·`collect_status`·구매항목. 아래 표는 지면상 `source_type`·`source_file`·`collect_status`와, 전부 국내 결제라 빈칸인 `원거래통화`·`원거래금액`을 생략했다.
 
 ## 견본 데이터 (결산 대상 월: 2026-02)
 

@@ -4,7 +4,7 @@
 
 ## 1. 가공(refine) 산출물 — 거래 표
 
-컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)" 기준 — 지면상 `transaction_id`·날짜·금액·결제처·카테고리·비고·결제수단·결제구분만 표시 (`원거래통화`·`원거래금액`은 전부 국내 결제라 빈칸, `source_type`·`collect_status`·구매항목 생략).
+컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)" 기준 — 지면상 `transaction_id`·날짜·금액·결제처·카테고리·비고·결제수단·결제구분만 표시 (`원거래통화`·`원거래금액`은 전부 국내 결제라 빈칸, `source_type`·`source_file`·`collect_status`·구매항목 생략).
 
 | transaction_id | 날짜 | 금액 | 결제처 | 카테고리 | 비고 | 결제수단 | 결제구분 |
 |---|---|---:|---|---|---|---|---|

@@ -13,7 +13,7 @@ model: haiku
 
 ## 입출력
 
-- 입력: `refine/result.csv`의 가공된 거래 표 (분류 검증과 동일 입력), **CSV**. 스키마는 interface-spec.md "거래 표 스키마 (확정 v1)": `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목
+- 입력: `refine/result.csv`의 가공된 거래 표 (분류 검증과 동일 입력), **CSV**. 스키마는 interface-spec.md "거래 표 스키마 (확정 v1)": `transaction_id`·날짜·금액(부호로 지출/수익 구분 — 지출은 음수, 수익은 양수)·결제처·카테고리·비고·결제수단·결제구분(값: `개인결제`·`법인결제`)·원거래통화·원거래금액·`source_type`·`source_file`·`collect_status`·구매항목
 - 실행 파라미터: 대상 월(`YYYY-MM`) — 지휘가 호출 시 전달한다 (interface-spec.md §실행 파라미터)
 - 출력: 거래 행별 통과/반려 결과 + 이유 한 줄, CSV로 `verify2/result.csv`에 저장 (분류 검증의 `verify1/result.csv`와 자리로 구분). 모양(확정 — interface-spec.md 기간·금액 검증 행): 입력 행 뒤에 `verify2_result`(`통과`/`반려`)·`verify2_reason`(반려 사유 한 줄, 통과면 빈칸) 두 열을 덧붙인다. 행을 지우거나 순서를 바꾸지 않고, 행 대조 키는 `transaction_id`.
 

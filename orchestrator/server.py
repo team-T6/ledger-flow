@@ -24,7 +24,8 @@
                               파일을 uploads/inbox/에 원본 그대로 저장한다. body.file_ids를 주면
                               그 폴더 파일 중 고른 것만 가져온다 (사전 인증 필요)
 - GET  /runs/current?since=N: 진행 이벤트 증분 조회 (화면이 1.5초 간격으로 폴링)
-                              중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담는다
+                              중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담고,
+                              fraud_check로 이 실행의 부정 사용 감지 토글 값을 알린다 (화면 도중 접속 복원용)
 - POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
                               (대기 상한 10분 — 초과하면 파이프라인이 전부 유지로 진행)
 - GET  /refix/pending?month=YYYY-MM : 결산 완료 후 남은 확인 필요 건 목록 (재결산 화면용 —
@@ -527,6 +528,7 @@ class RunState:
         self.month = None
         self.events = []       # run-pipeline.py의 on_event가 쌓는 진행 이벤트
         self.error = None      # 실행기 자체가 예외로 죽은 경우의 사유
+        self.fraud_check = False  # 이 실행의 부정 사용 감지 토글 — 화면이 도중에 붙을 때 검증 구성 복원용
         self.confirm = None    # 대기 중인 중간 확인 요청 (없으면 None)
         self.confirm_result = None
         self.confirm_seq = 0
@@ -540,6 +542,7 @@ class RunState:
             self.month = month
             self.events = []
             self.error = None
+            self.fraud_check = bool(fraud_check)
             self.confirm = None
             self.confirm_result = None
             self.confirm_ready.clear()
@@ -557,6 +560,7 @@ class RunState:
             self.month = month
             self.events = []
             self.error = None
+            self.fraud_check = False
             self.confirm = None
             self.confirm_result = None
             self.confirm_ready.clear()
@@ -623,6 +627,7 @@ class RunState:
                 "running": self.running,
                 "month": self.month,
                 "error": self.error,
+                "fraud_check": self.fraud_check,
                 "confirm": self.confirm,
                 "events": [e for e in self.events if e["seq"] > since],
                 "summary_ready": (not self.running) and os.path.exists(SUMMARY_PATH),

@@ -1686,6 +1686,11 @@
       showToast("아직 오지 않은 달입니다 — 오늘이 포함된 달까지 결산할 수 있습니다");
       return;
     }
+    if (REAL && running && selectedMonth && key !== selectedMonth) {
+      // 새 결산 준비는 업로드함을 비우므로, 진행 중 실행의 입력이 파괴되지 않게 막는다
+      showToast(monthTitle(selectedMonth) + " 결산이 진행 중입니다 — 끝난 뒤 다른 달을 결산할 수 있습니다");
+      return;
+    }
     selectedMonth = key;
     jobPhase = "upload";
     viewKey = key;
@@ -3069,7 +3074,18 @@
     });
   }
 
-  function startPolling(withFraud) {
+  /* 진행 중 결산 도중 접속(새로고침·다른 창) — 서버에 살아 있는 실행에 붙어
+     이벤트를 처음부터 재생해 진행 화면·중간 확인 패널을 복원한다 */
+  function attachToRun(month, withFraud) {
+    selectedMonth = month;
+    lastResult = null;
+    running = true;
+    startPolling(withFraud, true);
+    // 보고 있던 달이 그 달이면 진행 화면을 바로 연다 — 다른 화면이면 그 달을 열 때 openMonth가 보여준다
+    if (appHashMonth() === month) openMonth(month);
+  }
+
+  function startPolling(withFraud, attach) {
     progressUI.setVerifySubs(withFraud ? ["verify1", "verify2", "verify3"] : ["verify1", "verify2"]);
     STAGE_DOING["검증"] = withFraud
       ? "분류·금액·부정 사용 세 검증이 같은 표를 나란히 확인하는 중"
@@ -3080,10 +3096,15 @@
     document.getElementById("run-done").classList.add("hidden");
     document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
-    setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
-    setBookNav(selectedMonth || CUR_KEY);
-    renderSideMonths();
-    showPane("run-sec");
+    if (attach) {
+      // 도중 접속 복원 — 화면 전환 없이 상태만 잇는다 (보이는 화면은 attachToRun/openMonth가 결정)
+      renderSideMonths();
+    } else {
+      setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
+      setBookNav(selectedMonth || CUR_KEY);
+      renderSideMonths();
+      showPane("run-sec");
+    }
 
     var lastSeq = 0;
     var pollFails = 0;
@@ -3275,9 +3296,12 @@
     document.getElementById("r-pdf-frame").src = data.pdfUrl || "artifacts/result.pdf?inline=1";
 
     jobPhase = "result";
-    setDashTop(monthTitle(month), "결산 완료", "ok");
-    setBookNav(month);
-    renderResultActions(month, data.pdfUrl);
+    if (viewKey === month) {
+      // 다른 달을 보는 중에 결산이 끝났으면 그 화면의 머리글을 덮지 않는다 — 그 달을 열 때 openMonth가 채운다
+      setDashTop(monthTitle(month), "결산 완료", "ok");
+      setBookNav(month);
+      renderResultActions(month, data.pdfUrl);
+    }
     renderCompare(month, data);
     // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
     lastResult = { month: month, total_expense: data.total_expense || 0,
@@ -3910,9 +3934,14 @@
     // 표식 교체 — 실제 모드 문구는 상단 COPY.real에서만 관리한다
     applyRealCopy();
 
+    // 진행 중 결산 복원 — 서버에 실행이 살아 있으면(새로고침·다른 창) 그 월에 붙는다.
+    // 복원을 끝낸 뒤 보관함을 그려야 해시 복원(openMonth)이 실행 상태를 보고 진행 화면을 연다.
     // 월별 보관함 — 서버 보관 목록(archive/<월>/summary.json)으로 다시 그린다.
     // 보관 없는 달도 자유 선택 가능 (수집은 "대상 월 위주로 모으되 거르지 않는다"가 확정 규칙)
-    loadVault();
+    apiJson("runs/current?since=0").then(function (res) {
+      var d = res.ok ? res.data : null;
+      if (d && d.running && d.month) attachToRun(d.month, !!d.fraud_check);
+    }).catch(function () {}).then(loadVault);
 
     // 업로드 UI — inert 버튼을 실동작으로 교체 (clone으로 기존 토스트 리스너 제거)
     var input = document.createElement("input");

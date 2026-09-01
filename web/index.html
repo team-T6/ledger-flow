@@ -156,6 +156,7 @@
     background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
     padding: 30px 30px 26px; position: relative;
   }
+  .modal.modal-wide { max-width: 640px; }
   .modal h2 { font-size: 22px; line-height: 1.4; margin: 0 0 8px; }
   .modal .lead { font-size: 14.5px; margin: 0; }
   .modal-close {
@@ -309,8 +310,6 @@
   .trend-line .pt:hover .tv, .trend-line .pt:focus .tv { opacity: 1; }
   .trend-line .pt { outline: none; }
   .trend-line .hit { fill: transparent; }
-  .d-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
-  .d-actions .btn { font-size: 12.5px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
   .btn-quiet { background: transparent; color: var(--muted); }
 
   /* ---------- 결산 화면(#app) — 스크롤 없이 화면 전환 (결산 서고 → 대시보드) ---------- */
@@ -387,8 +386,20 @@
   .dash-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
   /* 보관월 상세(book) — 제목을 가운데 두고 좌우 화살표로 이웃 장부로 장을 넘긴다 */
   .dash-top.book { justify-content: center; }
+  /* 헤더 액션 — 본문 흐름(카드→차트→탭)을 끊지 않도록 헤더에 둔다.
+     book 모드: 산출물 액션은 왼쪽 끝, 상태 칩은 오른쪽 끝, 제목은 가운데 */
+  .dash-top-right { display: flex; align-items: center; gap: 10px; flex: none; }
+  .dash-top.book .dash-top-right { display: contents; }
+  .dash-top.book .dash-actions { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); }
   .dash-top.book .chip { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); }
-  @media (max-width: 720px) { .dash-top.book .chip { display: none; } }
+  .dash-actions { display: flex; align-items: center; gap: 8px; }
+  .dash-actions .btn { font-size: 12.5px; padding: 8px 16px; text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  @media (max-width: 1250px) {
+    /* 좁은 화면 — 액션을 제목 아랫줄로 내려 겹침을 막고 칩은 숨긴다 */
+    .dash-top.book { flex-wrap: wrap; }
+    .dash-top.book .dash-actions { position: static; transform: none; flex-wrap: wrap; width: 100%; order: 2; }
+    .dash-top.book .chip { display: none; }
+  }
   .book-arrow {
     font: inherit; font-size: 17px; font-weight: 700; cursor: pointer;
     width: 30px; height: 30px; border-radius: var(--radius);
@@ -427,11 +438,9 @@
   .dstep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dstep:disabled { opacity: 0.5; }
 
-  /* 결과 머리줄 — 제목 왼쪽, 다운로드 버튼 오른쪽 */
+  /* 결과 머리줄 — 산출물 버튼은 헤더(dash-actions)로 옮겨 제목만 남는다 */
   .result-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   .result-head h2 { margin: 0; }
-  .result-head .downloads { margin-top: 0; }
-  .result-head .downloads .btn { font-size: 13px; padding: 9px 18px; display: inline-flex; align-items: center; gap: 7px; }
 
   /* 보관 확인 — 결산 결과를 서고에 넣을지 묻는다 */
   .save-bar {
@@ -440,8 +449,6 @@
     display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
   }
   .save-bar b { font-size: 14.5px; }
-  .save-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .save-actions .btn { font-size: 13px; padding: 9px 18px; }
 
   /* 결산 완료 안내 — 진행 화면에서 결과로 넘어갈지 묻는다 (자동 전환 없음) */
   .run-done {
@@ -541,6 +548,36 @@
   .dropzone strong { color: var(--ink); }
   .dz-formats { font-size: 12px; margin-top: 6px; opacity: 0.75; }
   .src-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  .drive-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .drive-breadcrumb button {
+    font: inherit; font-size: inherit; color: var(--accent);
+    background: none; border: none; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  }
+  .drive-breadcrumb button:hover { background: var(--card); text-decoration: underline; }
+  .drive-breadcrumb .current { color: var(--ink); font-weight: 700; padding: 2px 4px; }
+  .drive-breadcrumb .sep { opacity: 0.5; }
+  .drive-list-head {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    font-size: 13px; color: var(--muted); margin-top: 14px;
+  }
+  .drive-file-all-label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .drive-file-all-label input { accent-color: var(--accent); }
+  .drive-entry-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+  .drive-entry-list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; font-size: 13.5px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .drive-entry-list input[type="checkbox"] { accent-color: var(--accent); flex: none; }
+  .drive-entry-list .drive-icon { flex: none; color: var(--muted); }
+  .drive-entry-list .name { flex: 1; word-break: break-all; }
+  .drive-entry-list button.name {
+    text-align: left; font: inherit; font-size: inherit; color: var(--ink);
+    background: none; border: none; cursor: pointer; padding: 0;
+  }
+  .drive-entry-list button.name:hover { color: var(--accent); text-decoration: underline; }
+  .drive-entry-list .size { color: var(--muted); font-size: 12px; flex: none; }
+  .drive-modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
   .file-list { margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
   .file-list li {
     display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -549,21 +586,47 @@
   }
   .file-list .ok { color: var(--accent); font-weight: 700; }
   .file-list .del {
-    background: none; border: none; cursor: pointer; padding: 0;
-    font: inherit; font-size: 13px; color: var(--muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: none; cursor: pointer; padding: 5px;
+    color: var(--muted); border-radius: 6px; line-height: 0;
   }
-  .file-list .del:hover { color: var(--red); }
+  .file-list .del:hover { color: var(--red); background: rgba(166, 58, 46, 0.1); }
+  .file-list .del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .manual-entry { margin-top: 16px; text-align: center; }
+  #manual-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  #manual-toggle .chevron { transition: transform 0.15s ease; }
+  #manual-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
   .manual-form {
-    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-areas:
+      "date date date date type type type type method method method method"
+      "merchant merchant merchant amount amount amount note note note note add add";
+    gap: 10px;
     margin-top: 12px; padding: 14px 16px;
     background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    text-align: left;
   }
+  .manual-form[hidden] { display: none; }
   .manual-form input, .manual-form select {
-    font: inherit; font-size: 13.5px; padding: 8px 10px;
+    font: inherit; font-size: 13.5px; padding: 8px 10px; width: 100%;
     border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink);
   }
-  .manual-form input[type="text"], .manual-form input[type="number"] { width: 130px; }
+  .manual-form .cp-date { grid-area: date; display: flex; width: 100%; }
+  .manual-form .cp-date input[type="text"] { width: auto; flex: 1 1 auto; min-width: 0; }
+  #manual-merchant { grid-area: merchant; }
+  #manual-amount { grid-area: amount; }
+  #manual-payment-type { grid-area: type; }
+  #manual-method { grid-area: method; }
+  #manual-note { grid-area: note; }
+  #manual-add { grid-area: add; width: 100%; }
+  .manual-form-hint { grid-column: 1 / -1; margin-top: 0; text-align: center; }
+  @media (max-width: 640px) {
+    .manual-form {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas: "date type" "method method" "merchant amount" "note note" "add add";
+    }
+  }
   .run-cta { margin-top: 28px; text-align: center; }
   .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -726,8 +789,6 @@
     width: 100%; height: 480px; border: 1px solid var(--line);
     border-radius: var(--radius); background: #FFFFFF;
   }
-  .downloads { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
-
   /* ---------- 푸터 ---------- */
   /* 푸터가 짧아 바닥이 마지막 화면 스냅 지점으로 되돌아가지 않도록, 바닥 자체를 스냅 지점으로 둔다 */
   footer { border-top: 1px solid var(--line); padding: 40px 24px 64px; font-size: 13px; color: var(--muted); scroll-snap-align: end; }
@@ -866,18 +927,18 @@
 <section class="page" id="preview-sec">
   <div class="wrap reveal">
     <div class="eyebrow">결과는 이렇게 나옵니다</div>
-    <h2>엑셀 장부 하나,<br>PDF 리포트 하나</h2>
+    <h2>회계 장부 하나,<br>분석 리포트 하나</h2>
     <div class="previews">
       <div class="preview">
-        <div class="preview-head"><h3>결산 리포트</h3><span class="ftag">PDF</span></div>
-        <p class="desc">월별 추이와 종합·법인·개인 분석이 인사이트와 함께 실립니다</p>
+        <div class="preview-head"><h3>분석 리포트</h3><span class="ftag">PDF</span></div>
+        <p class="desc">월별 추이와 종합·법인·개인 통계가 인사이트와 함께</p>
         <div class="mini-bar"><span>사용료</span><i style="width:100%"></i></div>
         <div class="mini-bar"><span>식대</span><i style="width:70%"></i></div>
         <div class="mini-bar"><span>구독료</span><i style="width:27%"></i></div>
         <div class="mini-bar"><span>교통비</span><i style="width:23%"></i></div>
       </div>
       <div class="preview">
-        <div class="preview-head"><h3>회계장부</h3><span class="ftag">엑셀</span></div>
+        <div class="preview-head"><h3>회계 장부</h3><span class="ftag">엑셀</span></div>
         <p class="desc">정리·분류가 끝난 전체 거래 내역</p>
         <div class="mini-row"><span>08-05 · 스튜디오밝음</span><span class="mono">-1,200,000</span></div>
         <div class="mini-row"><span>08-12 · 김밥천국 역삼점</span><span class="mono">-9,500</span></div>
@@ -953,7 +1014,10 @@
         <h2 id="dash-title">결산 서고</h2>
         <button class="book-arrow hidden" id="book-next" type="button" aria-label="다음 달 장부">›</button>
       </div>
-      <span class="chip hidden" id="dash-chip"></span>
+      <div class="dash-top-right">
+        <div class="dash-actions hidden" id="dash-actions"></div>
+        <span class="chip hidden" id="dash-chip"></span>
+      </div>
     </div>
     <div class="dash-steps hidden" id="dash-steps">
       <button type="button" class="dstep" data-pane="upload-sec"><span class="n">1</span>자료 넣기</button>
@@ -989,18 +1053,27 @@
       <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
     </ul>
     <div class="manual-entry" id="manual-entry">
-      <button class="btn btn-quiet inert" id="manual-toggle" type="button">현금 등 직접 입력 +</button>
+      <button class="btn btn-quiet inert" id="manual-toggle" type="button" aria-expanded="false">수기 입력
+        <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
       <div class="manual-form" id="manual-form" hidden>
-        <input type="date" id="manual-date" aria-label="날짜">
+        <span class="cp-date">
+          <input type="text" id="manual-date" placeholder="YYYY-MM-DD" aria-label="날짜">
+          <input type="date" id="manual-date-pick" class="cp-date-pick" tabindex="-1" aria-hidden="true">
+          <button type="button" class="cp-date-btn" id="manual-date-btn" title="달력에서 선택">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </button>
+        </span>
         <input type="text" id="manual-merchant" placeholder="결제처">
-        <input type="number" id="manual-amount" placeholder="금액(원)">
+        <input type="number" id="manual-amount" placeholder="지출 금액(원)" min="1" step="1">
         <select id="manual-payment-type" aria-label="결제구분">
           <option value="개인결제">개인결제</option>
           <option value="법인결제">법인결제</option>
         </select>
-        <input type="text" id="manual-method" placeholder="결제수단(예: 현금)" value="현금">
+        <input type="text" id="manual-method" placeholder="결제수단(예: 현금)">
         <input type="text" id="manual-note" placeholder="비고(선택)">
         <button class="btn" id="manual-add" type="button">추가</button>
+        <span class="hint manual-form-hint">수기 입력은 모두 지출로 기록됩니다 — 입금·매출 등 수익 항목은 지원하지 않습니다</span>
       </div>
       <ul class="file-list" id="manual-list"></ul>
     </div>
@@ -1087,17 +1160,10 @@
     <div class="eyebrow">결산 결과</div>
     <div class="result-head">
       <h2 id="r-title">2026년 8월 결산이 끝났습니다</h2>
-      <div class="downloads" id="downloads">
-        <a class="btn btn-ghost" href="demo/2026-08_report_20260831-1535.pdf" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>분석 리포트</a>
-        <a class="btn btn-ghost" href="demo/2026-08_ledger_20260831-1535.xlsx" download><svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>회계장부</a>
-      </div>
     </div>
 
     <div class="save-bar hidden" id="save-bar">
       <div><b>이 달 장부가 결산 서고에 꽂혔습니다</b><div class="hint">서고에서 언제든 다시 펼쳐 볼 수 있습니다</div></div>
-      <div class="save-actions">
-        <button class="btn btn-ghost" id="r-rerun" type="button">다시 결산하기</button>
-      </div>
     </div>
 
     <div class="report-block">
@@ -1194,7 +1260,7 @@
   <div class="wrap">
     <div class="eyebrow">분류 기준</div>
     <h2>카테고리 관리</h2>
-    <p class="lead">가공(분류)과 분류 검증(적합성 확인)이 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다 — 개인결제는 개인카드 표, 법인결제는 법인카드 표.</p>
+    <p class="lead">렛저가 결제내역을 분류할 때 이 기준을 그대로 따릅니다. 결제구분에 따라 쓰는 표가 다릅니다.</p>
     <div class="cat-updated" id="cat-updated"></div>
     <div class="cat-toolbar">
       <div class="cat-tabs" role="tablist">
@@ -1233,6 +1299,27 @@
     </div>
     <p class="invite-error" id="invite-error">초대코드가 맞지 않습니다. 다시 확인해 주세요.</p>
     <div class="hint" id="invite-hint">데모 초대코드: <strong class="mono">LEDGER</strong></div>
+  </div>
+</div>
+
+<!-- Drive 폴더 선택 모달 — "Google Drive 연결" 클릭 시 계정 폴더 목록을 보여주고 하나를 고르게 한다 -->
+<div class="modal-overlay hidden" id="drive-modal">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="drive-modal-title">
+    <button class="modal-close" id="drive-modal-close" type="button" aria-label="닫기">✕</button>
+    <div class="eyebrow">Google Drive 연결</div>
+    <h2 id="drive-modal-title">가져올 폴더를 선택해 주세요</h2>
+    <p class="lead" id="drive-modal-lead">폴더 목록을 불러오는 중…</p>
+    <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
+    <div class="drive-list-head hidden" id="drive-list-head">
+      <span id="drive-list-summary"></span>
+      <label class="drive-file-all-label">
+        <input type="checkbox" id="drive-select-all">전체 선택
+      </label>
+    </div>
+    <ul class="drive-entry-list" id="drive-entry-list"></ul>
+    <div class="drive-modal-actions">
+      <button class="btn" id="drive-import-selected" type="button" disabled>선택한 항목 가져오기</button>
+    </div>
   </div>
 </div>
 
@@ -1289,7 +1376,7 @@
     toastEl.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.classList.remove("show", "actionable"); },
-                            onAction ? 5000 : 2200); // 액션이 있으면 누를 시간을 더 준다
+                            onAction ? 7000 : 4000); // 액션이 있으면 누를 시간을 더 준다
   }
   document.querySelectorAll(".inert").forEach(function (b) {
     b.addEventListener("click", function () {
@@ -1313,6 +1400,17 @@
     renderShelf();
     showShelf();
   }
+  /* 헤더 액션(산출물 버튼) — 보관월 상세·결산 결과가 채우고, 그 화면일 때만 보인다 */
+  var dashActionsPane = null;
+  function beginDashActions(paneId) {
+    dashActionsPane = paneId;
+    var actions = document.getElementById("dash-actions");
+    actions.innerHTML = "";
+    // 지금 떠 있는 화면이 소유 화면일 때만 바로 보인다 — 아니면 showPane이 그 화면에서 켠다
+    var cur = document.querySelector("#dash-sec .dash-pane.on");
+    actions.classList.toggle("hidden", !cur || cur.id !== paneId);
+    return actions;
+  }
   function showPane(id) {
     shelfSec.classList.add("hidden");
     dashSec.classList.remove("hidden");
@@ -1320,6 +1418,8 @@
       p.classList.toggle("on", p.id === id);
     });
     document.querySelector("#dash-sec .dash-body").scrollTop = 0;
+    // 헤더 액션은 채워 둔 화면에서만 보인다 — 단계 스텝으로 다른 화면에 가면 숨긴다
+    document.getElementById("dash-actions").classList.toggle("hidden", id !== dashActionsPane);
     renderSteps(id);
   }
 
@@ -1353,6 +1453,12 @@
     var chip = document.getElementById("dash-chip");
     chip.textContent = chipText || "";
     chip.className = "chip" + (chipCls ? " " + chipCls : "") + (chipText ? "" : " hidden");
+    chip.removeAttribute("title");
+    // 헤더 액션은 보관월 상세·결산 결과 전용 — 기본은 비우고, 각 화면이 다시 채운다
+    dashActionsPane = null;
+    var hdrActions = document.getElementById("dash-actions");
+    hdrActions.innerHTML = "";
+    hdrActions.classList.add("hidden");
     // 장 넘김 화살표는 보관월 상세 전용 — 기본은 끄고, showMonthDetail이 다시 켠다
     document.querySelector("#dash-sec .dash-top").classList.remove("book");
     document.getElementById("book-prev").classList.add("hidden");
@@ -1443,6 +1549,9 @@
   var OPEN_ICO =
     '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  var DEL_ICO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+  var FOLDER_ICO = '<svg class="drive-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+  var FILE_ICO = '<svg class="drive-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
   /* 초대코드 확인 — 데모는 고정 코드, 실제 모드는 서버(.env의 INVITE_CODE)에서 검증한다 */
   var DEMO_CODE = "LEDGER";
@@ -1577,6 +1686,11 @@
       showToast("아직 오지 않은 달입니다 — 오늘이 포함된 달까지 결산할 수 있습니다");
       return;
     }
+    if (REAL && running && selectedMonth && key !== selectedMonth) {
+      // 새 결산 준비는 업로드함을 비우므로, 진행 중 실행의 입력이 파괴되지 않게 막는다
+      showToast(monthTitle(selectedMonth) + " 결산이 진행 중입니다 — 끝난 뒤 다른 달을 결산할 수 있습니다");
+      return;
+    }
     selectedMonth = key;
     jobPhase = "upload";
     viewKey = key;
@@ -1629,7 +1743,11 @@
       sideYear = monthYear(key);
       renderSideMonths();
       if (jobPhase === "run") { setDashTop(monthTitle(key), "결산 중", "run"); showPane("run-sec"); }
-      else if (jobPhase === "result") { setDashTop(monthTitle(key), "결산 완료", "ok"); showPane("result-sec"); }
+      else if (jobPhase === "result") {
+        setDashTop(monthTitle(key), "결산 완료", "ok");
+        renderResultActions(key, lastResultData && lastResultData.pdfUrl);
+        showPane("result-sec");
+      }
       else { setDashTop(monthTitle(key), "자료 대기", ""); showPane("upload-sec"); }
       setBookNav(key);
       return;
@@ -2082,8 +2200,9 @@
     history.replaceState(null, "", "#app/" + entry.month);
     sideYear = monthYear(entry.month);
     renderSideMonths();
-    setDashTop(monthTitle(entry.month),
-               entry.completed_at ? entry.completed_at + " 완료" : "서고 보관", "ok");
+    setDashTop(monthTitle(entry.month), entry.completed_at ? "완료" : "서고 보관", "ok");
+    // 결산 일시는 칩 툴팁으로 낮춘다 — 헤더에 액션이 들어와 긴 텍스트를 줄인다
+    if (entry.completed_at) document.getElementById("dash-chip").title = entry.completed_at + " 완료";
 
     setBookNav(entry.month);
 
@@ -2152,6 +2271,48 @@
       detail = demoBreakdown(entry);
     }
 
+    // 산출물 버튼 — 본문 흐름(카드→차트→탭)을 끊지 않도록 헤더 우측(상태 칩 옆)에 둔다
+    var actions = beginDashActions("month-sec");
+    if (REAL) {
+      if (!entry.files || entry.files.pdf) {
+        var pdf = document.createElement("a");
+        pdf.className = "btn";
+        pdf.innerHTML = OPEN_ICO + "분석 리포트";
+        pdf.href = "artifacts/result.pdf?month=" + entry.month + "&inline=1";
+        pdf.target = "_blank";
+        pdf.rel = "noopener";
+        actions.appendChild(pdf);
+      }
+      if (!entry.files || entry.files.xlsx) {
+        var xlsx = document.createElement("a");
+        xlsx.className = "btn btn-ghost";
+        xlsx.innerHTML = DL_ICO + "회계장부";
+        xlsx.href = "artifacts/result.xlsx?month=" + entry.month;
+        actions.appendChild(xlsx);
+      }
+    } else {
+      // 데모 — 샘플 산출물(web/demo/)을 열고 내려받는다
+      var demoPdf = document.createElement("a");
+      demoPdf.className = "btn";
+      demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
+      demoPdf.href = demoFile(entry.month, "pdf");
+      demoPdf.target = "_blank";
+      demoPdf.rel = "noopener";
+      actions.appendChild(demoPdf);
+      var demoXlsx = document.createElement("a");
+      demoXlsx.className = "btn btn-ghost";
+      demoXlsx.innerHTML = DL_ICO + "회계장부";
+      demoXlsx.href = demoFile(entry.month, "xlsx");
+      demoXlsx.setAttribute("download", "");
+      actions.appendChild(demoXlsx);
+    }
+    var rerun = document.createElement("button");
+    rerun.className = "btn btn-quiet";
+    rerun.type = "button";
+    rerun.textContent = "다시 결산하기";
+    rerun.addEventListener("click", function () { selectRunMonth(entry.month); });
+    actions.appendChild(rerun);
+
     var tabsWrap = document.createElement("div");
     tabsWrap.className = "rtabs";
     tabsWrap.innerHTML =
@@ -2202,48 +2363,6 @@
       renderSummaryDoc(docHost, demoSummaryText(entry));
     }
 
-    var actions = document.createElement("div");
-    actions.className = "d-actions";
-    if (REAL) {
-      if (!entry.files || entry.files.pdf) {
-        var pdf = document.createElement("a");
-        pdf.className = "btn";
-        pdf.innerHTML = OPEN_ICO + "분석 리포트";
-        pdf.href = "artifacts/result.pdf?month=" + entry.month + "&inline=1";
-        pdf.target = "_blank";
-        pdf.rel = "noopener";
-        actions.appendChild(pdf);
-      }
-      if (!entry.files || entry.files.xlsx) {
-        var xlsx = document.createElement("a");
-        xlsx.className = "btn btn-ghost";
-        xlsx.innerHTML = DL_ICO + "회계장부";
-        xlsx.href = "artifacts/result.xlsx?month=" + entry.month;
-        actions.appendChild(xlsx);
-      }
-    } else {
-      // 데모 — 샘플 산출물(web/demo/)을 열고 내려받는다
-      var demoPdf = document.createElement("a");
-      demoPdf.className = "btn";
-      demoPdf.innerHTML = OPEN_ICO + "분석 리포트";
-      demoPdf.href = demoFile(entry.month, "pdf");
-      demoPdf.target = "_blank";
-      demoPdf.rel = "noopener";
-      actions.appendChild(demoPdf);
-      var demoXlsx = document.createElement("a");
-      demoXlsx.className = "btn btn-ghost";
-      demoXlsx.innerHTML = DL_ICO + "회계장부";
-      demoXlsx.href = demoFile(entry.month, "xlsx");
-      demoXlsx.setAttribute("download", "");
-      actions.appendChild(demoXlsx);
-    }
-    var rerun = document.createElement("button");
-    rerun.className = "btn btn-quiet";
-    rerun.type = "button";
-    rerun.textContent = "다시 결산하기";
-    rerun.addEventListener("click", function () { selectRunMonth(entry.month); });
-    actions.appendChild(rerun);
-    monthDetailEl.appendChild(actions);
     showPane("month-sec");
   }
 
@@ -2261,8 +2380,7 @@
           btn.className = "m-card archived";
           btn.innerHTML = '<span class="spine"><b class="mm"></b><span class="amt mono"></span></span>';
           var sp = btn.querySelector(".spine");
-          // 책등 높이 미세 변주 — 같은 키의 장부만 꽂힌 선반보다 실제 서가처럼 보인다
-          sp.style.setProperty("--h", 122 + (mm % 3) * 8 + "px");
+          sp.style.setProperty("--h", "122px");
           btn.querySelector(".mm").textContent = mm + "월";
           btn.querySelector(".amt").textContent = entry.total_expense ? fmtShortMan(entry.total_expense) : "";
           // 확인 필요 건수는 책갈피 탭으로 — 0건이면 붙이지 않아 깨끗한 장부가 한눈에 구분된다
@@ -2830,7 +2948,9 @@
       var del = document.createElement("button");
       del.className = "del";
       del.type = "button";
-      del.textContent = "삭제";
+      del.innerHTML = DEL_ICO;
+      del.title = "삭제";
+      del.setAttribute("aria-label", f.name + " 삭제");
       del.addEventListener("click", function () {
         apiJson("uploads/delete", {
           method: "POST",
@@ -2850,7 +2970,7 @@
     updateRunButton();
   }
 
-  /* ---- 현금 등 직접 입력 (collect.md "하는 단계 7" — 자동 수집이 어려운 거래) ---- */
+  /* ---- 수기 입력 (collect.md "하는 단계 7" — 자동 수집이 어려운 거래) ---- */
   var manualListEl = document.getElementById("manual-list");
 
   function renderManualList(entries) {
@@ -2863,7 +2983,9 @@
       var del = document.createElement("button");
       del.className = "del";
       del.type = "button";
-      del.textContent = "삭제";
+      del.innerHTML = DEL_ICO;
+      del.title = "삭제";
+      del.setAttribute("aria-label", (m.결제처 || "항목") + " 삭제");
       del.addEventListener("click", function () {
         apiJson("uploads/manual/delete", {
           method: "POST",
@@ -2952,7 +3074,18 @@
     });
   }
 
-  function startPolling(withFraud) {
+  /* 진행 중 결산 도중 접속(새로고침·다른 창) — 서버에 살아 있는 실행에 붙어
+     이벤트를 처음부터 재생해 진행 화면·중간 확인 패널을 복원한다 */
+  function attachToRun(month, withFraud) {
+    selectedMonth = month;
+    lastResult = null;
+    running = true;
+    startPolling(withFraud, true);
+    // 보고 있던 달이 그 달이면 진행 화면을 바로 연다 — 다른 화면이면 그 달을 열 때 openMonth가 보여준다
+    if (appHashMonth() === month) openMonth(month);
+  }
+
+  function startPolling(withFraud, attach) {
     progressUI.setVerifySubs(withFraud ? ["verify1", "verify2", "verify3"] : ["verify1", "verify2"]);
     STAGE_DOING["검증"] = withFraud
       ? "분류·금액·부정 사용 세 검증이 같은 표를 나란히 확인하는 중"
@@ -2963,10 +3096,15 @@
     document.getElementById("run-done").classList.add("hidden");
     document.getElementById("run-title").textContent = "렛저가 결산하고 있습니다";
     jobPhase = "run";
-    setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
-    setBookNav(selectedMonth || CUR_KEY);
-    renderSideMonths();
-    showPane("run-sec");
+    if (attach) {
+      // 도중 접속 복원 — 화면 전환 없이 상태만 잇는다 (보이는 화면은 attachToRun/openMonth가 결정)
+      renderSideMonths();
+    } else {
+      setDashTop(monthTitle(selectedMonth || CUR_KEY), "결산 중", "run");
+      setBookNav(selectedMonth || CUR_KEY);
+      renderSideMonths();
+      showPane("run-sec");
+    }
 
     var lastSeq = 0;
     var pollFails = 0;
@@ -3158,8 +3296,12 @@
     document.getElementById("r-pdf-frame").src = data.pdfUrl || "artifacts/result.pdf?inline=1";
 
     jobPhase = "result";
-    setDashTop(monthTitle(month), "결산 완료", "ok");
-    setBookNav(month);
+    if (viewKey === month) {
+      // 다른 달을 보는 중에 결산이 끝났으면 그 화면의 머리글을 덮지 않는다 — 그 달을 열 때 openMonth가 채운다
+      setDashTop(monthTitle(month), "결산 완료", "ok");
+      setBookNav(month);
+      renderResultActions(month, data.pdfUrl);
+    }
     renderCompare(month, data);
     // 자동 저장 — 파이프라인이 만들어 둔 보관본을 서고 목록에 바로 반영한다
     lastResult = { month: month, total_expense: data.total_expense || 0,
@@ -3233,10 +3375,31 @@
   /* 결산 결과 화면 탭 — 고정 HTML이라 한 번만 초기화한다 (보관 상세는 매번 새로 그려 그때그때 초기화) */
   initTabs(document.getElementById("r-tabs"));
 
-  /* 다시 결산하기 */
-  document.getElementById("r-rerun").addEventListener("click", function () {
-    if (selectedMonth) selectRunMonth(selectedMonth);
-  });
+  /* 결산 결과 헤더 액션 — 보관월 상세와 같은 구성(분석 리포트·회계장부·다시 결산하기) */
+  function renderResultActions(month, pdfUrl) {
+    var actions = beginDashActions("result-sec");
+    var pdf = document.createElement("a");
+    pdf.className = "btn";
+    pdf.innerHTML = OPEN_ICO + "분석 리포트";
+    pdf.href = pdfUrl || (REAL ? "artifacts/result.pdf?inline=1" : demoFile(month, "pdf"));
+    pdf.target = "_blank";
+    pdf.rel = "noopener";
+    actions.appendChild(pdf);
+    var xlsx = document.createElement("a");
+    xlsx.className = "btn btn-ghost";
+    xlsx.innerHTML = DL_ICO + "회계장부";
+    xlsx.href = REAL ? "artifacts/result.xlsx" : demoFile(month, "xlsx");
+    if (!REAL) xlsx.setAttribute("download", "");
+    actions.appendChild(xlsx);
+    var rerun = document.createElement("button");
+    rerun.className = "btn btn-quiet";
+    rerun.type = "button";
+    rerun.textContent = "다시 결산하기";
+    rerun.addEventListener("click", function () {
+      if (selectedMonth) selectRunMonth(selectedMonth);
+    });
+    actions.appendChild(rerun);
+  }
 
   /* ---- 재결산 — 결산 완료 후 남은 확인 필요 건 수정·확정 (데모·실제 공용 패널) ----
      실제 모드는 서버가 확인 반영 후 통합만 재실행하고(GET /refix/pending → POST /runs/refix),
@@ -3602,7 +3765,6 @@
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   }
-  var CAT_DEL_ICO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
   function setCatDirty(v) {
     // 더티 상태가 저장 버튼·안내 문구를 이끈다 — 변경 없으면 저장 비활성
     catDirty = v;
@@ -3662,7 +3824,7 @@
         var del = document.createElement("button");
         del.type = "button";
         del.className = "cat-del";
-        del.innerHTML = CAT_DEL_ICO;
+        del.innerHTML = DEL_ICO;
         del.title = "삭제";
         del.setAttribute("aria-label", (row[0] || "행") + " 삭제");
         del.addEventListener("click", function () {
@@ -3772,9 +3934,14 @@
     // 표식 교체 — 실제 모드 문구는 상단 COPY.real에서만 관리한다
     applyRealCopy();
 
+    // 진행 중 결산 복원 — 서버에 실행이 살아 있으면(새로고침·다른 창) 그 월에 붙는다.
+    // 복원을 끝낸 뒤 보관함을 그려야 해시 복원(openMonth)이 실행 상태를 보고 진행 화면을 연다.
     // 월별 보관함 — 서버 보관 목록(archive/<월>/summary.json)으로 다시 그린다.
     // 보관 없는 달도 자유 선택 가능 (수집은 "대상 월 위주로 모으되 거르지 않는다"가 확정 규칙)
-    loadVault();
+    apiJson("runs/current?since=0").then(function (res) {
+      var d = res.ok ? res.data : null;
+      if (d && d.running && d.month) attachToRun(d.month, !!d.fraud_check);
+    }).catch(function () {}).then(loadVault);
 
     // 업로드 UI — inert 버튼을 실동작으로 교체 (clone으로 기존 토스트 리스너 제거)
     var input = document.createElement("input");
@@ -3798,27 +3965,194 @@
     var driveReal = drive.cloneNode(true);
     driveReal.classList.remove("inert");
     drive.parentNode.replaceChild(driveReal, drive);
-    driveReal.addEventListener("click", function () {
-      // Drive 가져오기 (확정 방식: claude CLI headless + Drive MCP) — 서버가 uploads/inbox/에 저장한다
-      if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
-      if (driveReal.disabled) return;
-      driveReal.disabled = true;
-      var label = driveReal.textContent;
-      driveReal.textContent = "Drive에서 가져오는 중…";
-      function restore() { driveReal.disabled = false; driveReal.textContent = label; }
-      apiJson("drive/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month: selectedMonth })
-      }).then(function (res) {
-        restore();
-        if (!res.ok) { showToast(res.data.error || "Drive 가져오기에 실패했습니다"); return; }
-        renderFileList(res.data.files || []);
-        showToast("Google Drive에서 가져왔습니다 — 준비된 파일 " + (res.data.files || []).length + "개");
-      }).catch(function () {
-        restore();
-        showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+
+    // Drive 폴더 선택 모달 — "내 드라이브" 루트부터 실제 폴더 구조를 눌러 들어가며 고른다.
+    // 폴더·파일을 한 목록에 아이콘으로만 구분해 보여주고, 체크박스는 폴더·파일 모두에 달아
+    // 여러 개를 한 번에 고를 수 있게 한다 — 폴더를 체크하면 그 폴더 안 파일을 전부 가져오고,
+    // 폴더 이름(버튼)을 누르면 체크와 무관하게 그 안으로 들어간다.
+    // (확정 방식: 매번 현재 폴더의 바로 아래 자식 폴더·파일만 GET /drive/browse?parent_id=로 불러온다 — AI 미사용)
+    var driveModal = document.getElementById("drive-modal");
+    var driveModalLead = document.getElementById("drive-modal-lead");
+    var driveBreadcrumb = document.getElementById("drive-breadcrumb");
+    var driveListHead = document.getElementById("drive-list-head");
+    var driveListSummary = document.getElementById("drive-list-summary");
+    var driveSelectAll = document.getElementById("drive-select-all");
+    var driveEntryList = document.getElementById("drive-entry-list");
+    var driveImportSelected = document.getElementById("drive-import-selected");
+    var driveImportInFlight = false;
+    var driveStack = [];  // [{id, name}, ...] — 첫 항목은 항상 "내 드라이브"(id: "root")
+
+    function closeDriveModal() {
+      driveModal.classList.add("hidden");
+      driveEntryList.innerHTML = "";
+      driveBreadcrumb.innerHTML = "";
+      driveListHead.classList.add("hidden");
+      driveImportSelected.disabled = true;
+    }
+    document.getElementById("drive-modal-close").addEventListener("click", closeDriveModal);
+    driveModal.addEventListener("click", function (e) { if (e.target === driveModal) closeDriveModal(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !driveModal.classList.contains("hidden")) closeDriveModal();
+    });
+
+    function renderDriveBreadcrumb() {
+      driveBreadcrumb.innerHTML = "";
+      driveStack.forEach(function (crumb, i) {
+        if (i > 0) {
+          var sep = document.createElement("span");
+          sep.className = "sep";
+          sep.textContent = "/";
+          driveBreadcrumb.appendChild(sep);
+        }
+        if (i === driveStack.length - 1) {
+          var current = document.createElement("span");
+          current.className = "current";
+          current.textContent = crumb.name;
+          driveBreadcrumb.appendChild(current);
+        } else {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = crumb.name;
+          btn.addEventListener("click", function () {
+            driveStack = driveStack.slice(0, i + 1);
+            loadDriveFolder(crumb.id);
+          });
+          driveBreadcrumb.appendChild(btn);
+        }
       });
+    }
+
+    function updateDriveImportButton() {
+      var checked = driveEntryList.querySelectorAll('input[type="checkbox"]:checked').length;
+      driveImportSelected.disabled = checked === 0;
+      driveImportSelected.textContent = checked
+        ? "선택한 항목 가져오기 (" + checked + "개)"
+        : "선택한 항목 가져오기";
+    }
+
+    function renderDriveEntryRow(entry, type) {
+      var li = document.createElement("li");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      cb.value = entry.id;
+      cb.dataset.type = type;
+      cb.addEventListener("change", updateDriveImportButton);
+      li.appendChild(cb);
+
+      var icon = document.createElement("span");
+      icon.innerHTML = type === "folder" ? FOLDER_ICO : FILE_ICO;
+      li.appendChild(icon.firstChild);
+
+      if (type === "folder") {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "name";
+        btn.textContent = entry.name;
+        btn.addEventListener("click", function () {
+          driveStack.push(entry);
+          loadDriveFolder(entry.id);
+        });
+        li.appendChild(btn);
+      } else {
+        var name = document.createElement("span");
+        name.className = "name";
+        name.textContent = entry.name;
+        li.appendChild(name);
+        if (entry.size) {
+          var size = document.createElement("span");
+          size.className = "size";
+          size.textContent = Math.max(1, Math.round(entry.size / 1024)) + "KB";
+          li.appendChild(size);
+        }
+      }
+      return li;
+    }
+
+    function renderDriveEntries(folders, files) {
+      driveEntryList.innerHTML = "";
+      var total = folders.length + files.length;
+      driveListHead.classList.toggle("hidden", total === 0);
+      if (!total) { updateDriveImportButton(); return; }
+      driveListSummary.textContent = "폴더 " + folders.length + "개 · 파일 " + files.length + "개";
+      driveSelectAll.checked = true;
+      folders.forEach(function (folder) { driveEntryList.appendChild(renderDriveEntryRow(folder, "folder")); });
+      files.forEach(function (file) { driveEntryList.appendChild(renderDriveEntryRow(file, "file")); });
+      updateDriveImportButton();
+    }
+
+    driveSelectAll.addEventListener("change", function () {
+      driveEntryList.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+        cb.checked = driveSelectAll.checked;
+      });
+      updateDriveImportButton();
+    });
+
+    function loadDriveFolder(folderId) {
+      driveModalLead.textContent = "불러오는 중…";
+      driveEntryList.innerHTML = "";
+      driveListHead.classList.add("hidden");
+      driveImportSelected.disabled = true;
+      renderDriveBreadcrumb();
+      apiJson("drive/browse" + (folderId === "root" ? "" : "?parent_id=" + encodeURIComponent(folderId)))
+        .then(function (res) {
+          if (!res.ok) {
+            driveModalLead.textContent = res.data.error || "Drive 폴더 조회에 실패했습니다";
+            return;
+          }
+          var folders = res.data.folders || [];
+          var files = res.data.files || [];
+          driveModalLead.textContent = (folders.length || files.length)
+            ? "폴더를 열거나, 가져올 항목을 선택하세요 (폴더 선택 시 안의 파일을 전부 가져옵니다)"
+            : "이 폴더는 비어 있습니다";
+          renderDriveEntries(folders, files);
+        }).catch(function () {
+          driveModalLead.textContent = "서버에 연결하지 못했습니다 — orchestrator/server.py 확인";
+        });
+    }
+
+    driveImportSelected.addEventListener("click", function () {
+      if (driveImportInFlight) return;
+      var checked = Array.prototype.slice.call(driveEntryList.querySelectorAll('input[type="checkbox"]:checked'));
+      var folderIds = checked.filter(function (cb) { return cb.dataset.type === "folder"; }).map(function (cb) { return cb.value; });
+      var fileIds = checked.filter(function (cb) { return cb.dataset.type === "file"; }).map(function (cb) { return cb.value; });
+      if (!folderIds.length && !fileIds.length) return;
+      var currentFolder = driveStack[driveStack.length - 1];
+      driveImportInFlight = true;
+      driveModalLead.textContent = "가져오는 중…";
+
+      // 매니페스트 파일에 동시 쓰기 경합이 나지 않도록 순차 실행한다 (병렬 X)
+      var requests = folderIds.map(function (id) { return { folder_id: id, file_ids: null }; });
+      if (fileIds.length) requests.push({ folder_id: currentFolder.id, file_ids: fileIds });
+      var lastRes = null;
+      requests.reduce(function (chain, req) {
+        return chain.then(function () {
+          return apiJson("drive/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(Object.assign({ month: selectedMonth }, req))
+          }).then(function (res) {
+            lastRes = res;
+            if (!res.ok) throw new Error(res.data.error || "Drive 가져오기에 실패했습니다");
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        driveImportInFlight = false;
+        closeDriveModal();
+        renderFileList((lastRes.data.files) || []);
+        showToast("Google Drive에서 가져왔습니다 — 준비된 파일 " + ((lastRes.data.files || []).length) + "개");
+      }).catch(function (err) {
+        driveImportInFlight = false;
+        showToast((err && err.message) || "서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
+        closeDriveModal();
+      });
+    });
+
+    driveReal.addEventListener("click", function () {
+      if (!selectedMonth) { showToast("결산할 월을 먼저 선택해 주세요"); return; }
+      driveStack = [{ id: "root", name: "내 드라이브" }];
+      driveModal.classList.remove("hidden");
+      loadDriveFolder("root");
     });
 
     var manualToggle = document.getElementById("manual-toggle");
@@ -3828,7 +4162,22 @@
     var manualForm = document.getElementById("manual-form");
     manualToggleReal.addEventListener("click", function () {
       manualForm.hidden = !manualForm.hidden;
+      manualToggleReal.setAttribute("aria-expanded", String(!manualForm.hidden));
     });
+    (function () {
+      var text = document.getElementById("manual-date");
+      var pick = document.getElementById("manual-date-pick");
+      document.getElementById("manual-date-btn").addEventListener("click", function () {
+        try { pick.showPicker(); } catch (e) { pick.click(); }
+      });
+      pick.addEventListener("change", function () {
+        if (!pick.value) return;
+        text.value = pick.value;
+      });
+      text.addEventListener("input", function () {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text.value)) pick.value = text.value;
+      });
+    })();
     document.getElementById("manual-add").addEventListener("click", function () {
       var date = document.getElementById("manual-date").value;
       var merchant = document.getElementById("manual-merchant").value.trim();
@@ -3837,6 +4186,7 @@
       var method = document.getElementById("manual-method").value.trim() || "현금";
       var note = document.getElementById("manual-note").value.trim();
       if (!date || !merchant || !amount) { showToast("날짜·결제처·지출 금액을 입력해 주세요"); return; }
+      if (amount < 0) { showToast("금액은 양수로 입력해 주세요 — 수기 입력은 항상 지출로 기록됩니다"); return; }
       apiJson("uploads/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3847,6 +4197,8 @@
       }).then(function (res) {
         if (!res.ok) { showToast(res.data.error || "추가에 실패했습니다"); return; }
         renderManualList(res.data.entries || []);
+        document.getElementById("manual-date").value = "";
+        document.getElementById("manual-date-pick").value = "";
         document.getElementById("manual-merchant").value = "";
         document.getElementById("manual-amount").value = "";
         document.getElementById("manual-note").value = "";
@@ -3860,12 +4212,6 @@
       e.preventDefault();
       uploadFiles(e.dataTransfer.files);
     });
-
-    // 다운로드 버튼 — 실제 산출물 링크로 교체
-    var downloads = document.getElementById("downloads");
-    downloads.innerHTML =
-      '<a class="btn btn-ghost" href="artifacts/result.pdf">' + DL_ICO + '분석 리포트</a>' +
-      '<a class="btn btn-ghost" href="artifacts/result.xlsx">' + DL_ICO + '회계장부</a>';
 
     // 업로드 목록은 빈 상태로 시작 — 월 선택 시 서버 업로드함도 비워서 표시와 실제를 맞춘다
     renderFileList([]);

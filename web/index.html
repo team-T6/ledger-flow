@@ -518,7 +518,7 @@
   .tx-table td.amt { text-align: right; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
   .tx-table td.amt.minus { color: var(--red); }
   .tx-table td.amt.plus { color: var(--accent); }
-  .tx-table td.reason { white-space: normal; color: var(--muted); font-size: 12.5px; max-width: 220px; }
+  .tx-table td.reason { white-space: normal; color: var(--muted); font-size: 12.5px; min-width: 320px; }
   .tx-table tr.flagged td { background: rgba(166, 58, 46, 0.06); }
   .tx-table tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--red); }
   .tx-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13.5px; }
@@ -1855,16 +1855,18 @@
         return;
       }
       var head = "<tr><th>날짜</th><th>결제처</th><th>카테고리</th><th>결제수단</th><th>결제구분</th>" +
-        "<th>지출</th><th>수익</th><th>비고</th></tr>";
+        "<th>금액</th><th>비고</th></tr>";
       var body = filtered.map(function (r) {
+        var income = r["수익"] || 0;
+        var amtCls = income ? "plus" : "minus";
+        var amtText = income ? "+" + fmt(income) : (r["지출"] ? "-" + fmt(r["지출"]) : "");
         return '<tr class="' + (r.flagged ? "flagged" : "") + '">' +
           '<td class="mono">' + esc(r["날짜"] || "") + "</td>" +
           "<td>" + esc(r["결제처"] || "") + "</td>" +
           "<td>" + esc(r["카테고리"] || "") + "</td>" +
           "<td>" + esc(r["결제수단"] || "") + "</td>" +
           "<td>" + esc(r["결제구분"] || "") + "</td>" +
-          '<td class="amt minus">' + (r["지출"] ? "-" + fmt(r["지출"]) : "") + "</td>" +
-          '<td class="amt plus">' + (r["수익"] ? "+" + fmt(r["수익"]) : "") + "</td>" +
+          '<td class="amt ' + amtCls + '">' + amtText + "</td>" +
           '<td class="reason">' + esc(r.reason || "") + "</td></tr>";
       }).join("");
       scroll.innerHTML = '<table class="tx-table">' + head + body + "</table>";

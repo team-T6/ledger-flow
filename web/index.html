@@ -622,6 +622,8 @@
   #manual-method { grid-area: method; }
   #manual-note { grid-area: note; }
   #manual-add { grid-area: add; width: 100%; }
+  /* 폼 안 버튼은 입력 칸과 높이를 맞춘다 — 기본 .btn(15px/13px)은 폼에 비해 너무 크다 */
+  .manual-form .btn, .cards-form .btn { font-size: 13.5px; font-weight: 600; padding: 8px 16px; }
   .manual-form-hint { grid-column: 1 / -1; margin-top: 0; text-align: center; }
   /* 카드 구분 등록 폼 — 수기 입력 폼의 상자·입력 스타일을 빌리되 한 줄 flex로 편다 */
   .cards-form { display: flex; flex-wrap: wrap; align-items: center; }
@@ -1068,7 +1070,7 @@
       <div class="dz-formats">지원 확장자: .csv .txt .png .jpg .jpeg .xlsx .pdf .zip</div>
       <div class="src-buttons">
         <button class="btn btn-ghost inert" id="pick-files">파일 선택</button>
-        <button class="btn btn-ghost inert" id="drive-btn">Google Drive 연결</button>
+        <button class="btn btn-ghost inert" id="drive-btn">Google Drive에서 가져오기</button>
       </div>
     </div>
     <ul class="file-list" id="file-list">
@@ -1341,11 +1343,11 @@
   </div>
 </div>
 
-<!-- Drive 폴더 선택 모달 — "Google Drive 연결" 클릭 시 계정 폴더 목록을 보여주고 하나를 고르게 한다 -->
+<!-- Drive 폴더 선택 모달 — "Google Drive에서 가져오기" 클릭 시 계정 폴더 목록을 보여주고 하나를 고르게 한다 -->
 <div class="modal-overlay hidden" id="drive-modal">
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="drive-modal-title">
     <button class="modal-close" id="drive-modal-close" type="button" aria-label="닫기">✕</button>
-    <div class="eyebrow">Google Drive 연결</div>
+    <div class="eyebrow">Google Drive 가져오기</div>
     <h2 id="drive-modal-title">가져올 폴더를 선택해 주세요</h2>
     <p class="lead" id="drive-modal-lead">폴더 목록을 불러오는 중…</p>
     <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
@@ -4273,7 +4275,6 @@
       var li = document.createElement("li");
       var cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.checked = true;
       cb.value = entry.id;
       cb.dataset.type = type;
       cb.addEventListener("change", updateDriveImportButton);
@@ -4314,7 +4315,7 @@
       driveListHead.classList.toggle("hidden", total === 0);
       if (!total) { updateDriveImportButton(); return; }
       driveListSummary.textContent = "폴더 " + folders.length + "개 · 파일 " + files.length + "개";
-      driveSelectAll.checked = true;
+      driveSelectAll.checked = false;  // 기본 미선택 — 사용자가 가져올 항목을 직접 고른다
       folders.forEach(function (folder) { driveEntryList.appendChild(renderDriveEntryRow(folder, "folder")); });
       files.forEach(function (file) { driveEntryList.appendChild(renderDriveEntryRow(file, "file")); });
       updateDriveImportButton();

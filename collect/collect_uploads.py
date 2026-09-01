@@ -36,6 +36,9 @@ DEFAULT_UPLOAD_DIR = os.path.join(REPO_ROOT, "uploads", "inbox")
 # 현금 등 자동 수집이 어려운 거래의 직접 입력 (collect.md "하는 단계 7") — 웹 서버가
 # uploads/inbox/ 밖에 쓴다 (orchestrator/server.py의 POST /uploads/manual)
 MANUAL_ENTRIES_PATH = os.path.join(REPO_ROOT, "uploads", "manual_entries.json")
+# 카드 구분 등록 목록 — 결제수단명 → 개인결제/법인결제 (collect.md "판단 기준"의 등록된 카드
+# 목록, interface-spec.md 확정 로그 2026-09-01). 웹 "자료 넣기"에서 등록한다 (GET/POST /cards)
+CARD_REGISTRY_PATH = os.path.join(REPO_ROOT, "uploads", "card_registry.json")
 
 TEXT_EXTS = {".csv", ".txt"}
 IMAGE_MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
@@ -267,7 +270,10 @@ def map_table_row(r):
         "카테고리": "",           # 가공(refine) 몫
         "비고": r.get("비고") or "",
         "결제수단": r.get("결제수단") or "",
-        "결제구분": "법인결제" if "법인" in payer_hint else "개인결제",
+        # 원본 표기에 근거가 있을 때만 채운다 — 없으면 빈 값(미확정, 스키마 확정)으로 두고
+        # 카드 구분 등록 목록(apply_card_registry)이나 중간 확인의 사용자 입력이 확정한다
+        "결제구분": ("법인결제" if "법인" in payer_hint
+                 else "개인결제" if "개인" in payer_hint else ""),
         # 해외결제면 AI 변환이 원본 통화·해외금액을 함께 내놓는다 — 국내 결제는 빈칸 유지
         "원거래통화": (r.get("원거래통화") or "").strip(),
         "원거래금액": foreign_amount if foreign_amount else "",
@@ -288,13 +294,43 @@ def map_receipt(r):
         "카테고리": "",
         "비고": "",
         "결제수단": r.get("결제수단") or "",
-        "결제구분": "개인결제",   # 영수증만으로 법인 여부 판단 근거 없음 — 기본값
+        "결제구분": "",   # 영수증만으로 명의 판단 근거 없음 — 빈 값(미확정), 기본값을 지어내지 않는다
         "원거래통화": "",
         "원거래금액": "",
         "source_type": "receipt",
         "collect_status": "확인됨" if r.get("확인됨") else "확인 필요",
         "구매항목": r.get("구매항목") or "",
     }
+
+
+def load_card_registry():
+    """카드 구분 등록 목록(결제수단명 → 개인결제/법인결제)을 읽는다 — 없거나 깨져 있으면 빈 목록."""
+    if not os.path.exists(CARD_REGISTRY_PATH):
+        return {}
+    try:
+        with open(CARD_REGISTRY_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {str(k): v for k, v in data.items()
+            if isinstance(data, dict) and v in ("개인결제", "법인결제")}
+
+
+def apply_card_registry(rows, registry):
+    """결제구분이 빈 행을 등록 목록의 결제수단 매칭(공백 무시)으로 채운다.
+
+    서식 매핑 규칙·원본 표기가 이미 채운 값은 건드리지 않는다 (collect.md 판단 순서:
+    매핑 규칙 → 원본 표기 → 등록 목록). 등록에도 없으면 빈 값(미확정) 그대로 둔다.
+    """
+    if not registry:
+        return
+    by_method = {_norm_for_match(name): division for name, division in registry.items()}
+    for r in rows:
+        if str(r.get("결제구분") or "").strip():
+            continue
+        division = by_method.get(_norm_for_match(r.get("결제수단")))
+        if division:
+            r["결제구분"] = division
 
 
 def load_manual_entries():
@@ -513,6 +549,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
 
     rows += [map_manual_entry(m) for m in manual_entries]  # 현금 등 직접 입력 (collect.md "하는 단계 7")
     rows = dedupe_receipt_matches(rows)  # 영수증-카드내역 같은 거래 병합 (이중 계상 방지)
+    apply_card_registry(rows, load_card_registry())  # 미확정 결제구분을 등록 목록으로 채운다
     for r in rows:  # 통화 표기 승격 안전망 — 원천(정형·AI 변환·영수증) 공통, 채워진 값은 유지
         promote_foreign(r)
     assign_ids(rows, month)

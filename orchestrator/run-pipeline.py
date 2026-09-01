@@ -641,9 +641,11 @@ def make_llm_stage(client, stage, month, on_progress=None):
 # ---------- 중간 확인 (사용자 입력 — 웹 실행 경로 한정, 단계 문서 "중간 확인" 확정) ----------
 
 # 확인 지점별 사용자 수정 허용 필드 — 그 시점 문제의 원인 필드만 연다
+# (가공의 결제구분: 미확정이면 카테고리 체계를 못 정하므로 여기서 사용자가 확정한다 —
+#  interface-spec.md 확정 로그 2026-09-01)
 CONFIRM_EDITABLE = {
     "collect": ["날짜", "금액", "결제처", "결제구분", "구매항목"],
-    "refine": ["결제처", "카테고리"],
+    "refine": ["결제처", "결제구분", "카테고리"],
     "verify": ["날짜", "금액", "카테고리"],
 }
 USER_CONFIRM_NOTE = "[사용자 확인]"
@@ -674,7 +676,8 @@ def _tid(row):
 
 
 def clean_resolutions(resolutions):
-    """관찰자(웹)가 보낸 사용자 입력을 방어적으로 거른다 — transaction_id + 문자열 필드만 통과."""
+    """관찰자(웹)가 보낸 사용자 입력을 방어적으로 거른다 — transaction_id + 문자열 필드 +
+    선택 필드 exclude(결산 제외, boolean)만 통과."""
     fixes = []
     for item in resolutions or []:
         if not isinstance(item, dict):
@@ -686,6 +689,7 @@ def clean_resolutions(resolutions):
         if not isinstance(fields, dict):
             fields = {}
         fixes.append({"transaction_id": tid,
+                      "exclude": bool(item.get("exclude")),
                       "fields": {str(k): str(v).strip() for k, v in fields.items()}})
     return fixes
 
@@ -713,17 +717,22 @@ def apply_stage_fixes(stage, fixes):
     """수집·가공 확인 반영 — 그 칸 result.csv를 사용자 입력으로 갱신한다 (이후 단계가 재처리).
 
     수정 없이 확인만 한 행도 반영으로 친다 (수집은 collect_status를 확인됨으로).
-    반영된 transaction_id 집합을 돌려준다."""
+    exclude 행은 값 수정 대신 result.csv에서 지워 이후 단계가 처리하지 않는다
+    (결산 제외 — interface-spec.md 확정 로그 2026-09-01).
+    (반영된 tid 집합, 제외된 tid 집합)을 돌려준다."""
     path = os.path.join(REPO_ROOT, stage, "result.csv")
     if not os.path.exists(path):
-        return set()
+        return set(), set()
     rows, fieldnames = read_csv_rows(path)
     by_tid = {_tid(r): r for r in rows}
     editable = CONFIRM_EDITABLE[stage]
-    applied = set()
+    applied, excluded = set(), set()
     for fix in fixes:
         row = by_tid.get(fix["transaction_id"])
         if row is None:
+            continue
+        if fix.get("exclude"):
+            excluded.add(fix["transaction_id"])
             continue
         for key, value in fix["fields"].items():
             if key in editable and key in row:
@@ -732,9 +741,11 @@ def apply_stage_fixes(stage, fixes):
             row["collect_status"] = "확인됨"
         _tag_user_confirmed(row)
         applied.add(fix["transaction_id"])
-    if applied:
+    if excluded:
+        rows = [r for r in rows if _tid(r) not in excluded]
+    if applied or excluded:
         write_csv_rows(path, rows, fieldnames)
-    return applied
+    return applied, excluded
 
 
 # 검증기별 "사용자 확인 대상" 판정값 — 1·2는 반려, 3은 확인 요청(부정 단정 없음)
@@ -776,24 +787,31 @@ def apply_verify_fixes(fixes):
     """검증 확인 반영 — refine 값을 갱신하고, 반려했던 검증 판정을 통과(사용자 확인)로 갱신한다.
 
     통합은 장부 값을 refine/result.csv에서 읽으므로 값 수정은 거기에 반영하고,
-    검증 CSV에는 같은 값 반영 + 판정 갱신으로 두 파일이 어긋나지 않게 한다."""
-    applied = set()
+    검증 CSV에는 같은 값 반영 + 판정 갱신으로 두 파일이 어긋나지 않게 한다.
+    exclude 행은 refine·검증 CSV 모두에서 지워 통합이 장부에 싣지 않는다 (결산 제외).
+    (반영된 tid 집합, 제외된 tid 집합)을 돌려준다."""
+    applied, excluded = set(), set()
     refine_path = LLM_STAGE_INPUTS["verify1"]
     if not os.path.exists(refine_path):
-        return applied
+        return applied, excluded
     rows, fieldnames = read_csv_rows(refine_path)
     by_tid = {_tid(r): r for r in rows}
     for fix in fixes:
         row = by_tid.get(fix["transaction_id"])
         if row is None:
             continue
+        if fix.get("exclude"):
+            excluded.add(fix["transaction_id"])
+            continue
         for key, value in fix["fields"].items():
             if key in CONFIRM_EDITABLE["verify"] and key in row:
                 row[key] = value
         _tag_user_confirmed(row)
         applied.add(fix["transaction_id"])
-    if not applied:
-        return applied
+    if not applied and not excluded:
+        return applied, excluded
+    if excluded:
+        rows = [r for r in rows if _tid(r) not in excluded]
     write_csv_rows(refine_path, rows, fieldnames)
 
     fixes_by_tid = {f["transaction_id"]: f for f in fixes}
@@ -803,6 +821,10 @@ def apply_verify_fixes(fixes):
             continue
         vrows, vfields = read_csv_rows(path)
         changed = False
+        if excluded:
+            kept = [r for r in vrows if _tid(r) not in excluded]
+            changed = len(kept) != len(vrows)
+            vrows = kept
         for row in vrows:
             if _tid(row) not in applied:
                 continue
@@ -817,23 +839,41 @@ def apply_verify_fixes(fixes):
             changed = True
         if changed:
             write_csv_rows(path, vrows, vfields)
-    return applied
+    return applied, excluded
 
 
-def drop_resolved_flags(envelope, stage, resolved):
-    """반영된 행의 flags를 단계 보고에서 걷어내고 counts를 갱신한다 (요약의 확인 필요 목록 정합)."""
+def stage_tid_by_row(stage):
+    """단계 result.csv의 행 번호(1부터) → transaction_id 맵 — flags의 row 대조용.
+
+    제외(exclude) 반영은 행을 지워 번호를 밀기 때문에, 반영 전에 만들어 둬야 한다."""
     path = os.path.join(REPO_ROOT, stage, "result.csv")
-    if not resolved or not os.path.exists(path):
-        return
+    if not os.path.exists(path):
+        return {}
     rows, _ = read_csv_rows(path)
-    tid_by_row = {i + 1: _tid(r) for i, r in enumerate(rows)}
-    kept = [f for f in envelope.get("flags", [])
-            if tid_by_row.get(f.get("row")) not in resolved]
-    removed = len(envelope.get("flags", [])) - len(kept)
-    if removed:
+    return {i + 1: _tid(r) for i, r in enumerate(rows)}
+
+
+def drop_resolved_flags(envelope, resolved, excluded, tid_by_row):
+    """반영·제외된 행의 flags를 단계 보고에서 걷어내고 counts를 갱신한다 (요약의 확인 필요
+    목록 정합). tid_by_row는 반영 전 스냅숏(stage_tid_by_row) — 반영된 행은 ok로 옮기고,
+    제외된 행은 total에서도 뺀다."""
+    if not resolved and not excluded:
+        return
+    kept, n_resolved, n_excluded = [], 0, 0
+    for f in envelope.get("flags", []):
+        tid = tid_by_row.get(f.get("row"))
+        if tid in resolved:
+            n_resolved += 1
+        elif tid in excluded:
+            n_excluded += 1
+        else:
+            kept.append(f)
+    if n_resolved or n_excluded:
         envelope["flags"] = kept
-        envelope["counts"]["flagged"] = max(0, envelope["counts"]["flagged"] - removed)
-        envelope["counts"]["ok"] += removed
+        counts = envelope["counts"]
+        counts["flagged"] = max(0, counts["flagged"] - n_resolved - n_excluded)
+        counts["ok"] += n_resolved
+        counts["total"] = max(0, counts["total"] - n_excluded)
         if envelope["status"] == "partial" and not kept:
             envelope["status"] = "ok"
 
@@ -872,17 +912,21 @@ def run_confirmation(run, on_confirm, point):
 
     fixes = clean_resolutions(resolutions)
     if point == "verify":
-        applied = apply_verify_fixes(fixes)
+        snapshots = {s: stage_tid_by_row(s) for s in VERIFY_FLAG_VALUES}
+        applied, excluded = apply_verify_fixes(fixes)
         for stage in ("verify1", "verify2", "verify3"):
             env = run.envelopes.get(stage)
             if env and env["status"] != "failed":
-                drop_resolved_flags(env, stage, applied)
+                drop_resolved_flags(env, applied, excluded, snapshots.get(stage, {}))
         counts = None
     else:
-        applied = apply_stage_fixes(point, fixes)
-        drop_resolved_flags(run.envelopes[point], point, applied)
+        snapshot = stage_tid_by_row(point)
+        applied, excluded = apply_stage_fixes(point, fixes)
+        drop_resolved_flags(run.envelopes[point], applied, excluded, snapshot)
         counts = run.envelopes[point]["counts"]
-    memo = f"사용자 확인 반영 {len(applied)}건 · 그대로 유지 {len(pending) - len(applied)}건"
+    memo = (f"사용자 확인 반영 {len(applied)}건"
+            + (f" · 결산 제외 {len(excluded)}건" if excluded else "")
+            + f" · 그대로 유지 {len(pending) - len(applied) - len(excluded)}건")
     run.log(point, "확인 반영", counts=counts, memo=memo)
     run.notes.append(f"중간 확인({STAGE_LABELS[point]}): {memo}")
 
@@ -1283,13 +1327,15 @@ def run_refix(month, resolutions, on_event=None):
                          + (f" (그 결산의 단계 보고: {prev_name}/)" if prev_name else ""))
 
         fixes = clean_resolutions(resolutions)
-        applied = apply_verify_fixes(fixes)
+        snapshots = {s: stage_tid_by_row(s) for s in VERIFY_FLAG_VALUES}
+        applied, excluded = apply_verify_fixes(fixes)
         for stage in VERIFY_FLAG_VALUES:
             env = run.envelopes.get(stage)
             if env and env["status"] != "failed":
-                drop_resolved_flags(env, stage, applied)
+                drop_resolved_flags(env, applied, excluded, snapshots.get(stage, {}))
                 run.archive(stage, env)  # 갱신된 counts·flags로 아카이브도 맞춘다
-        memo = f"재결산 — 사용자 확인 반영 {len(applied)}건"
+        memo = (f"재결산 — 사용자 확인 반영 {len(applied)}건"
+                + (f" · 결산 제외 {len(excluded)}건" if excluded else ""))
         run.log("verify", "확인 반영", memo=memo)
         run.notes.append(memo)
 

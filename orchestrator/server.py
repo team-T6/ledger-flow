@@ -11,6 +11,9 @@
 - POST /uploads/delete      : 업로드 파일 1건 삭제 / POST /uploads/clear : 전체 삭제
 - GET  /uploads/manual      : 현금 등 직접 입력 목록 (collect.md "하는 단계 7")
 - POST /uploads/manual      : 직접 입력 1건 추가 / POST /uploads/manual/delete : 1건 삭제
+- GET  /cards               : 카드 구분 등록 목록 (결제수단명 → 개인결제/법인결제)
+- POST /cards               : 카드 1건 등록/변경 {name, division} / POST /cards/delete : {name} 삭제
+                              수집이 결제구분 미확정 행을 이 목록으로 채운다 (uploads/card_registry.json)
 - POST /runs                : 파이프라인 실행 시작 (run-pipeline.py를 백그라운드 스레드로)
                               body.source가 "uploads"면 업로드 파일로 수집한다
                               body.fraud_check가 참이면 부정 사용 검증(부정 사용 감지)을 함께 실행한다
@@ -26,8 +29,9 @@
 - GET  /runs/current?since=N: 진행 이벤트 증분 조회 (화면이 1.5초 간격으로 폴링)
                               중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담고,
                               fraud_check로 이 실행의 부정 사용 감지 토글 값을 알린다 (화면 도중 접속 복원용)
-- POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
-                              (대기 상한 10분 — 초과하면 파이프라인이 전부 유지로 진행)
+- POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields, exclude?}]}
+                              (exclude가 참인 행은 결산에서 제외. 대기 상한 10분 —
+                              초과하면 파이프라인이 전부 유지로 진행)
 - GET  /refix/pending?month=YYYY-MM : 결산 완료 후 남은 확인 필요 건 목록 (재결산 화면용 —
                               중간 확인과 같은 payload 모양. 칸 산출물의 달이 아니면 보관본
                               archive/<월>/stages/에서 읽고, 그것도 없으면 409)
@@ -234,6 +238,58 @@ def delete_manual_entry(entry_id):
     entries = [e for e in load_manual_entries() if e.get("id") != entry_id]
     save_manual_entries(entries)
     return entries
+
+
+# 카드 구분 등록 목록 — 결제수단명 → 개인결제/법인결제. 수집이 결제구분 미확정(빈 값) 행을
+# 이 목록의 결제수단 매칭으로 채운다 (collect/collect_uploads.py apply_card_registry,
+# interface-spec.md 확정 로그 2026-09-01). 사용자 데이터라 uploads/ 아래(커밋 차단)에 둔다.
+CARD_REGISTRY_PATH = os.path.join(REPO_ROOT, "uploads", "card_registry.json")
+
+
+def load_card_registry():
+    if not os.path.exists(CARD_REGISTRY_PATH):
+        return {}
+    try:
+        with open(CARD_REGISTRY_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if v in ("개인결제", "법인결제")}
+
+
+def save_card_registry(registry):
+    os.makedirs(os.path.dirname(CARD_REGISTRY_PATH), exist_ok=True)
+    with open(CARD_REGISTRY_PATH, "w", encoding="utf-8") as f:
+        json.dump(registry, f, ensure_ascii=False)
+
+
+def card_registry_list():
+    """화면용 정렬 목록 — [{name, division}, ...]."""
+    registry = load_card_registry()
+    return [{"name": name, "division": registry[name]} for name in sorted(registry)]
+
+
+def upsert_card(payload):
+    """카드 1건 등록/변경 — 실패하면 ValueError(사용자에게 보여줄 사유)."""
+    name = str(payload.get("name") or "").strip()
+    division = payload.get("division")
+    if not name:
+        raise ValueError("카드(결제수단) 이름을 입력해 주세요")
+    if division not in ("개인결제", "법인결제"):
+        raise ValueError("구분은 개인결제/법인결제 중 하나여야 합니다")
+    registry = load_card_registry()
+    registry[name] = division
+    save_card_registry(registry)
+    return card_registry_list()
+
+
+def delete_card(name):
+    registry = load_card_registry()
+    registry.pop(str(name or "").strip(), None)
+    save_card_registry(registry)
+    return card_registry_list()
 
 
 def build_result_data(month=None):
@@ -695,6 +751,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"entries": load_manual_entries()})
             return
 
+        if path == "/cards":
+            self._send_json(200, {"cards": card_registry_list()})
+            return
+
         if path == "/drive/browse":
             parent_match = re.search(r"(?:^|&)parent_id=([\w-]+)(?:&|$)", query)
             try:
@@ -993,6 +1053,29 @@ class Handler(BaseHTTPRequestHandler):
                 entry_id = None
             entries = delete_manual_entry(entry_id) if entry_id is not None else load_manual_entries()
             self._send_json(200, {"entries": entries})
+            return
+
+        if self.path == "/cards":
+            try:
+                payload = json.loads(raw) if raw else {}
+            except json.JSONDecodeError:
+                self._send_json(400, {"error": "요청 본문이 JSON이 아닙니다"})
+                return
+            try:
+                cards = upsert_card(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            self._send_json(200, {"cards": cards})
+            return
+
+        if self.path == "/cards/delete":
+            try:
+                name = json.loads(raw).get("name") if raw else None
+            except json.JSONDecodeError:
+                name = None
+            cards = delete_card(name) if name else card_registry_list()
+            self._send_json(200, {"cards": cards})
             return
 
         if self.path == "/call-agent":

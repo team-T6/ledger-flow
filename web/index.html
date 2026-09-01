@@ -449,6 +449,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
   }
   .save-bar b { font-size: 14.5px; }
+  .save-bar .btn { font-size: 13px; padding: 9px 18px; }
 
   /* 결산 완료 안내 — 진행 화면에서 결과로 넘어갈지 묻는다 (자동 전환 없음) */
   .run-done {
@@ -593,9 +594,10 @@
   .file-list .del:hover { color: var(--red); background: rgba(166, 58, 46, 0.1); }
   .file-list .del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .manual-entry { margin-top: 16px; text-align: center; }
-  #manual-toggle { display: inline-flex; align-items: center; gap: 6px; }
-  #manual-toggle .chevron { transition: transform 0.15s ease; }
-  #manual-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+  #manual-toggle, #cards-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  #manual-toggle .chevron, #cards-toggle .chevron { transition: transform 0.15s ease; }
+  #manual-toggle[aria-expanded="true"] .chevron,
+  #cards-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
   .manual-form {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
@@ -621,6 +623,12 @@
   #manual-note { grid-area: note; }
   #manual-add { grid-area: add; width: 100%; }
   .manual-form-hint { grid-column: 1 / -1; margin-top: 0; text-align: center; }
+  /* 카드 구분 등록 폼 — 수기 입력 폼의 상자·입력 스타일을 빌리되 한 줄 flex로 편다 */
+  .cards-form { display: flex; flex-wrap: wrap; align-items: center; }
+  .cards-form[hidden] { display: none; }
+  .cards-form input[type="text"] { flex: 1 1 220px; width: auto; }
+  .cards-form select, .cards-form .btn { flex: 0 0 auto; width: auto; }
+  .cards-form .manual-form-hint { flex-basis: 100%; }
   @media (max-width: 640px) {
     .manual-form {
       grid-template-columns: 1fr 1fr;
@@ -709,6 +717,11 @@
   .cp-table select { width: auto; max-width: 200px; }
   .cp-table input:focus, .cp-table select:focus { outline: none; border-color: var(--accent); }
   .cp-table input[type="checkbox"] { accent-color: var(--accent); }
+  /* 결산 제외 행 — 값 입력을 잠그고 흐리게, 제외 열만 또렷이 남긴다 */
+  .cp-table td.cp-excl-cell { text-align: center; }
+  .cp-table tr.cp-excluded td { opacity: 0.45; }
+  .cp-table tr.cp-excluded td.cp-excl-cell { opacity: 1; }
+  .cp-table tr.cp-excluded td:nth-child(2) { text-decoration: line-through; }
   /* 날짜 칸 — 표기는 텍스트(YYYY-MM-DD)로 고정하고, 달력 버튼이 숨긴 date 입력의 피커를 연다 */
   .cp-date { position: relative; display: inline-flex; align-items: center; gap: 4px; }
   .cp-date input[type="text"] { width: 104px; }
@@ -1077,6 +1090,23 @@
       </div>
       <ul class="file-list" id="manual-list"></ul>
     </div>
+    <!-- 카드 구분 등록 — 결제수단명 → 개인/법인 (uploads/card_registry.json). 원본만으로
+         명의를 알 수 없는 거래의 결제구분을 수집이 이 목록으로 채운다 -->
+    <div class="manual-entry" id="card-registry">
+      <button class="btn btn-quiet inert" id="cards-toggle" type="button" aria-expanded="false">카드 구분 등록
+        <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="manual-form cards-form" id="cards-form" hidden>
+        <input type="text" id="card-name" placeholder="카드(결제수단) 이름 — 예: 국민카드">
+        <select id="card-division" aria-label="구분">
+          <option value="개인결제">개인결제</option>
+          <option value="법인결제">법인결제</option>
+        </select>
+        <button class="btn" id="card-add" type="button">등록</button>
+        <span class="hint manual-form-hint">등록해 두면 영수증처럼 원본만으로 개인/법인을 알 수 없는 거래의 결제구분을 이 목록의 결제수단 이름으로 채웁니다</span>
+      </div>
+      <ul class="file-list" id="card-list"></ul>
+    </div>
     <label class="fraud-toggle" id="fraud-toggle-wrap">
       <input type="checkbox" id="fraud-toggle">
       <span><strong>법인카드 부정 사용 감지</strong> — 검증에 부정 사용 점검을 추가합니다
@@ -1138,7 +1168,7 @@
       <div class="cp-actions">
         <button class="btn" id="confirm-apply">반영하고 계속</button>
         <button class="btn btn-ghost" id="confirm-skip">그대로 계속</button>
-        <span class="hint">체크한 행만 확인 완료로 반영됩니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
+        <span class="hint">체크한 행만 확인 완료로 반영되고, "제외"를 체크한 행은 결산에서 빠집니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
       </div>
     </div>
 
@@ -1164,6 +1194,7 @@
 
     <div class="save-bar hidden" id="save-bar">
       <div><b>이 달 장부가 결산 서고에 꽂혔습니다</b><div class="hint">서고에서 언제든 다시 펼쳐 볼 수 있습니다</div></div>
+      <button class="btn btn-ghost" id="save-open-shelf" type="button">서고에서 펼쳐 보기 →</button>
     </div>
 
     <div class="report-block">
@@ -1227,7 +1258,7 @@
       <!-- 확인 필요 탭 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
       <div class="rtab-panel" data-panel="fix">
         <div class="confirm-panel hidden" id="refix-panel">
-          <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>
+          <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</span></div>
           <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
           <div class="cp-actions">
             <button class="btn" id="refix-apply" type="button">재결산</button>
@@ -2543,17 +2574,35 @@
       wrap.appendChild(btn);
       return { el: wrap, ctl: text };
     }
+    if (field === "결제구분") {
+      // 자유 텍스트 대신 선택지 — 미확정(빈 값)은 스키마의 공식 상태 (interface-spec 확정)
+      var dsel = document.createElement("select");
+      [["", "미확정"], ["개인결제", "개인결제"], ["법인결제", "법인결제"]].forEach(function (pair) {
+        var opt = document.createElement("option");
+        opt.value = pair[0];
+        opt.textContent = pair[1];
+        dsel.appendChild(opt);
+      });
+      dsel.value = (val === "개인결제" || val === "법인결제") ? val : "";
+      return { el: dsel, ctl: dsel };
+    }
     if (field === "카테고리") {
       var sel = document.createElement("select");
-      var names = confirmCatNames(d["결제구분"]);
-      if (val && names.indexOf(val) < 0) names = [val].concat(names);
-      names.forEach(function (name) {
-        var opt = document.createElement("option");
-        opt.value = opt.textContent = name;
-        sel.appendChild(opt);
-      });
-      sel.value = val || names[0] || "";
-      return { el: sel, ctl: sel };
+      function rebuild(division) {
+        var current = sel.options.length ? sel.value : val;
+        var names = confirmCatNames(division);
+        if (current && names.indexOf(current) < 0) names = [current].concat(names);
+        sel.innerHTML = "";
+        names.forEach(function (name) {
+          var opt = document.createElement("option");
+          opt.value = opt.textContent = name;
+          sel.appendChild(opt);
+        });
+        sel.value = current || names[0] || "";
+      }
+      rebuild(d["결제구분"]);
+      // 같은 행의 결제구분을 고르면 fillConfirmTable이 이걸 불러 목록을 그 구분 체계로 좁힌다
+      return { el: sel, ctl: sel, setDivision: rebuild };
     }
     var input = document.createElement("input");
     input.type = "text";
@@ -2574,7 +2623,7 @@
     checkAll.title = "전체 선택";
     thCheck.appendChild(checkAll);
     head.appendChild(thCheck);
-    ["거래"].concat(editable).concat(["사유"]).forEach(function (h) {
+    ["거래"].concat(editable).concat(["사유", "제외"]).forEach(function (h) {
       var th = document.createElement("th");
       th.textContent = h;
       head.appendChild(th);
@@ -2587,7 +2636,7 @@
       checkAll.indeterminate = on > 0 && on < checks.length;
     }
     checkAll.addEventListener("change", function () {
-      table.querySelectorAll(".cp-check").forEach(function (c) { c.checked = checkAll.checked; });
+      table.querySelectorAll(".cp-check").forEach(function (c) { if (!c.disabled) c.checked = checkAll.checked; });
       checkAll.indeterminate = false;
     });
     rows.forEach(function (row) {
@@ -2605,9 +2654,11 @@
       info.textContent = [d.결제처 || row.transaction_id, d.날짜, d.금액]
         .filter(function (v) { return v; }).join(" · ");
       tr.appendChild(info);
+      var widgets = {};
       editable.forEach(function (field) {
         var td = document.createElement("td");
         var widget = confirmFieldInput(field, d);
+        widgets[field] = widget;
         widget.ctl.dataset.field = field;
         function markEdited() { check.checked = true; syncCheckAll(); }
         widget.ctl.addEventListener("input", markEdited);
@@ -2615,16 +2666,44 @@
         td.appendChild(widget.el);
         tr.appendChild(td);
       });
+      // 결제구분을 고르면 카테고리 선택지를 그 구분(개인/법인) 체계로 좁힌다
+      if (widgets["결제구분"] && widgets["카테고리"] && widgets["카테고리"].setDivision) {
+        widgets["결제구분"].ctl.addEventListener("change", function () {
+          widgets["카테고리"].setDivision(widgets["결제구분"].ctl.value);
+        });
+      }
       var reason = document.createElement("td");
       reason.className = "reason";
       reason.textContent = row.reason || "";
       tr.appendChild(reason);
+      // 결산 제외 — 체크하면 값 수정 대신 이 행을 결산에서 뺀다 (입력은 잠근다)
+      var tdExcl = document.createElement("td");
+      tdExcl.className = "cp-excl-cell";
+      var excl = document.createElement("input");
+      excl.type = "checkbox";
+      excl.className = "cp-exclude";
+      excl.title = "이 거래를 결산에서 제외";
+      excl.setAttribute("aria-label", "결산에서 제외");
+      excl.addEventListener("change", function () {
+        tr.classList.toggle("cp-excluded", excl.checked);
+        tr.querySelectorAll("[data-field]").forEach(function (inp) { inp.disabled = excl.checked; });
+        check.checked = false;
+        check.disabled = excl.checked;
+        syncCheckAll();
+      });
+      tdExcl.appendChild(excl);
+      tr.appendChild(tdExcl);
       table.appendChild(tr);
     });
   }
   function collectResolutions(table) {
     var resolutions = [];
     table.querySelectorAll("tr[data-tid]").forEach(function (tr) {
+      var excl = tr.querySelector(".cp-exclude");
+      if (excl && excl.checked) {
+        resolutions.push({ transaction_id: tr.dataset.tid, exclude: true, fields: {} });
+        return;
+      }
       if (!tr.querySelector(".cp-check").checked) return;
       var fields = {};
       tr.querySelectorAll("[data-field]").forEach(function (inp) {
@@ -3000,6 +3079,35 @@
     updateRunButton();
   }
 
+  /* ---- 카드 구분 등록 (결제수단명 → 개인/법인 — uploads/card_registry.json) ----
+     원본만으로 명의를 알 수 없는 거래의 결제구분을 수집이 이 목록으로 채운다 */
+  var cardListEl = document.getElementById("card-list");
+
+  function renderCardList(cards) {
+    cardListEl.innerHTML = "";
+    (cards || []).forEach(function (c) {
+      var li = document.createElement("li");
+      var label = document.createElement("span");
+      label.textContent = c.name + " — " + c.division;
+      var del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.innerHTML = DEL_ICO;
+      del.title = "삭제";
+      del.setAttribute("aria-label", c.name + " 삭제");
+      del.addEventListener("click", function () {
+        apiJson("cards/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: c.name })
+        }).then(function (res) { renderCardList(res.data.cards || []); });
+      });
+      li.appendChild(label);
+      li.appendChild(del);
+      cardListEl.appendChild(li);
+    });
+  }
+
   function uploadFiles(fileArray) {
     var files = Array.prototype.slice.call(fileArray);
     if (!files.length) return;
@@ -3038,7 +3146,7 @@
   };
 
   function loadVault() {
-    apiJson("months").then(function (res) {
+    return apiJson("months").then(function (res) {
       renderVault((res.data && res.data.months) || [], true);
       // 보관월 상세가 열려 있으면 서버 목록 기준으로 다시 그린다 (새로고침 직후 데모 데이터 보정)
       var mk = appHashMonth();
@@ -3321,6 +3429,19 @@
     showPane("result-sec");
   });
 
+  /* 저장 안내 → 보관본 상세 — 결과 화면 고정(jobPhase)을 풀어야 이 달을 다시 열어도 서고 화면으로 간다 */
+  document.getElementById("save-open-shelf").addEventListener("click", function () {
+    var key = lastResult && lastResult.month;
+    var entry = key && findArchived(key);
+    if (!entry) {
+      showToast("서고 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요");
+      if (REAL) loadVault();
+      return;
+    }
+    jobPhase = null;
+    showMonthDetail(entry, archivedList);
+  });
+
   /* ---- 전월 비교 — 개요 증감 + "전월 비교" 탭(추이·건수) ---- */
   function renderCompare(monthKey, cur) {
     var deltaEl = document.getElementById("r-expense-delta");
@@ -3438,13 +3559,14 @@
   }
 
   /* 데모 — 사용자 입력을 거래 목록에 반영한다. 확인된 건은 집계 제외였다가 합산에 들어오므로
-     새로 합산될 지출 합(added)을 함께 돌려준다 */
+     새로 합산될 지출 합(added)을 함께 돌려준다. exclude 행은 목록에서 지운다(결산 제외) */
   function applyDemoFixes(rows, resolutions) {
-    var applied = 0, added = 0;
+    var applied = 0, added = 0, excludedIdx = [];
     resolutions.forEach(function (fix) {
       var idx = parseInt(String(fix.transaction_id).replace("demo-", ""), 10);
       var row = (rows || [])[idx];
       if (!row || !row.flagged) return;
+      if (fix.exclude) { excludedIdx.push(idx); return; }
       if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
       if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
       var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
@@ -3454,7 +3576,9 @@
       added += row["지출"] || 0;
       applied++;
     });
-    return { applied: applied, added: added };
+    // 제외 행은 인덱스가 밀리지 않게 뒤에서부터 지운다
+    excludedIdx.sort(function (a, b) { return b - a; }).forEach(function (i) { rows.splice(i, 1); });
+    return { applied: applied, added: added, excluded: excludedIdx.length };
   }
   function demoRemainingFlags(rows) {
     return rows.filter(function (r) { return r.flagged; })
@@ -3510,22 +3634,25 @@
     var data = lastResultData;
     setTimeout(function () {
       var r = applyDemoFixes(data.rows, resolutions);
-      if (r.applied) {
+      if (r.applied || r.excluded) {
         var agg = demoAggregate(data.rows);
         data.by_category = agg.by_category;
         data.by_payer = agg.by_payer;
         data.top_spenders = agg.top_spenders;
         data.total_expense = (data.total_expense || 0) + r.added;
         data.net = (data.total_income || 0) - data.total_expense;
-        data.flagged_count = Math.max(0, (data.flagged_count || 0) - r.applied);
+        data.tx_count = Math.max(0, (data.tx_count || 0) - r.excluded);
+        data.flagged_count = Math.max(0, (data.flagged_count || 0) - r.applied - r.excluded);
         data.flags = demoRemainingFlags(data.rows);
         data.summaryText = demoSummaryText({ month: data.month, tx_count: data.tx_count,
                                              flagged_count: data.flagged_count });
       }
       setRefixBusy(false);
       renderResult(data);
-      showToast(r.applied ? "재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건이 장부에 반영되었습니다"
-                          : "반영된 행이 없습니다");
+      showToast(r.applied || r.excluded
+        ? "재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건 반영"
+          + (r.excluded ? " · 결산 제외 " + r.excluded + "건" : "")
+        : "반영된 행이 없습니다");
     }, REDUCED ? 0 : 1200);
   }
 
@@ -3561,7 +3688,7 @@
     el.className = "confirm-panel";
     el.innerHTML =
       '<div class="cp-head"><b class="rfx-title">확인 필요 거래 정리</b>' +
-      '<span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실립니다</span></div>' +
+      '<span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</span></div>' +
       '<div class="cp-scroll"><table class="cp-table"></table></div>' +
       '<div class="cp-actions"><button class="btn rfx-apply" type="button">재결산</button>' +
       '<span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span></div>';
@@ -3584,7 +3711,7 @@
         Object.keys(d).forEach(function (k) { entry[k] = d[k]; });
       }
       var r = applyDemoFixes(entry.rows || [], resolutions);
-      if (!r.applied) {
+      if (!r.applied && !r.excluded) {
         setPanelBusy(panel, false);
         showToast("반영된 행이 없습니다");
         return;
@@ -3594,12 +3721,14 @@
       entry.by_payer = agg.by_payer;
       entry.top_spenders = agg.top_spenders;
       entry.total_expense = (entry.total_expense || 0) + r.added;
+      entry.tx_count = Math.max(0, (entry.tx_count || 0) - r.excluded);
       entry.flagged_count = entry.rows.filter(function (x) { return x.flagged; }).length;
       entry.flags = demoRemainingFlags(entry.rows);
       entry.incomplete = [];
       renderVault(archivedList, vaultReal);
       showMonthDetail(entry, archivedList);
-      showToast("재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건이 장부에 반영되었습니다");
+      showToast("재결산이 끝났습니다 — 사용자 확인 " + r.applied + "건 반영"
+        + (r.excluded ? " · 결산 제외 " + r.excluded + "건" : ""));
     }, REDUCED ? 0 : 1200);
   }
 
@@ -3938,7 +4067,7 @@
     // 복원을 끝낸 뒤 보관함을 그려야 해시 복원(openMonth)이 실행 상태를 보고 진행 화면을 연다.
     // 월별 보관함 — 서버 보관 목록(archive/<월>/summary.json)으로 다시 그린다.
     // 보관 없는 달도 자유 선택 가능 (수집은 "대상 월 위주로 모으되 거르지 않는다"가 확정 규칙)
-    apiJson("runs/current?since=0").then(function (res) {
+    var vaultReady = apiJson("runs/current?since=0").then(function (res) {
       var d = res.ok ? res.data : null;
       if (d && d.running && d.month) attachToRun(d.month, !!d.fraud_check);
     }).catch(function () {}).then(loadVault);
@@ -4206,6 +4335,34 @@
     });
     renderManualList([]);
 
+    // 카드 구분 등록 — 토글을 실동작으로 바꾸고 서버 목록을 불러온다
+    var cardsToggle = document.getElementById("cards-toggle");
+    var cardsToggleReal = cardsToggle.cloneNode(true);
+    cardsToggleReal.classList.remove("inert");
+    cardsToggle.parentNode.replaceChild(cardsToggleReal, cardsToggle);
+    var cardsForm = document.getElementById("cards-form");
+    cardsToggleReal.addEventListener("click", function () {
+      cardsForm.hidden = !cardsForm.hidden;
+      cardsToggleReal.setAttribute("aria-expanded", String(!cardsForm.hidden));
+    });
+    document.getElementById("card-add").addEventListener("click", function () {
+      var name = document.getElementById("card-name").value.trim();
+      var division = document.getElementById("card-division").value;
+      if (!name) { showToast("카드(결제수단) 이름을 입력해 주세요"); return; }
+      apiJson("cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, division: division })
+      }).then(function (res) {
+        if (!res.ok) { showToast(res.data.error || "등록에 실패했습니다"); return; }
+        renderCardList(res.data.cards || []);
+        document.getElementById("card-name").value = "";
+      });
+    });
+    apiJson("cards").then(function (res) {
+      if (res.ok) renderCardList(res.data.cards || []);
+    }).catch(function () {});
+
     var dropzone = document.getElementById("dropzone");
     dropzone.addEventListener("dragover", function (e) { e.preventDefault(); });
     dropzone.addEventListener("drop", function (e) {
@@ -4218,9 +4375,15 @@
 
     // 분류 기준 화면이 서버 감지보다 먼저 데모로 그려졌으면 정본을 다시 불러온다
     if (!viewCategories.classList.contains("hidden")) loadCategories();
+
+    return vaultReady;
   }
 
-  probeServer().then(function (ok) { if (ok) enableRealMode(); });
+  /* 첫 화면은 실제 모드·보관 목록을 확인한 뒤 정한다 — 데모 목록으로 먼저 라우팅하면
+     이미 결산이 끝난 달(보관본 있음)이 "이번 달"로 잡혀 자료 넣기 화면에 고정된다 */
+  var booted = probeServer()
+    .then(function (ok) { return ok ? enableRealMode() : null; })
+    .catch(function () {});
 
   /* 스크롤 등장 */
   if (!REDUCED && "IntersectionObserver" in window) {
@@ -4238,7 +4401,7 @@
     document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
   }
 
-  route(); // 첫 진입 — #app으로 새로고침해도 월말결산하기 뷰가 유지된다
+  booted.then(function () { route(); }); // 첫 진입 — #app으로 새로고침해도 월말결산하기 뷰가 유지된다
 })();
 </script>
 </body>

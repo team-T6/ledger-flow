@@ -3,6 +3,10 @@
 파일 유형별 처리 (단계 문서 collect.md "판단 기준"의 AI 판단/일반 코드 구분 그대로):
 - zip: 압축을 풀어 안의 파일을 개별 원천으로 편입 — 일반 코드 (collect.md "하는 단계 0")
 - 하나카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 normalize 재사용 — 일반 코드
+- 신한법인카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 parse_shinhan 재사용 — 일반 코드.
+  이 서식은 항상 법인카드라 결제구분·승인+취소 부호를 매핑 규칙이 확정해서 매긴다 —
+  낯선 서식 경로(AI 판단)로 새면 결제구분을 "법인" 문자열 유무로만 추정해 개인결제로 잘못
+  기본값이 매겨지고, 승인+취소 쌍도 매핑 규칙 없이 AI가 임의로 처리하게 된다
 - 낯선 서식 CSV/TXT/XLSX/PDF(텍스트 레이어 있는 문서만): call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
   한 호출로 묶어 변환 — collect.md "하는 단계 1" 확정, 호출당 고정 비용 절감)
 - 영수증·결제 문자 캡처 이미지 (PNG/JPG): call-agent.py call_agent_with_image — AI 판단
@@ -45,6 +49,12 @@ ZIP_MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 압축 해제 총 용량 상한(50MB, 
 HANA_HEADER = {"이용일자", "이용가맹점", "이용금액", "할부기간", "회차",
                "원금", "수수료", "이용혜택", "혜택금액"}
 
+# 신한법인카드 정형 CSV 판별용 필수 헤더 (collect.py parse_shinhan이 읽는 컬럼) — 이 서식은
+# 항상 법인카드이므로 여기서 걸러야 map_table_row의 "법인" 문자열 추정(개인결제 기본값)을
+# 타지 않고 parse_shinhan이 결제구분=법인결제·승인+취소 부호 규칙을 그대로 적용한다
+SHINHAN_HEADER = {"승인일시", "가맹점명", "승인금액", "통화", "해외이용금액",
+                  "승인번호", "사용자", "취소여부"}
+
 AI_WORKERS = 3  # 이미지 병렬 호출 수 (개별 실패는 flags로 흡수 — 낯선 서식은 일괄 1호출)
 
 
@@ -75,6 +85,14 @@ def is_hana_csv(text):
         line = line.strip()
         if line:
             return HANA_HEADER <= {col.strip() for col in line.split(",")}
+    return False
+
+
+def is_shinhan_csv(text):
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return SHINHAN_HEADER <= {col.strip() for col in line.split(",")}
     return False
 
 
@@ -450,13 +468,15 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
 
         notify()
 
-        hana_paths, image_paths, table_paths = [], [], []
+        hana_paths, shinhan_paths, image_paths, table_paths = [], [], [], []
         for path in paths:
             ext = os.path.splitext(path)[1].lower()
             if ext in IMAGE_MEDIA_TYPES:
                 image_paths.append(path)
             elif ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
                 hana_paths.append(path)
+            elif ext in TEXT_EXTS and is_shinhan_csv(read_text_any(path)):
+                shinhan_paths.append(path)
             else:
                 table_paths.append(path)
 
@@ -465,6 +485,11 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
             by_month = collect.normalize(hana_paths, default_month=month)
             rows += [r for month_rows in by_month.values() for r in month_rows]
             done_files += len(hana_paths)
+            notify()
+
+        if shinhan_paths:
+            rows += collect.parse_shinhan(shinhan_paths)  # transaction_id는 assign_ids가 이어서 부여
+            done_files += len(shinhan_paths)
             notify()
 
         if table_paths:
@@ -500,7 +525,8 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         for r in rows:
             writer.writerow(r)
 
-    stats = {"card": len(hana_paths) + len(table_paths), "image": len(image_paths), "manual": len(manual_entries)}
+    stats = {"card": len(hana_paths) + len(shinhan_paths) + len(table_paths),
+             "image": len(image_paths), "manual": len(manual_entries)}
     return {"out_path": out_path if rows else None, "rows": rows,
             "envelope": build_envelope(rows, stats, errors)}
 

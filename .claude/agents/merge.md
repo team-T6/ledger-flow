@@ -43,7 +43,7 @@ model: sonnet
 
 # 판단 기준
 
-- 어떤 구성으로 실어야 읽히는지 (엑셀 장부 컬럼, PDF 리포트 목차) — interface-spec.md "산출물 양식" 초안 기준
+- 어떤 구성으로 실어야 읽히는지 (엑셀 장부 컬럼, PDF 리포트 목차) — interface-spec.md "산출물 양식" 확정 기준
 - 애매하면 categories.md(카테고리 체계, 확정)를 참고한다
 
 # 도구 제한

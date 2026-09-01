@@ -622,6 +622,8 @@
   #manual-method { grid-area: method; }
   #manual-note { grid-area: note; }
   #manual-add { grid-area: add; width: 100%; }
+  /* 폼 안 버튼은 입력 칸과 높이를 맞춘다 — 기본 .btn(15px/13px)은 폼에 비해 너무 크다 */
+  .manual-form .btn, .cards-form .btn { font-size: 13.5px; font-weight: 600; padding: 8px 16px; }
   .manual-form-hint { grid-column: 1 / -1; margin-top: 0; text-align: center; }
   /* 카드 구분 등록 폼 — 수기 입력 폼의 상자·입력 스타일을 빌리되 한 줄 flex로 편다 */
   .cards-form { display: flex; flex-wrap: wrap; align-items: center; }

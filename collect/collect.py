@@ -1,6 +1,7 @@
 """collect 단계 정규화 스크립트.
 
-sample_data/hana_card/*.csv(카드사 원본, 월별 1파일)를 읽어 표준 거래 표로 정규화하고,
+sample_data/hana_card/*.csv(개인카드)·sample_data/shinhan_corp/*.csv(법인카드) 원본을
+카드사별 컬럼 매핑 규칙으로 표준 거래 표로 정규화하고,
 collect/result.csv 하나로 합쳐 만든다 (칸 폴더 공용 관례 result.*, AGENTS.md §2).
 컬럼은 interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로 13개 —
 금액은 부호로 지출/수익 구분(지출 음수·수익 양수), 결제자 대신 결제구분(개인결제/법인결제),
@@ -29,6 +30,7 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(BASE_DIR, "..", "sample_data", "hana_card")
+SHINHAN_DIR = os.path.join(BASE_DIR, "..", "sample_data", "shinhan_corp")
 
 # interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로
 OUT_FIELDS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
@@ -120,6 +122,45 @@ def normalize(files, default_month=None):
     return by_month
 
 
+def parse_shinhan(files):
+    """신한법인카드 승인내역 서식 매핑 (규칙 있는 서식 — 단계 문서 "AI 판단 / 일반 코드 구분").
+
+    승인+취소 쌍은 걸러내지 않고 둘 다 넘긴다 — 취소 행은 환불(양수 금액)로 기입하고
+    비고에 표기한다 (범위 밖 데이터의 반려는 검증 몫, run() docstring과 같은 원칙).
+    통화가 KRW가 아니면 원거래통화·원거래금액으로 매핑한다 (해외결제 승격 규칙 확정).
+    부정 사용 검증(F2 심야)이 쓸 수 있게 결제 시각을 비고에 남긴다.
+    """
+    rows = []
+    for path in files:
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                date, time_part = row["승인일시"].split(" ")
+                amount = int(row["승인금액"])
+                cancelled = row["취소여부"].strip().upper() == "Y"
+                currency = row["통화"].strip()
+                is_foreign = bool(currency) and currency != "KRW"
+                memo_bits = [f"결제시각 {time_part[:5]}", f"승인번호 {row['승인번호']}",
+                             f"사용자 {row['사용자']}"]
+                if cancelled:
+                    memo_bits.append("승인취소")
+                rows.append({
+                    "transaction_id": "",  # run()에서 하나카드와 같은 체계로 이어 부여
+                    "날짜": date,
+                    "금액": amount if cancelled else -amount,
+                    "결제처": row["가맹점명"],
+                    "카테고리": "",
+                    "비고": ", ".join(memo_bits),
+                    "결제수단": "신한법인카드",
+                    "결제구분": "법인결제",
+                    "원거래통화": currency if is_foreign else "",
+                    "원거래금액": row["해외이용금액"].strip() if is_foreign else "",
+                    "source_type": "card_excel",
+                    "collect_status": "확인됨",
+                    "구매항목": "",
+                })
+    return rows
+
+
 def assign_status_and_items(rows, seed=7):
     """확인됨 건(핵심 값을 실제로 읽은 거래)에 구매항목을 채운다 (collect.md "하는 단계" 1).
 
@@ -180,12 +221,28 @@ def run(month=None):
     걸러내는 책임은 지지 않는다 — 범위 밖 데이터의 반려는 기간·금액 검증 몫 (interface-spec.md §실행 파라미터).
     """
     files = sorted(glob.glob(os.path.join(SRC_DIR, "*.csv")))
+    shinhan_files = sorted(glob.glob(os.path.join(SHINHAN_DIR, "*.csv")))
     if month:
         files = [p for p in files if os.path.basename(p).startswith(month)]
-    if not files:
+        shinhan_files = [p for p in shinhan_files if os.path.basename(p).startswith(month)]
+    if not files and not shinhan_files:
         return {"out_path": None, "rows": [], "envelope": build_envelope([])}
 
     by_month = normalize(files)
+    shinhan_rows = parse_shinhan(shinhan_files)
+    if shinhan_rows:
+        # transaction_id는 하나카드 부여분과 같은 tx_YYMMDD_NN 체계를 이어 쓴다 (중복 방지)
+        day_seq = {}
+        for month_rows in by_month.values():
+            for r in month_rows:
+                m = re.match(r"tx_(\d{6})_(\d+)", r["transaction_id"])
+                if m:
+                    day_seq[m.group(1)] = max(day_seq.get(m.group(1), 0), int(m.group(2)))
+        for r in shinhan_rows:
+            yymmdd = r["날짜"][2:].replace("-", "")
+            day_seq[yymmdd] = day_seq.get(yymmdd, 0) + 1
+            r["transaction_id"] = f"tx_{yymmdd}_{day_seq[yymmdd]:02d}"
+            by_month.setdefault(r["날짜"][:7].replace("-", ""), []).append(r)
     out_path, rows = write_output(by_month)
     return {"out_path": out_path, "rows": rows, "envelope": build_envelope(rows)}
 

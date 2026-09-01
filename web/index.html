@@ -722,19 +722,13 @@
   .cp-table tr.cp-excluded td { opacity: 0.45; }
   .cp-table tr.cp-excluded td.cp-excl-cell { opacity: 1; }
   .cp-table tr.cp-excluded td:nth-child(2) { text-decoration: line-through; }
-  /* 날짜 칸 — 표기는 텍스트(YYYY-MM-DD)로 고정하고, 달력 버튼이 숨긴 date 입력의 피커를 연다 */
+  /* 날짜 칸 — 표기는 텍스트(YYYY-MM-DD)로 고정하고, 입력 박스 클릭 시 숨긴 date 입력의 피커를 연다 */
   .cp-date { position: relative; display: inline-flex; align-items: center; gap: 4px; }
-  .cp-date input[type="text"] { width: 104px; }
+  .cp-date input[type="text"] { width: 104px; cursor: pointer; }
   .cp-date .cp-date-pick {
     position: absolute; left: 0; bottom: 0; width: 0; height: 0;
     opacity: 0; pointer-events: none; border: 0; padding: 0;
   }
-  .cp-date .cp-date-btn {
-    font: inherit; display: inline-flex; align-items: center; cursor: pointer;
-    padding: 7px 8px; background: var(--bg); color: var(--muted);
-    border: 1px solid var(--line); border-radius: var(--radius);
-  }
-  .cp-date .cp-date-btn:hover { border-color: var(--accent); color: var(--accent); }
   .cp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .cp-actions .hint { font-size: 12.5px; color: var(--muted); }
 
@@ -1071,11 +1065,8 @@
       </button>
       <div class="manual-form" id="manual-form" hidden>
         <span class="cp-date">
-          <input type="text" id="manual-date" placeholder="YYYY-MM-DD" aria-label="날짜">
+          <input type="text" id="manual-date" placeholder="YYYY-MM-DD" aria-label="날짜" title="클릭하면 달력에서 선택할 수 있습니다">
           <input type="date" id="manual-date-pick" class="cp-date-pick" tabindex="-1" aria-hidden="true">
-          <button type="button" class="cp-date-btn" id="manual-date-btn" title="달력에서 선택">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          </button>
         </span>
         <input type="text" id="manual-merchant" placeholder="결제처">
         <input type="number" id="manual-amount" placeholder="지출 금액(원)" min="1" step="1">
@@ -2538,27 +2529,24 @@
      드롭다운, 나머지는 텍스트. {el: 붙일 요소, ctl: 값·이벤트를 담당하는 입력}을 돌려준다 */
   function confirmFieldInput(field, d) {
     var val = d[field] || "";
-    if (field === "날짜" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    if (field === "날짜") {
       // 네이티브 date 입력은 로캘에 따라 월/일/년으로 보여서, 표기는 텍스트(YYYY-MM-DD)로
-      // 고정하고 달력은 숨긴 date 입력의 피커만 빌려 쓴다
+      // 고정하고 달력은 숨긴 date 입력의 피커만 빌려 쓴다 — 값이 비어 있어도 클릭하면 고를 수 있다
+      var validVal = /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : "";
       var wrap = document.createElement("span");
       wrap.className = "cp-date";
       var text = document.createElement("input");
       text.type = "text";
       text.placeholder = "YYYY-MM-DD";
-      text.value = val;
+      text.title = "클릭하면 달력에서 선택할 수 있습니다";
+      text.value = validVal || val;
       var pick = document.createElement("input");
       pick.type = "date";
       pick.className = "cp-date-pick";
       pick.tabIndex = -1;
-      pick.value = val;
+      pick.value = validVal;
       pick.setAttribute("aria-hidden", "true");
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "cp-date-btn";
-      btn.title = "달력에서 선택";
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
-      btn.addEventListener("click", function () {
+      text.addEventListener("click", function () {
         try { pick.showPicker(); } catch (e) { pick.click(); }
       });
       pick.addEventListener("change", function () {
@@ -2571,7 +2559,6 @@
       });
       wrap.appendChild(text);
       wrap.appendChild(pick);
-      wrap.appendChild(btn);
       return { el: wrap, ctl: text };
     }
     if (field === "결제구분") {
@@ -4296,7 +4283,7 @@
     (function () {
       var text = document.getElementById("manual-date");
       var pick = document.getElementById("manual-date-pick");
-      document.getElementById("manual-date-btn").addEventListener("click", function () {
+      text.addEventListener("click", function () {
         try { pick.showPicker(); } catch (e) { pick.click(); }
       });
       pick.addEventListener("change", function () {

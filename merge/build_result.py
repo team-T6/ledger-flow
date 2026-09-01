@@ -163,6 +163,8 @@ def load_transactions(fraud_check=False):
 
 def split_transactions(transactions):
     """verify1·verify2 중 하나라도 반려면 확인 필요 목록으로 뺀다 (재시도 없음).
+    verify2 `대상외`(대상 월 아님) 행은 이 함수 호출 전에 이미 걸러져 들어오지 않는다
+    (run_merge에서 제거 — 2026-09-01 확정 로그).
     부정 사용 검증(있으면)의 확인 요청 건은 **장부·집계에서 빼지 않고** 확인 필요 목록에만
     함께 싣는다 — 데이터는 정상이고 업무 사용 여부만 확인 대상이라서다
     (단계 문서 merge.md · interface-spec.md 부정 사용 검증 확정 로그). 그래서 이 건은
@@ -953,6 +955,9 @@ def run(month=None, fraud_check=False):
         return {"ok_rows": [], "flagged_rows": [], "summary": summarize([]), "envelope": failed_envelope}
 
     transactions, incomplete = load_transactions(fraud_check=fraud_check)
+    # 대상 월 아닌 행(verify2 '대상외')은 장부·확인 필요 목록 어디에도 싣지 않는다
+    # — 파이프라인 실행에선 지휘가 이 단계 전에 이미 뺐지만, merge 단독 실행 대비 여기서도 제외
+    transactions = [r for r in transactions if r.get("verify2_result") != "대상외"]
     total = len(transactions)
     if total == 0:
         empty_envelope = build_envelope(0, [], [], message="확인 대상 없음")

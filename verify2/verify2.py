@@ -6,8 +6,9 @@
 함께 돌려준다.
 
 판단 불가 행(날짜 형식 깨짐·범위 미정 통화)은 문서 "오류·예외 처리"대로 임의 통과
-처리하지 않고 반려 값에 "판단 불가" 사유를 남겨 envelope에는 "확인 필요"로 싣는다
-(행 결과 어휘는 interface-spec 확정 그대로 통과/반려 두 가지 유지).
+처리하지 않고 반려 값에 "판단 불가" 사유를 남겨 envelope에는 "확인 필요"로 싣는다.
+대상 월이 아닌 행(날짜는 읽혔으나 다른 달)은 `대상외`로 표시해 지휘가 확인 없이
+제외한다 (2026-09-01 확정 로그). 행 결과 어휘: 통과 / 반려 / 대상외.
 
 사용법: python3 verify2/verify2.py <YYYY-MM>  (입력: refine/result.csv)
 """
@@ -34,15 +35,21 @@ REQUIRED_COLUMNS = ("transaction_id", "날짜", "금액", "결제수단")
 
 
 def _check_row(row, month):
-    """한 행에 세 기준을 순서대로 적용해 (반려 사유 목록, 판단 불가 여부)를 돌려준다."""
+    """한 행에 세 기준을 순서대로 적용해 (반려 사유 목록, 판단 불가 여부, 대상외 여부)를 돌려준다.
+
+    대상외 = 날짜가 읽혔고 대상 월이 아닌 경우 — 수집 범위 밖 데이터라 지휘가 확인 없이 제외한다
+    (verify2.md 판단 기준 1). 날짜 형식 오류는 대상외가 아니라 반려(판단 불가).
+    """
     reasons = []
     undecidable = False
+    out_of_scope = False
 
     # 1. 대상 월
     date = (row.get("날짜") or "").strip()
     if re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         if not date.startswith(month):
             reasons.append(f"대상 월 아님 (날짜: {date})")
+            out_of_scope = True
     else:
         reasons.append("판단 불가 (형식 오류)")
         undecidable = True
@@ -78,7 +85,7 @@ def _check_row(row, month):
                 reasons.append(
                     f"환산 환율 이상 (약 {rate:,.0f}원/{currency} — 상식 범위 {low:,} - {high:,} 밖)")
 
-    return reasons, undecidable
+    return reasons, undecidable, out_of_scope
 
 
 def _write_csv(fieldnames, rows):
@@ -125,9 +132,14 @@ def run_verify2(input_text: str, month: str) -> dict:
     out_fieldnames = fieldnames + ["verify2_result", "verify2_reason"]
     out_rows, flags, ok_count = [], [], 0
     for i, row in enumerate(rows, start=1):
-        reasons, undecidable = _check_row(row, month)
+        reasons, undecidable, out_of_scope = _check_row(row, month)
         out_row = dict(row)
-        if reasons:
+        if out_of_scope:
+            # 대상 월 아님 — 지휘가 확인 없이 제외 (verify2.md 판단 기준 1)
+            out_row["verify2_result"] = "대상외"
+            out_row["verify2_reason"] = "; ".join(reasons)
+            flags.append({"row": i, "type": "대상외", "reason": out_row["verify2_reason"]})
+        elif reasons:
             out_row["verify2_result"] = "반려"
             out_row["verify2_reason"] = "; ".join(reasons)
             flags.append({"row": i, "type": "확인 필요" if undecidable else "반려",

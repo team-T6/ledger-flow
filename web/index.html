@@ -2647,6 +2647,13 @@
     return { el: input, ctl: input };
   }
 
+  /* 확인 지점(수집·가공·검증)·재결산 공통 수정 필드 — 서버 CONFIRM_EDITABLE_BASE와 같은 규칙.
+     결제구분은 그 행이 미확정일 때만 추가한다 (confirmEditableFor) */
+  var CONFIRM_FIELDS = ["날짜", "금액", "결제처", "카테고리", "구매항목", "비고"];
+  function confirmEditableFor(division) {
+    return (division || "").trim() ? CONFIRM_FIELDS : CONFIRM_FIELDS.concat(["결제구분"]);
+  }
+
   function fillConfirmTable(table, rows, editable) {
     ensureConfirmCats();
     editable = editable || [];
@@ -3051,10 +3058,11 @@
       var item = {
         transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
         data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
-                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": division, "비고": r["비고"] || "",
+                "결제처": r["결제처"], "카테고리": r["카테고리"], "구매항목": r["구매항목"] || "",
+                "결제구분": division, "비고": r["비고"] || "",
                 "source_file": "", "source_type": r["결제수단"] || "" }
       };
-      if (!division.trim()) item.editable = ["날짜", "금액", "카테고리", "비고", "결제구분"];
+      if (!division.trim()) item.editable = confirmEditableFor("");
       pending.push(item);
     });
     return pending;
@@ -3068,7 +3076,7 @@
     document.getElementById("confirm-title").textContent =
       label + " 단계에서 확인이 필요한 거래 " + rows.length + "건";
     document.getElementById("confirm-sub").textContent = DEMO_CONFIRM_DESC[stage] || "";
-    fillConfirmTable(document.getElementById("confirm-table"), rows, ["날짜", "금액", "카테고리", "비고"]);
+    fillConfirmTable(document.getElementById("confirm-table"), rows, CONFIRM_FIELDS);
     demoConfirmPanel.classList.remove("hidden");
     demoConfirmPanel.scrollIntoView({ behavior: "smooth", block: "center" });
     function finish(note) {
@@ -3767,14 +3775,15 @@
       var item = {
         transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
         data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
-                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": division, "비고": r["비고"] || "",
+                "결제처": r["결제처"], "카테고리": r["카테고리"], "구매항목": r["구매항목"] || "",
+                "결제구분": division, "비고": r["비고"] || "",
                 "source_file": r["source_file"] || "", "source_type": r["source_type"] || "" }
       };
-      // 미확정 행만 결제구분을 연다 (서버 verify_editable_for와 같은 규칙)
-      if (!division.trim()) item.editable = ["날짜", "금액", "카테고리", "비고", "결제구분"];
+      // 미확정 행만 결제구분을 연다 (서버 confirm_editable_for와 같은 규칙)
+      if (!division.trim()) item.editable = confirmEditableFor("");
       pending.push(item);
     });
-    return { editable: ["날짜", "금액", "카테고리", "비고"], rows: pending };
+    return { editable: CONFIRM_FIELDS, rows: pending };
   }
 
   /* 데모 — 사용자 입력을 거래 목록에 반영한다. 확인된 건은 집계 제외였다가 합산에 들어오므로
@@ -3786,10 +3795,10 @@
       var row = (rows || [])[idx];
       if (!row || !row.flagged) return;
       if (fix.exclude) { excludedIdx.push(idx); return; }
-      if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
-      if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
+      ["날짜", "결제처", "카테고리", "구매항목", "결제구분"].forEach(function (f) {
+        if (fix.fields[f]) row[f] = fix.fields[f];
+      });
       if (fix.fields["비고"] != null) row["비고"] = fix.fields["비고"];
-      if (fix.fields["결제구분"]) row["결제구분"] = fix.fields["결제구분"];
       var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
       if (!isNaN(amt) && amt < 0) row["지출"] = -amt;
       row.flagged = false;

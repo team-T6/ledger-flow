@@ -26,6 +26,7 @@ SAMPLE_INPUT = os.path.join(BASE_DIR, "input-sample.md")
 DEFAULT_OUTPUT = os.path.join(BASE_DIR, "result.csv")
 
 CONFIRM_NEEDED = "확인 필요"
+USER_CONFIRM_MARK = "[사용자 확인]"  # 수집 확인 지점에서 사용자가 확정한 행 표식 (지휘가 비고에 남김)
 
 # "PG사명/가맹점" 꼴로 붙는 알려진 PG사 표기 — 뒤의 실가맹점명으로 정규화한다
 PG_PREFIXES = ("NHN KCP", "KG이니시스", "토스페이먼츠", "나이스페이먼츠", "다날")
@@ -148,9 +149,21 @@ def run_refine_hybrid(input_text, categories_text, role_instruction, call_model)
             "message": "수집 대상 없음",
         }}
 
+    # 수집 확인 지점에서 사용자가 확정한 행([사용자 확인] 비고)은 그가 채운 결제처·카테고리를
+    # 다시 손대지 않는다 — 값이 비어 있을 때만 아래 정규화·분류로 채운다
+    # (interface-spec.md 확정 로그 2026-09-01 — 확인 지점 공통 수정 규칙)
+    user_locked = set()
+    for row in rows:
+        if USER_CONFIRM_MARK in (row.get("비고") or ""):
+            cat = (row.get("카테고리") or "").strip()
+            if (row.get("결제처") or "").strip() and cat and cat != CONFIRM_NEEDED:
+                user_locked.add(row.get("transaction_id", ""))
+
     needs_classification = []
     resolved_ids = set()
     for row in rows:
+        if row.get("transaction_id", "") in user_locked:
+            continue  # 사용자가 결제처·카테고리를 확정한 행 — 그대로 둔다
         merchant, resolved = normalize_merchant(row.get("결제처", ""))
         if resolved:
             row["결제처"] = merchant

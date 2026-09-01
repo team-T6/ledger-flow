@@ -85,7 +85,7 @@ LLM_STAGE_REFERENCES = {
 
 STATUS_VOCAB = {"ok", "empty", "partial", "failed"}
 # interface-spec "단계 결과 보고" flags[].type 어휘 고정
-FLAG_TYPE_VOCAB = {"확인 필요", "반려", "확인 요청", "오류", "미완"}
+FLAG_TYPE_VOCAB = {"확인 필요", "반려", "대상외", "확인 요청", "오류", "미완"}
 
 # interface-spec.md "단계 결과 보고" 규격 — 판단형 단계 응답에 구조화 출력으로 강제한다
 ENVELOPE_SCHEMA = {
@@ -640,35 +640,32 @@ def make_llm_stage(client, stage, month, on_progress=None):
 
 # ---------- 중간 확인 (사용자 입력 — 웹 실행 경로 한정, 단계 문서 "중간 확인" 확정) ----------
 
-# 확인 지점별 사용자 수정 허용 필드 — 그 시점 문제의 원인 필드만 연다
-# (가공의 결제구분: 미확정이면 카테고리 체계를 못 정하므로 여기서 사용자가 확정한다 —
-#  interface-spec.md 확정 로그 2026-09-01)
-CONFIRM_EDITABLE = {
-    "collect": ["날짜", "금액", "결제처", "결제구분", "구매항목"],
-    "refine": ["결제처", "결제구분", "카테고리"],
-    "verify": ["날짜", "금액", "카테고리"],
-}
+# 확인 지점(수집·가공·검증)·재결산 공통 수정 허용 필드 — 전 지점 동일 규칙
+# (interface-spec.md 확정 로그 2026-09-01):
+#  - 값 필드는 아래 목록 공통. `카테고리`를 수집 확인에서 고쳐도 가공이 [사용자 확인] 행은
+#    다시 손대지 않는다 (refine.py).
+#  - `결제구분`은 그 행이 미확정(빈 값)일 때만 드롭다운으로 연다 — 이미 정해진 명의는
+#    어느 지점에서도 뒤집지 않는다 (명의 판정은 가공 단계 책임). confirm_editable_for 참고.
+#  - `비고`: 부정 사용 소명("결제 적게 돼 재결제") 등 판단 근거를 남길 수 있게.
+CONFIRM_EDITABLE_BASE = ["날짜", "금액", "결제처", "카테고리", "구매항목", "비고"]
 USER_CONFIRM_NOTE = "[사용자 확인]"
 
 
-def verify_editable_for(data):
-    """검증·재결산 확인 지점에서 이 행이 열어 줄 수정 필드 — 공통 필드에 더해,
-    그 행의 `결제구분`이 미확정(빈 값)일 때만 `결제구분`을 연다 (카테고리 체계가
-    구분에 따라 갈리므로). 이미 정해진 명의는 잠근다 (interface-spec.md 확정 로그
-    2026-09-01 — 명의 판정은 가공 단계 책임, 검증 결과를 명의 변경으로 뒤집지 않는다).
-    """
-    fields = list(CONFIRM_EDITABLE["verify"])
+def confirm_editable_for(data):
+    """이 행이 확인 지점에서 열어 줄 수정 필드 — 공통 값 필드에 더해, 그 행의
+    `결제구분`이 미확정(빈 값)일 때만 `결제구분`을 연다 (전 지점 공통 규칙)."""
+    fields = list(CONFIRM_EDITABLE_BASE)
     if not str((data or {}).get("결제구분", "")).strip():
         fields.append("결제구분")
     return fields
 
 
-def _verify_fix_allows(row, key):
-    """검증 확인 반영에서 이 키를 이 행에 쓸 수 있는가 — 공통 허용 필드이거나,
-    `결제구분`이면서 그 행이 아직 미확정일 때만 (서버 최종 방어)."""
+def _confirm_fix_allows(row, key):
+    """확인 반영에서 이 키를 이 행에 쓸 수 있는가 — 공통 값 필드이거나, `결제구분`이면서
+    그 행이 아직 미확정일 때만 (서버 최종 방어, 전 지점 공통)."""
     if key not in row:
         return False
-    if key in CONFIRM_EDITABLE["verify"]:
+    if key in CONFIRM_EDITABLE_BASE:
         return True
     return key == "결제구분" and not str(row.get("결제구분", "")).strip()
 
@@ -717,7 +714,8 @@ def clean_resolutions(resolutions):
 
 
 def build_stage_pending(stage, envelope):
-    """수집·가공 확인 지점 — 단계 보고 flags의 행 데이터를 그 칸 result.csv에서 읽어 만든다."""
+    """수집·가공 확인 지점 — 단계 보고 flags의 행 데이터를 그 칸 result.csv에서 읽어 만든다.
+    미확정 결제구분 행에는 행별 editable을 실어 결제구분 드롭다운을 연다 (전 지점 공통)."""
     path = os.path.join(REPO_ROOT, stage, "result.csv")
     if not os.path.exists(path):
         return []
@@ -730,8 +728,13 @@ def build_stage_pending(stage, envelope):
         row = rows[idx - 1]
         if not _tid(row):
             continue
-        pending.append({"transaction_id": _tid(row), "type": flag["type"],
-                        "reason": flag["reason"], "data": dict(row)})
+        data = dict(row)
+        item = {"transaction_id": _tid(row), "type": flag["type"],
+                "reason": flag["reason"], "data": data}
+        row_editable = confirm_editable_for(data)
+        if row_editable != CONFIRM_EDITABLE_BASE:
+            item["editable"] = row_editable
+        pending.append(item)
     return pending
 
 
@@ -747,7 +750,6 @@ def apply_stage_fixes(stage, fixes):
         return set(), set()
     rows, fieldnames = read_csv_rows(path)
     by_tid = {_tid(r): r for r in rows}
-    editable = CONFIRM_EDITABLE[stage]
     applied, excluded = set(), set()
     for fix in fixes:
         row = by_tid.get(fix["transaction_id"])
@@ -757,7 +759,7 @@ def apply_stage_fixes(stage, fixes):
             excluded.add(fix["transaction_id"])
             continue
         for key, value in fix["fields"].items():
-            if key in editable and key in row:
+            if _confirm_fix_allows(row, key):
                 row[key] = value
         if stage == "collect" and "collect_status" in row:
             row["collect_status"] = "확인됨"
@@ -802,8 +804,8 @@ def build_verify_pending(refine_path=None, verify_paths=None):
     for entry in pending.values():
         entry["reason"] = " / ".join(entry.pop("reasons"))
         # 미확정 결제구분 행만 행별 editable로 결제구분을 연다 (없으면 payload 공통값 사용)
-        row_editable = verify_editable_for(entry["data"])
-        if row_editable != CONFIRM_EDITABLE["verify"]:
+        row_editable = confirm_editable_for(entry["data"])
+        if row_editable != CONFIRM_EDITABLE_BASE:
             entry["editable"] = row_editable
         result.append(entry)
     return result
@@ -830,7 +832,7 @@ def apply_verify_fixes(fixes):
             excluded.add(fix["transaction_id"])
             continue
         for key, value in fix["fields"].items():
-            if _verify_fix_allows(row, key):
+            if _confirm_fix_allows(row, key):
                 row[key] = value
         _tag_user_confirmed(row)
         applied.add(fix["transaction_id"])
@@ -855,7 +857,7 @@ def apply_verify_fixes(fixes):
             if _tid(row) not in applied:
                 continue
             for key, value in fixes_by_tid[_tid(row)]["fields"].items():
-                if _verify_fix_allows(row, key):
+                if _confirm_fix_allows(row, key):
                     row[key] = value
             _tag_user_confirmed(row)
             # 부정 사용 검증의 확인 요청은 "업무 사용 확정" 입력이 같은 방식으로 통과 처리한다
@@ -904,6 +906,51 @@ def drop_resolved_flags(envelope, resolved, excluded, tid_by_row):
             envelope["status"] = "ok"
 
 
+def _shrink_total(env, n):
+    """단계 보고 counts.total을 n만큼 줄이고 ok를 다시 맞춘다 (행이 빠진 뒤 정합용)."""
+    if not env or env["status"] == "failed" or not n:
+        return
+    c = env["counts"]
+    c["total"] = max(0, c["total"] - n)
+    c["ok"] = max(0, c["total"] - c["flagged"])
+
+
+def auto_exclude_out_of_scope(run):
+    """대상 월 아닌 행(verify2 판정 `대상외`)을 검증 확인 지점 전에 결산에서 뺀다.
+
+    수집 범위 밖 데이터(다른 달 거래)라 사용자가 판단할 게 없으므로 확인 없이 제외한다 —
+    refine/result.csv와 각 검증 result.csv에서 행을 지우고 관련 단계 보고 counts를 갱신한다
+    (interface-spec.md 확정 로그 2026-09-01). CLI·웹 실행 모두에서 돈다.
+    """
+    v2_path = os.path.join(REPO_ROOT, "verify2", "result.csv")
+    if not os.path.exists(v2_path):
+        return
+    v2_rows, _ = read_csv_rows(v2_path)
+    tids = {_tid(r) for r in v2_rows if r.get("verify2_result") == "대상외" and _tid(r)}
+    if not tids:
+        return
+    # 검증 2 보고에서 대상외 flag를 걷어내고 counts 갱신 (파일 제거 전에 — 행 번호가 유효해야 한다)
+    v2_env = run.envelopes.get("verify2")
+    if v2_env and v2_env["status"] != "failed":
+        drop_resolved_flags(v2_env, set(), tids, stage_tid_by_row("verify2"))
+    # 파일에서 실제 제거
+    removed = 0
+    for rel in ("refine/result.csv", "verify1/result.csv", "verify2/result.csv", "verify3/result.csv"):
+        path = os.path.join(REPO_ROOT, rel)
+        if not os.path.exists(path):
+            continue
+        rows, fieldnames = read_csv_rows(path)
+        kept = [r for r in rows if _tid(r) not in tids]
+        if len(kept) != len(rows):
+            write_csv_rows(path, kept, fieldnames)
+            removed = max(removed, len(rows) - len(kept))
+    # 나머지 단계 보고 total 정합 — refine·verify1·verify3 flags엔 대상외가 없어 위에서 안 줄었다
+    for stage in ("refine", "verify1", "verify3"):
+        _shrink_total(run.envelopes.get(stage), removed)
+    run.log("verify", "자동 제외", memo=f"대상 월 아님 {len(tids)}건 (수집 범위 밖) — 확인 없이 제외")
+    run.notes.append(f"대상 월 아님 {len(tids)}건 — 검증 전 자동 제외 (수집 범위 밖 데이터)")
+
+
 def run_confirmation(run, on_confirm, point):
     """확인 지점 1곳 실행 — 대기(확인 대기) → 사용자 입력 반영(확인 반영) → 보고 갱신.
 
@@ -923,7 +970,7 @@ def run_confirmation(run, on_confirm, point):
         return
 
     run.log(point, "확인 대기", memo=f"확인 필요 {len(pending)}건 — 사용자 입력 대기")
-    payload = {"stage": point, "editable": CONFIRM_EDITABLE[point],
+    payload = {"stage": point, "editable": CONFIRM_EDITABLE_BASE,
                "month": run.month, "rows": pending}
     try:
         resolutions = on_confirm(payload)
@@ -944,6 +991,9 @@ def run_confirmation(run, on_confirm, point):
             env = run.envelopes.get(stage)
             if env and env["status"] != "failed":
                 drop_resolved_flags(env, applied, excluded, snapshots.get(stage, {}))
+        # 제외된 행은 refine/result.csv에서도 빠졌으니 가공 보고 total도 함께 줄인다
+        # (안 그러면 통합 직전 "거래 행 유실 의심" 오탐)
+        _shrink_total(run.envelopes.get("refine"), len(excluded))
         counts = None
     else:
         snapshot = stage_tid_by_row(point)
@@ -1228,6 +1278,9 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
     for env in verify_envs.values():
         if env["status"] != "failed" and env["counts"]["total"] != refine_env["counts"]["total"]:
             run.warnings.append(f"거래 행 유실 의심 — 가공 {refine_env['counts']['total']}건 → {STAGE_LABELS[env['stage']]} {env['counts']['total']}건")
+
+    # 대상 월 아닌 행(verify2 '대상외')을 확인 지점 전에 자동 제외 — 장부·확인 필요 목록에 안 남긴다
+    auto_exclude_out_of_scope(run)
 
     # 중간 확인 3 — 검증 반려 행을 통합 직전에 사용자에게 (수정·확인하면 장부에 실린다)
     run_confirmation(run, on_confirm, "verify")

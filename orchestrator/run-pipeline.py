@@ -12,11 +12,11 @@
   (refine/refine.py의 run_refine_hybrid · verify1/call-agent.py의 run_verify1)가 코드로
   처리하고, 애매한 것만 make_call_model()로 만든 콜백을 통해 Claude에 묻는다
   (run_refine_hybrid · run_verify1_hybrid)
-- 기간·금액/부정 사용 검증: 담당자 실행 코드가 아직 없어 그 단계 문서를 시스템 프롬프트로
-  하는 API 단발 호출로 처리한다 (make_llm_stage). 응답을 구조화 출력(JSON 스키마)으로
-  강제해 산출물 CSV(artifact_csv)와 결과 보고(report)를 함께 받고, 산출물은 지휘가 그
-  칸의 result.csv로 써 준다 — 형식 위반은 호출 실패 (임시 — 담당자 실행 코드가 생기면
-  하이브리드 방식으로 대체)
+- 기간·금액 검증: 세 기준 모두 결정론적 대조라 담당자 실행 코드(verify2/verify2.py의
+  run_verify2)가 AI 없이 코드로 판정한다 (단계 문서 "AI 판단 / 일반 코드 구분")
+- 부정 사용 검증: 하이브리드 — 주말/시각·키워드 대조·집계·임계·스코어링은 담당자 실행
+  코드(verify3/verify3.py의 run_verify3)가 코드로 판정하고, F3 문맥·F4 개인성 소비
+  추론만 make_call_model 콜백으로 Claude에 묻는다
 - 인증 폴백: .env에 ANTHROPIC_API_KEY가 없으면 하이브리드·단발 호출 모두 같은 프롬프트를
   claude CLI 헤드리스(claude -p, CLI 로그인 세션)로 실행한다. JSON-only 지시 + 코드
   재검증으로 형식을 지킨다
@@ -452,12 +452,14 @@ def make_call_model(client, model):
     """
     def call_model(system_prompt, user_message, schema):
         if client is not None:
-            response = client.messages.create(
+            # max_tokens가 커서 비스트리밍 호출은 SDK 10분 제한 가드에 걸린다 — 스트리밍 필수
+            with client.messages.stream(
                 model=model, max_tokens=MAX_TOKENS,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
                 output_config={"format": {"type": "json_schema", "schema": schema}},
-            )
+            ) as stream:
+                response = stream.get_final_message()
             return next(b.text for b in response.content if b.type == "text")
         cli_message = (
             f"{user_message}\n\n"
@@ -505,6 +507,35 @@ def run_verify1_hybrid(client, month, on_progress=None):
         call_model = make_call_model(client, STAGE_MODELS["verify1"])
         result = mod.run_verify1(input_csv, call_model=call_model)
         return result["report"]
+    return call
+
+
+def run_verify2_code(month):
+    """기간·금액 검증(verify2) 실행 — 세 기준 모두 결정론적 대조라 AI 없이 담당자 실행
+    코드로 판정한다 (verify2.md "AI 판단 / 일반 코드 구분" 확정, verify2/verify2.py)."""
+    def call():
+        input_path = LLM_STAGE_INPUTS["verify2"]
+        if not os.path.exists(input_path):
+            return empty_envelope("verify2", f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
+        with open(input_path, encoding="utf-8-sig") as f:
+            input_csv = f.read()
+        mod = load_module("verify2_stage", os.path.join(REPO_ROOT, "verify2", "verify2.py"))
+        return mod.run_verify2(input_csv, month)["report"]
+    return call
+
+
+def run_verify3_hybrid(client, month):
+    """부정 사용 검증(verify3) 하이브리드 실행 — 결정론 기준·스코어링은 코드로, F3 문맥·F4
+    추론만 AI에 묻는다 (verify3.md "AI 판단 / 일반 코드 구분" 확정, verify3/verify3.py)."""
+    def call():
+        input_path = LLM_STAGE_INPUTS["verify3"]
+        if not os.path.exists(input_path):
+            return empty_envelope("verify3", f"입력 파일 없음: {os.path.relpath(input_path, REPO_ROOT)}")
+        with open(input_path, encoding="utf-8-sig") as f:
+            input_csv = f.read()
+        mod = load_module("verify3_stage_hybrid", os.path.join(REPO_ROOT, "verify3", "verify3.py"))
+        call_model = make_call_model(client, STAGE_MODELS["verify3"])
+        return mod.run_verify3(input_csv, call_model=call_model)["report"]
     return call
 
 
@@ -1097,16 +1128,18 @@ def _run_stages(run, month, upload_dir=None, on_confirm=None, fraud_check=False)
     run_confirmation(run, on_confirm, "refine")
 
     # 3. 검증 스테이지 병렬 — 기본 1·2, 부정 사용 감지 토글을 켠 실행은 3도 함께
-    # verify1은 하이브리드(명칭 대조는 코드, 추정만 AI) — verify2·3은 아직 담당자 실행
-    # 코드가 없어 API 단발 호출(임시, run-pipeline.py 상단 docstring 참고)
+    # verify1·3은 하이브리드(결정론 판정은 코드, 애매한 것만 AI), verify2는 전부 코드
+    # (각 단계 문서 "AI 판단 / 일반 코드 구분" 확정)
     verify_stages = ["verify1", "verify2"] + (["verify3"] if fraud_check else [])
     with ThreadPoolExecutor(max_workers=len(verify_stages)) as pool:
         futures = {}
         for stage in verify_stages:
             if stage == "verify1":
                 fn = run_verify1_hybrid(client, month, on_progress=run.progress)
+            elif stage == "verify2":
+                fn = run_verify2_code(month)
             else:
-                fn = make_llm_stage(client, stage, month, on_progress=run.progress)
+                fn = run_verify3_hybrid(client, month)
             futures[stage] = pool.submit(run.call_stage, stage, fn)
         verify_envs = {stage: f.result() for stage, f in futures.items()}
     v1_env, v2_env = verify_envs["verify1"], verify_envs["verify2"]

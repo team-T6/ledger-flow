@@ -740,6 +740,8 @@
     border: 1px solid var(--line); border-radius: var(--radius);
     background: var(--bg); color: var(--ink);
   }
+  /* 비고는 소명 메모라 넓게 */
+  .cp-table input[data-field="비고"] { width: 240px; }
   .cp-table select { width: auto; max-width: 200px; }
   .cp-table input:focus, .cp-table select:focus { outline: none; border-color: var(--accent); }
   .cp-table input[type="checkbox"] { accent-color: var(--accent); }
@@ -2975,6 +2977,8 @@
     { s: "가공", ev: "prog", d: 35, t: 42, note: '"Notion Labs" 해외결제 표기 정리 중', wait: 600 },
     { s: "가공", ev: "prog", d: 42, t: 42, wait: 350 },
     { s: "가공", ev: "done", meta: "42건", log: "가공 | 완료 | 42건 중 40건 분류, 2건은 확인 필요" },
+    // 중간 확인 — 가공이 가맹점·분류를 확정하지 못한 건을 사용자에게 물어보고 계속한다
+    { s: "가공", ev: "confirm", stage: "refine", wait: 300 },
     // 검증 둘은 병렬 실행 — 행 하나로 묶고(둘 다 끝나야 완료), 로그에서 분류/금액을 나눠 보여준다
     { s: "검증", ev: "start", log: "분류 검증 | 시작 | 카테고리가 분류 기준에 맞는지 확인 중 (금액 검증과 동시 진행)", wait: 120 },
     { s: "검증", ev: "vprog", v: "verify1", d: 0, t: 42, wait: 100 },
@@ -2989,6 +2993,8 @@
     { s: "검증", ev: "log", log: "분류 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요", wait: 200 },
     { s: "검증", ev: "vprog", v: "verify2", d: 42, t: 42, wait: 250 },
     { s: "검증", ev: "done", meta: "42건 ×2", log: "금액 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요" },
+    // 중간 확인 — 검증에서 반려·확인 요청된 건을 통합 전에 사용자에게 물어본다
+    { s: "검증", ev: "confirm", stage: "verify", wait: 300 },
     { s: "통합", ev: "start", log: "통합 | 시작 | 장부·리포트 만드는 중", wait: 700 },
     { s: "통합", ev: "done", meta: "42건", log: "통합 | 완료 | 결산 리포트(PDF)·회계장부(엑셀) 생성" }
   ];
@@ -3021,10 +3027,73 @@
     return out;
   }
 
+  /* ---------- 데모 중간 확인 — 파이프라인을 멈추고 사용자 입력을 받는다 ----------
+     실제 모드의 confirm 패널(#confirm-panel)을 그대로 빌려, 그 단계에서 확인이 필요한
+     거래를 사용자가 고치거나 그대로 둘 수 있게 한다. 입력은 이번 실행의 작업 사본
+     (demoRunRows)에 반영돼 이어지는 집계·결과 화면에 그대로 나타난다 */
+  var demoRunRows = null;
+  var demoConfirmPanel = document.getElementById("confirm-panel");
+  var DEMO_CONFIRM_LABEL = { refine: "가공", verify: "검증" };
+  var DEMO_CONFIRM_DESC = {
+    refine: "가맹점·카테고리를 확정하지 못한 거래입니다 — 값을 바로잡거나 그대로 둘 수 있습니다",
+    verify: "검증에서 반려되거나 확인 요청된 거래입니다 — 수정해 확인하면 장부에 실리고, 그대로 두면 확인 필요로 남습니다"
+  };
+  function demoConfirmStageMatch(stage, row) {
+    if (!row.flagged) return false;
+    if (stage === "refine") return /verify1|가맹점|분류 근거/.test(row.reason || "");
+    return true; // verify 단계 — 앞 단계에서 정리되지 않고 남은 확인 필요 건 전부
+  }
+  function demoConfirmPending(stage) {
+    var pending = [];
+    (demoRunRows || []).forEach(function (r, idx) {
+      if (!demoConfirmStageMatch(stage, r)) return;
+      var division = r["결제구분"] || "";
+      var item = {
+        transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
+        data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
+                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": division, "비고": r["비고"] || "",
+                "source_file": "", "source_type": r["결제수단"] || "" }
+      };
+      if (!division.trim()) item.editable = ["날짜", "금액", "카테고리", "비고", "결제구분"];
+      pending.push(item);
+    });
+    return pending;
+  }
+  function demoRunConfirm(stage, resume) {
+    var rows = demoConfirmPending(stage);
+    var log = document.getElementById("runlog");
+    if (!rows.length) { resume(); return; }
+    var label = DEMO_CONFIRM_LABEL[stage] || stage;
+    logLine(log, label, "확인 대기 | 확인이 필요한 거래 " + rows.length + "건 — 입력을 기다립니다", false);
+    document.getElementById("confirm-title").textContent =
+      label + " 단계에서 확인이 필요한 거래 " + rows.length + "건";
+    document.getElementById("confirm-sub").textContent = DEMO_CONFIRM_DESC[stage] || "";
+    fillConfirmTable(document.getElementById("confirm-table"), rows, ["날짜", "금액", "카테고리", "비고"]);
+    demoConfirmPanel.classList.remove("hidden");
+    demoConfirmPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+    function finish(note) {
+      demoConfirmPanel.classList.add("hidden");
+      logLine(log, label, "확인 반영 | " + note, false);
+      resume();
+    }
+    document.getElementById("confirm-apply").onclick = function () {
+      var res = collectResolutions(document.getElementById("confirm-table"));
+      var applied = applyDemoFixes(demoRunRows, res);
+      finish("사용자 확인 " + res.length + "건 반영 (수정 " + applied.applied +
+             "건, 제외 " + applied.excluded + "건) — 계속 진행");
+    };
+    document.getElementById("confirm-skip").onclick = function () {
+      finish("모두 그대로 두고 계속 진행");
+    };
+  }
+
   document.getElementById("run-btn").addEventListener("click", function () {
     if (running) return;
     if (REAL) { runReal(); return; }
     running = true;
+    demoRunRows = DEMO_TX_BASE.map(function (r) {
+      var c = {}; Object.keys(r).forEach(function (k) { c[k] = r[k]; }); return c;
+    });
     var script = fraudOn() ? buildFraudScript() : SCRIPTED;
     progressUI.setVerifySubs(fraudOn() ? ["verify1", "verify2", "verify3"] : ["verify1", "verify2"]);
     var log = document.getElementById("runlog");
@@ -3046,6 +3115,11 @@
         return;
       }
       var ev = script[i++];
+      if (ev.ev === "confirm") {
+        // 파이프라인 일시정지 — 사용자가 확인 패널에 응답하면 이어서 진행한다
+        demoRunConfirm(ev.stage, function () { setTimeout(tick, REDUCED ? 0 : (ev.wait || 400)); });
+        return;
+      }
       if (ev.ev === "start") progressUI.start(ev.s, ev.note);
       else if (ev.ev === "prog") {
         progressUI.progress(ev.s, ev.d, ev.t);
@@ -3063,7 +3137,28 @@
     }
     function finishDemo() {
       var key = selectedMonth || CUR_KEY;
-      setTimeout(function () { renderResult(demoResultData(key)); }, REDUCED ? 0 : 500);
+      var d = demoResultData(key);
+      if (demoRunRows) {
+        // 중간 확인에서 사용자가 고친 내용을 결과·집계에 반영한다
+        var agg = demoAggregate(demoRunRows);
+        var exp = 0, inc = 0, flagged = 0;
+        demoRunRows.forEach(function (r) {
+          if (r.flagged) { flagged++; return; }
+          exp += r["지출"] || 0; inc += r["수익"] || 0;
+        });
+        d.rows = demoRunRows;
+        d.by_category = agg.by_category;
+        d.by_payer = agg.by_payer;
+        d.top_spenders = agg.top_spenders;
+        d.tx_count = demoRunRows.length;
+        d.flagged_count = flagged;
+        d.total_expense = exp;
+        d.total_income = inc;
+        d.net = inc - exp;
+        d.flags = demoRemainingFlags(demoRunRows);
+        d.summaryText = demoSummaryText({ month: key, tx_count: d.tx_count, flagged_count: d.flagged_count });
+      }
+      setTimeout(function () { renderResult(d); }, REDUCED ? 0 : 500);
     }
     tick();
   });
@@ -3672,14 +3767,14 @@
       var item = {
         transaction_id: "demo-" + idx, type: "반려", reason: r.reason || "",
         data: { "날짜": r["날짜"], "금액": r["지출"] ? "-" + r["지출"] : String(r["수익"] || ""),
-                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": division,
+                "결제처": r["결제처"], "카테고리": r["카테고리"], "결제구분": division, "비고": r["비고"] || "",
                 "source_file": r["source_file"] || "", "source_type": r["source_type"] || "" }
       };
       // 미확정 행만 결제구분을 연다 (서버 verify_editable_for와 같은 규칙)
-      if (!division.trim()) item.editable = ["날짜", "금액", "카테고리", "결제구분"];
+      if (!division.trim()) item.editable = ["날짜", "금액", "카테고리", "비고", "결제구분"];
       pending.push(item);
     });
-    return { editable: ["날짜", "금액", "카테고리"], rows: pending };
+    return { editable: ["날짜", "금액", "카테고리", "비고"], rows: pending };
   }
 
   /* 데모 — 사용자 입력을 거래 목록에 반영한다. 확인된 건은 집계 제외였다가 합산에 들어오므로
@@ -3693,6 +3788,8 @@
       if (fix.exclude) { excludedIdx.push(idx); return; }
       if (fix.fields["날짜"]) row["날짜"] = fix.fields["날짜"];
       if (fix.fields["카테고리"]) row["카테고리"] = fix.fields["카테고리"];
+      if (fix.fields["비고"] != null) row["비고"] = fix.fields["비고"];
+      if (fix.fields["결제구분"]) row["결제구분"] = fix.fields["결제구분"];
       var amt = parseInt(String(fix.fields["금액"] || "").replace(/[^0-9-]/g, ""), 10);
       if (!isNaN(amt) && amt < 0) row["지출"] = -amt;
       row.flagged = false;

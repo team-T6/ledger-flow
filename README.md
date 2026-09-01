@@ -4,7 +4,7 @@
 # 렛저 Ledger Flow
 ### 월말결산 비서
 
-[![데모 보기](https://img.shields.io/badge/데모-team--t6.github.io-1E5B45?style=flat-square)](https://team-t6.github.io/ledger-flow/)
+[![데모 보기](https://img.shields.io/badge/Demo-team--t6.github.io-1E5B45?style=flat-square)](https://team-t6.github.io/ledger-flow/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1E5B45.svg?style=flat-square)](LICENSE)
 [![Python 3](https://img.shields.io/badge/Python-3-1E5B45?style=flat-square)](requirements.txt)
 [![Claude API](https://img.shields.io/badge/Agent-Claude%20API-1E5B45?style=flat-square)](https://docs.anthropic.com/)
@@ -53,11 +53,11 @@ flowchart TD
         subgraph VERIFY["병렬 검증"]
             direction TB
             V1["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY1(분류 검증)</b><br/><span style='color:#1C1917'>붙인 카테고리가 분류 체계에<br/>맞는지 검사</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 가공된 거래 표<br/>OUT: 통과/반려 (분류 관점)</span></div>"]
-            V2["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY2(기간·금액 검증)</b><br/><span style='color:#1C1917'>대상 월 거래인지, 금액 기입·해외결제 환산이 맞는지 검사</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 가공된 거래 표<br/>OUT: 통과/반려 (기간·금액 관점)</span></div>"]
+            V2["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY2(기간·금액 검증)</b><br/><span style='color:#1C1917'>대상 월 거래인지, 금액 기입·해외결제 환산이 맞는지 검사</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 가공된 거래 표<br/>OUT: 통과/반려/대상외 (기간·금액 관점)</span></div>"]
             V3["<div style='text-align:left'><b style='color:#1E5B45'>VERIFY3(부정 사용 검증)</b><br/><span style='color:#1C1917'>법인카드 결제를 부정 사용 감지 기준으로 점검</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 법인결제 행<br/>OUT: 통과/확인 요청</span></div>"]
             V1 ~~~ V2 ~~~ V3
         end
-        MERGE["<div style='text-align:left'><b style='color:#1E5B45'>MERGE(통합)</b><br/><span style='color:#1C1917'>반려 건만 제외하고 장부·리포트 작성<br/>(확인 요청 건은 장부에 남기고 별도 표시)</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 거래 표 + 검증 결과<br/>OUT: 엑셀 장부 + PDF 리포트</span></div>"]
+        MERGE["<div style='text-align:left'><b style='color:#1E5B45'>MERGE(통합)</b><br/><span style='color:#1C1917'>반려·대상외 건을 빼고 장부·리포트 작성<br/>(확인 요청 건은 장부에 남기고 별도 표시)</span><hr style='margin:4px 0;border:none;border-top:1px solid #1E5B45'/><span style='color:#1C1917'>IN: 거래 표 + 검증 결과<br/>OUT: 엑셀 장부 + PDF 리포트</span></div>"]
 
         COLLECT --> REFINE --> VERIFY --> MERGE
     end
@@ -77,7 +77,7 @@ flowchart TD
 
 설계할 때 정한 원칙이 두 가지 있습니다.
 
-- **돈과 관련된 판단은 렛저가 끝맺지 않습니다.** 검증에서 걸린 거래를 에이전트가 알아서 고치거나, 스스로 다시 시도해 판정을 뒤집지 않습니다. 분류·기간·금액이 걸리면 "확인 필요"로, 부정 사용 소지가 있으면 (단정하지 않고) "확인 요청"으로 표시해 반드시 사람의 확인을 거치게 합니다. 결산 도중에는 중간 확인 화면에서 바로 고칠 수 있고, 그대로 둔 건은 리포트의 "확인 필요" 목록에 사유와 함께 실립니다 — 결산이 끝난 뒤에도 결과 화면에서 확정해 재결산할 수 있습니다.
+- **돈과 관련된 판단은 렛저가 끝맺지 않습니다.** 검증에서 걸린 거래를 에이전트가 알아서 고치거나, 스스로 다시 시도해 판정을 뒤집지 않습니다. 분류·기간·금액이 걸리면 "확인 필요"로, 부정 사용 소지가 있으면 (단정하지 않고) "확인 요청"으로 표시해 반드시 사람의 확인을 거치게 합니다. 결산 도중에는 중간 확인 화면에서 값을 고치거나, 명의를 알 수 없어 미확정으로 남은 결제구분을 정하거나, 결산에서 뺄 건을 제외할 수 있고, 그대로 둔 건은 리포트의 "확인 필요" 목록에 사유와 함께 실립니다 — 결산이 끝난 뒤에도 결과 화면에서 확정해 재결산할 수 있습니다.
 - **검증들은 동시에 돕니다.** 보는 관점(분류 / 기간·금액 / 부정 사용)이 서로 겹치지 않아서 순서를 기다릴 이유가 없고, 사람이 확인해야 할 건도 한 번에 모아서 보여줄 수 있습니다.
 
 ## 직접 실행해 보기
@@ -138,6 +138,7 @@ py orchestrator\server.py
 
 - 이 저장소에 있는 데이터는 전부 `sample_data/`의 가짜 데이터입니다. 실제 카드 내역이나 계정 정보는 커밋되지 않도록 막아 두었습니다
 - 실행할 때 올린 파일과 로그는 로컬(`uploads/`, `logs/`)에만 남습니다
+- 완료된 결산 결과(엑셀·PDF·집계)는 `archive/<월>/`에 로컬로만 보관되며, 결산 서고 화면이 여기서 읽어 옵니다 (실거래 정보이기에 커밋에선 제외)
 
 ## 더 알아보기
 

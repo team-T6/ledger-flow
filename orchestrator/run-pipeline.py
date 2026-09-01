@@ -651,6 +651,28 @@ CONFIRM_EDITABLE = {
 USER_CONFIRM_NOTE = "[사용자 확인]"
 
 
+def verify_editable_for(data):
+    """검증·재결산 확인 지점에서 이 행이 열어 줄 수정 필드 — 공통 필드에 더해,
+    그 행의 `결제구분`이 미확정(빈 값)일 때만 `결제구분`을 연다 (카테고리 체계가
+    구분에 따라 갈리므로). 이미 정해진 명의는 잠근다 (interface-spec.md 확정 로그
+    2026-09-01 — 명의 판정은 가공 단계 책임, 검증 결과를 명의 변경으로 뒤집지 않는다).
+    """
+    fields = list(CONFIRM_EDITABLE["verify"])
+    if not str((data or {}).get("결제구분", "")).strip():
+        fields.append("결제구분")
+    return fields
+
+
+def _verify_fix_allows(row, key):
+    """검증 확인 반영에서 이 키를 이 행에 쓸 수 있는가 — 공통 허용 필드이거나,
+    `결제구분`이면서 그 행이 아직 미확정일 때만 (서버 최종 방어)."""
+    if key not in row:
+        return False
+    if key in CONFIRM_EDITABLE["verify"]:
+        return True
+    return key == "결제구분" and not str(row.get("결제구분", "")).strip()
+
+
 def read_csv_rows(path):
     with open(path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
@@ -779,6 +801,10 @@ def build_verify_pending(refine_path=None, verify_paths=None):
     result = []
     for entry in pending.values():
         entry["reason"] = " / ".join(entry.pop("reasons"))
+        # 미확정 결제구분 행만 행별 editable로 결제구분을 연다 (없으면 payload 공통값 사용)
+        row_editable = verify_editable_for(entry["data"])
+        if row_editable != CONFIRM_EDITABLE["verify"]:
+            entry["editable"] = row_editable
         result.append(entry)
     return result
 
@@ -804,7 +830,7 @@ def apply_verify_fixes(fixes):
             excluded.add(fix["transaction_id"])
             continue
         for key, value in fix["fields"].items():
-            if key in CONFIRM_EDITABLE["verify"] and key in row:
+            if _verify_fix_allows(row, key):
                 row[key] = value
         _tag_user_confirmed(row)
         applied.add(fix["transaction_id"])
@@ -829,7 +855,7 @@ def apply_verify_fixes(fixes):
             if _tid(row) not in applied:
                 continue
             for key, value in fixes_by_tid[_tid(row)]["fields"].items():
-                if key in CONFIRM_EDITABLE["verify"] and key in row:
+                if _verify_fix_allows(row, key):
                     row[key] = value
             _tag_user_confirmed(row)
             # 부정 사용 검증의 확인 요청은 "업무 사용 확정" 입력이 같은 방식으로 통과 처리한다

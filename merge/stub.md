@@ -1,6 +1,6 @@
 # 통합 산출물 모양 견본 (stub)
 
-> merge가 내놓는 진짜 산출물은 **엑셀 회계장부**(`result.xlsx`)와 **PDF 결산 리포트**(`result.pdf`) 두 바이너리 파일이다([orchestrator/result.md](../orchestrator/result.md) 참고). 이 문서는 그 두 파일이 실제로 어떤 모양이어야 하는지 마크다운 표로 보여주는 견본이지, 진짜 산출물이 아니다.
+> merge가 내놓는 진짜 산출물은 **엑셀 회계장부**(`result.xlsx`)와 **PDF 결산 리포트**(`result.pdf`) 두 바이너리 파일이다(목차·양식 정본은 [interface-spec.md](../docs/interface-spec.md) "산출물 양식"). 실행마다 재생성되는 산출물이라 커밋하지 않는다 — 커밋되는 샘플은 `web/demo/`의 고정본뿐. 이 문서는 그 두 파일이 실제로 어떤 모양이어야 하는지 마크다운 표로 보여주는 견본이지, 진짜 산출물이 아니다.
 >
 > 입력 예시는 [verify2/input-sample.md](../verify2/input-sample.md)의 값(거래 표 스키마 v1 기준)을 그대로 가져왔다. verify1 판정은 이 견본을 위해 새로 가정한 값(카테고리가 전부 [categories.md](../docs/categories.md) 체계에 있어 전부 통과)이다 — refine·verify1의 실제 산출물이 아직 없어 이렇게 가정했다. 전부 연습용 가짜 값이며 실데이터 아님.
 

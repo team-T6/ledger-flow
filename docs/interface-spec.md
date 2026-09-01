@@ -21,7 +21,7 @@
 
 > 두는 자리 확정: 단계 영어명 = repo 최상위의 "칸 폴더"명 (`collect/` `refine/` `verify1/` `verify2/` `verify3/` `merge/` — 담당자별 1칸). 각 칸 폴더에는 그 단계에 필요한 것이 전부 모인다: 약속(`README.md`) · 받는 재료 견본(`input-sample.md`) · 산출물 모양 견본(`stub.md`) · 진짜 산출물(`result.*`) · 산출물 생성에 코드가 필요하면 그 코드까지. 칸 폴더는 옮기지 않고, 기존 파일은 지우지 않는다.
 >
-> 커밋 정책: 견본(`input-sample.md`·`stub.md`)은 `sample_data/` 기반 가짜 데이터로만 작성해 커밋한다. **실데이터로 실행한 `result.*`는 커밋 금지** — .gitignore가 `*.xlsx`/`*.csv`/`*.pdf`를 차단하고 있어(`sample_data/` 제외) 기본적으로 걸러지며, 가짜 데이터 기반 결과를 공유하고 싶을 때만 팀 확인 후 예외로 올린다. 지휘의 실행 로그는 종전대로 `logs/`에 두고 커밋 차단(`logs/.gitkeep`만 커밋).
+> 커밋 정책: 견본(`input-sample.md`·`stub.md`)은 `sample_data/` 기반 가짜 데이터로만 작성해 커밋한다. **칸별 `result.*`와 `archive/`는 커밋하지 않는다** — 실행마다 재생성되는 산출물이고, .gitignore가 `*.xlsx`/`*.csv`/`*.pdf`/`archive/`(및 `orchestrator/result-summary.md`)를 차단한다(`sample_data/` 제외). 커밋되는 실물 산출물은 Pages 데모용 `web/demo/` 고정 샘플뿐. 견본·문서가 값을 참조할 땐 커밋되는 `sample_data/`를 기준으로 쓴다. 지휘의 실행 로그는 종전대로 `logs/`에 두고 커밋 차단(`logs/.gitkeep`만 커밋).
 
 ## 단계별 판단할 것
 
@@ -129,6 +129,8 @@
 ## 다음 단계
 
 미정·검토 항목이 확정되는 대로 이 문서의 해당 표기를 갱신한다. 남은 것: 없음 — 전 항목 확정 (새 미결 사안이 생기면 여기에 추가).
+
+- 확정됨(2026-09-01): **실행 산출물 커밋 정리 — `result.*`는 추적 안 함** — 칸별 `result.*`(및 `merge/result.{xlsx,pdf}`·`orchestrator/result-summary.md`)가 규칙 이전에 커밋돼 실행마다 `M`으로 잡히던 것을 정리한다. `git rm --cached`로 추적 해제(디스크 파일은 유지, 파이프라인이 계속 생성), `.gitignore`에 `orchestrator/result-summary.md` 추가(나머지는 `*.csv`·`*.xlsx`·`*.pdf` 규칙이 이미 처리). 죽은 파일 `orchestrator/result.md`(코드는 `result-summary.md`를 씀)·비표준 예시 `verify2/result.md`(다른 칸엔 없고 코드가 안 만듦, 형태 견본은 `stub.md`)는 삭제. 커밋되는 산출물은 `web/demo/` 고정 샘플로 일원화. 견본 문서의 "`collect/result.csv`의 실제 행" 참조는 커밋되는 `sample_data/` 기준으로 바꿈. 파이프라인 동작·스키마·보고 규격 변경 없음 (config·문서 정리).
 
 - 확정됨(2026-09-01): **Google Drive 가져오기 — 버튼 명칭·기본 선택 조정** — 업로드 화면의 Drive 진입 버튼 라벨을 "Google Drive 연결"에서 "Google Drive에서 가져오기"로 바꾼다 (OAuth 연결 단계가 화면에 없고 실제 동작은 폴더 탐색·파일 가져오기라 명칭을 기능에 맞춘다 — 위 두 Drive 확정 항목의 "Google Drive 연결" 버튼 언급도 이 라벨로 읽는다). 폴더 선택 모달의 파일·폴더 체크박스와 "전체 선택"은 **기본 미선택**으로 두어 사용자가 가져올 항목을 명시적으로 고르게 한다. 엔드포인트·가져오기 동작·산출물은 변경 없음 (웹 소관).
 

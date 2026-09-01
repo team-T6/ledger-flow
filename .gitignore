@@ -231,6 +231,10 @@ archive/
 # 웹 데모 샘플 산출물 — sample_data 기반 가짜 데이터라 커밋 허용 (Pages 데모의 리포트·장부 미리보기에 필요)
 !web/demo/**
 
+# 파이프라인 실행 산출물 — 실행마다 재생성(단계 간 데이터 전달용). 커밋되는 산출물은 web/demo/ 고정 샘플뿐
+#   (칸별 result.csv·merge/result.{xlsx,pdf}는 위 *.csv·*.xlsx·*.pdf 규칙에서 이미 무시됨)
+orchestrator/result-summary.md
+
 # 지휘에게 전달하는 단계 결과 보고 — 실거래 정보(결제처·비고 등)를 그대로 담고 있어 커밋 금지
 collect/result-report.json
 

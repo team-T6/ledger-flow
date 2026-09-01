@@ -518,7 +518,7 @@
   .tx-table td.amt { text-align: right; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
   .tx-table td.amt.minus { color: var(--red); }
   .tx-table td.amt.plus { color: var(--accent); }
-  .tx-table td.reason { white-space: normal; color: var(--muted); font-size: 12.5px; max-width: 220px; }
+  .tx-table td.reason { white-space: normal; color: var(--muted); font-size: 12.5px; min-width: 320px; }
   .tx-table tr.flagged td { background: rgba(166, 58, 46, 0.06); }
   .tx-table tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--red); }
   .tx-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13.5px; }
@@ -553,6 +553,17 @@
     font: inherit; font-size: 13px; color: var(--muted);
   }
   .file-list .del:hover { color: var(--red); }
+  .manual-entry { margin-top: 16px; text-align: center; }
+  .manual-form {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    margin-top: 12px; padding: 14px 16px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .manual-form input, .manual-form select {
+    font: inherit; font-size: 13.5px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink);
+  }
+  .manual-form input[type="text"], .manual-form input[type="number"] { width: 130px; }
   .run-cta { margin-top: 28px; text-align: center; }
   .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -977,6 +988,22 @@
       <li><span>신한카드_202608.csv</span><span class="ok">준비됨</span></li>
       <li><span>영수증_캡처_3장.zip</span><span class="ok">준비됨</span></li>
     </ul>
+    <div class="manual-entry" id="manual-entry">
+      <button class="btn btn-quiet inert" id="manual-toggle" type="button">현금 등 직접 입력 +</button>
+      <div class="manual-form" id="manual-form" hidden>
+        <input type="date" id="manual-date" aria-label="날짜">
+        <input type="text" id="manual-merchant" placeholder="결제처">
+        <input type="number" id="manual-amount" placeholder="금액(원)">
+        <select id="manual-payment-type" aria-label="결제구분">
+          <option value="개인결제">개인결제</option>
+          <option value="법인결제">법인결제</option>
+        </select>
+        <input type="text" id="manual-method" placeholder="결제수단(예: 현금)" value="현금">
+        <input type="text" id="manual-note" placeholder="비고(선택)">
+        <button class="btn" id="manual-add" type="button">추가</button>
+      </div>
+      <ul class="file-list" id="manual-list"></ul>
+    </div>
     <label class="fraud-toggle" id="fraud-toggle-wrap">
       <input type="checkbox" id="fraud-toggle">
       <span><strong>법인카드 부정 사용 감지</strong> — 검증에 부정 사용 점검을 추가합니다
@@ -1828,16 +1855,18 @@
         return;
       }
       var head = "<tr><th>날짜</th><th>결제처</th><th>카테고리</th><th>결제수단</th><th>결제구분</th>" +
-        "<th>지출</th><th>수익</th><th>비고</th></tr>";
+        "<th>금액</th><th>비고</th></tr>";
       var body = filtered.map(function (r) {
+        var income = r["수익"] || 0;
+        var amtCls = income ? "plus" : "minus";
+        var amtText = income ? "+" + fmt(income) : (r["지출"] ? "-" + fmt(r["지출"]) : "");
         return '<tr class="' + (r.flagged ? "flagged" : "") + '">' +
           '<td class="mono">' + esc(r["날짜"] || "") + "</td>" +
           "<td>" + esc(r["결제처"] || "") + "</td>" +
           "<td>" + esc(r["카테고리"] || "") + "</td>" +
           "<td>" + esc(r["결제수단"] || "") + "</td>" +
           "<td>" + esc(r["결제구분"] || "") + "</td>" +
-          '<td class="amt minus">' + (r["지출"] ? "-" + fmt(r["지출"]) : "") + "</td>" +
-          '<td class="amt plus">' + (r["수익"] ? "+" + fmt(r["수익"]) : "") + "</td>" +
+          '<td class="amt ' + amtCls + '">' + amtText + "</td>" +
           '<td class="reason">' + esc(r.reason || "") + "</td></tr>";
       }).join("");
       scroll.innerHTML = '<table class="tx-table">' + head + body + "</table>";
@@ -2761,6 +2790,8 @@
   var REAL = false;
   var selectedMonth = null;
   var uploadCount = 0;
+  var manualCount = 0;
+  function updateRunButton() { runBtn.disabled = !(uploadCount || manualCount); }
 
   function apiJson(path, opts) {
     return fetch(path, opts).then(function (r) {
@@ -2789,6 +2820,13 @@
       var li = document.createElement("li");
       var name = document.createElement("span");
       name.textContent = f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + "KB)";
+      if (f.source === "drive") {
+        var badge = document.createElement("span");
+        badge.className = "chip";
+        badge.style.marginLeft = "6px";
+        badge.textContent = "Drive에서 가져옴";
+        name.appendChild(badge);
+      }
       var del = document.createElement("button");
       del.className = "del";
       del.type = "button";
@@ -2809,7 +2847,35 @@
       empty.innerHTML = "<span>아직 올린 파일이 없습니다</span>";
       fileListEl.appendChild(empty);
     }
-    runBtn.disabled = !files.length;
+    updateRunButton();
+  }
+
+  /* ---- 현금 등 직접 입력 (collect.md "하는 단계 7" — 자동 수집이 어려운 거래) ---- */
+  var manualListEl = document.getElementById("manual-list");
+
+  function renderManualList(entries) {
+    manualCount = (entries || []).length;
+    manualListEl.innerHTML = "";
+    (entries || []).forEach(function (m) {
+      var li = document.createElement("li");
+      var label = document.createElement("span");
+      label.textContent = m.날짜 + " · " + m.결제처 + " · " + fmt(m.금액) + "원 (" + m.결제구분 + ")";
+      var del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.textContent = "삭제";
+      del.addEventListener("click", function () {
+        apiJson("uploads/manual/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: m.id })
+        }).then(function (res) { renderManualList(res.data.entries || []); });
+      });
+      li.appendChild(label);
+      li.appendChild(del);
+      manualListEl.appendChild(li);
+    });
+    updateRunButton();
   }
 
   function uploadFiles(fileArray) {
@@ -3754,6 +3820,39 @@
         showToast("서버에 연결하지 못했습니다 — orchestrator/server.py 확인");
       });
     });
+
+    var manualToggle = document.getElementById("manual-toggle");
+    var manualToggleReal = manualToggle.cloneNode(true);
+    manualToggleReal.classList.remove("inert");
+    manualToggle.parentNode.replaceChild(manualToggleReal, manualToggle);
+    var manualForm = document.getElementById("manual-form");
+    manualToggleReal.addEventListener("click", function () {
+      manualForm.hidden = !manualForm.hidden;
+    });
+    document.getElementById("manual-add").addEventListener("click", function () {
+      var date = document.getElementById("manual-date").value;
+      var merchant = document.getElementById("manual-merchant").value.trim();
+      var amount = parseInt(document.getElementById("manual-amount").value, 10);
+      var paymentType = document.getElementById("manual-payment-type").value;
+      var method = document.getElementById("manual-method").value.trim() || "현금";
+      var note = document.getElementById("manual-note").value.trim();
+      if (!date || !merchant || !amount) { showToast("날짜·결제처·지출 금액을 입력해 주세요"); return; }
+      apiJson("uploads/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          날짜: date, 결제처: merchant, 금액: amount,
+          결제구분: paymentType, 결제수단: method, 비고: note
+        })
+      }).then(function (res) {
+        if (!res.ok) { showToast(res.data.error || "추가에 실패했습니다"); return; }
+        renderManualList(res.data.entries || []);
+        document.getElementById("manual-merchant").value = "";
+        document.getElementById("manual-amount").value = "";
+        document.getElementById("manual-note").value = "";
+      });
+    });
+    renderManualList([]);
 
     var dropzone = document.getElementById("dropzone");
     dropzone.addEventListener("dragover", function (e) { e.preventDefault(); });

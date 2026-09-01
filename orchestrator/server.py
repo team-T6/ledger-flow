@@ -16,8 +16,13 @@
                               body.fraud_check가 참이면 부정 사용 검증(부정 사용 감지)을 함께 실행한다
 - GET  /categories          : 분류 기준(docs/categories.md) 원문 + 최종 업데이트 일시
 - POST /categories          : 분류 기준 저장 — 원문을 통째로 받아 최종 업데이트 일시를 찍어 쓴다
-- POST /drive/import        : Google Drive 가져오기 — claude CLI headless + .mcp.json의 Drive MCP로
-                              대상 폴더 파일을 uploads/inbox/에 저장한다 (사전 인증 필요)
+- GET  /drive/browse?parent_id=: Drive 폴더 선택 UI용 — 그 폴더 바로 아래의 하위 폴더·가져올 수
+                              있는 파일 목록 (Drive REST API 직접 호출, AI 미사용, parent_id
+                              생략 시 "내 드라이브" 루트)
+- POST /drive/import        : Google Drive 가져오기 — Drive REST API를 직접 호출해(AI 미사용)
+                              대상 폴더(body.folder_id, 없으면 .env의 DRIVE_FOLDER 이름 매칭)의
+                              파일을 uploads/inbox/에 원본 그대로 저장한다. body.file_ids를 주면
+                              그 폴더 파일 중 고른 것만 가져온다 (사전 인증 필요)
 - GET  /runs/current?since=N: 진행 이벤트 증분 조회 (화면이 1.5초 간격으로 폴링)
                               중간 확인 대기 중이면 confirm 필드(단계·행·수정 가능 필드)를 담는다
 - POST /runs/confirm        : 중간 확인 응답 — {stage, resolutions:[{transaction_id, fields}]}
@@ -46,10 +51,12 @@ import importlib.util
 import json
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -71,8 +78,9 @@ UPLOAD_MAX_COUNT = 30
 
 CATEGORIES_PATH = os.path.join(REPO_ROOT, "docs", "categories.md")  # 분류 기준 단일 정본
 CATEGORIES_MAX_BYTES = 64 * 1024  # 설정 화면 저장 상한 — 정본이 문서 파일이라 넉넉히 잡는다
-MCP_CONFIG_PATH = os.path.join(REPO_ROOT, ".mcp.json")  # Drive MCP 등록 자리 (.mcp.json.example 참고)
-DRIVE_IMPORT_TIMEOUT = 300  # Drive 가져오기 CLI 호출 상한 (초)
+MCP_CONFIG_PATH = os.path.join(REPO_ROOT, ".mcp.json")  # Drive MCP 등록 자리 (.mcp.json.example 참고) — 계정 인증 1회 수행에 계속 사용
+GDRIVE_CREDS_DIR = os.environ.get("GDRIVE_CREDS_DIR") or os.path.join(REPO_ROOT, ".config")  # .mcp.json의 같은 값과 맞춘다
+DRIVE_HTTP_TIMEOUT = 60  # Drive REST 호출 1건당 상한 (초)
 
 ARTIFACTS = {  # 내려받기 허용 목록 — 경로 조작 방지를 위해 고정 매핑만 쓴다
     "/artifacts/result.xlsx": (os.path.join(REPO_ROOT, "merge", "result.xlsx"),
@@ -199,8 +207,8 @@ def add_manual_entry(payload):
         amount = int(payload.get("금액"))
     except (TypeError, ValueError):
         raise ValueError("금액은 숫자여야 합니다")
-    if amount == 0:
-        raise ValueError("금액은 0이 될 수 없습니다")
+    if amount <= 0:
+        raise ValueError("금액은 양수로 입력해 주세요 — 수기 입력은 항상 지출로 기록됩니다")
     payment_type = payload.get("결제구분") or "개인결제"
     if payment_type not in ("개인결제", "법인결제"):
         raise ValueError("결제구분은 개인결제/법인결제 중 하나여야 합니다")
@@ -211,7 +219,7 @@ def add_manual_entry(payload):
         "id": next_id,
         "날짜": payload["날짜"].strip(),
         "결제처": payload["결제처"].strip(),
-        "금액": -abs(amount),  # 거래 표 스키마 — 지출은 음수 (직접 입력은 대부분 현금 지출)
+        "금액": -amount,  # 거래 표 스키마 — 지출은 음수 (수기 입력은 항상 지출)
         "결제구분": payment_type,
         "결제수단": (payload.get("결제수단") or "현금").strip(),
         "비고": (payload.get("비고") or "").strip(),
@@ -306,48 +314,205 @@ def write_categories(content):
     return now
 
 
-def drive_import(month):
-    """Google Drive 가져오기 — claude CLI headless + .mcp.json의 Drive MCP (확정 방식).
+def _drive_request(method, url, token, params=None, data=None, raw=False):
+    """Drive/OAuth REST 호출 — AI(LLM) 없이 직접 호출한다 (바이너리 파일이 MCP 도구를 거치면
 
-    사전 조건: claude CLI 설치 + .mcp.json에 Drive MCP 등록(.mcp.json.example 참고) +
-    해당 MCP의 계정 인증이 이 머신에서 완료돼 있어야 한다. 조건이 빠지면 안내 오류를 돌려준다.
-    CLI는 repo 밖 임시 디렉터리에서 실행한다 (프로젝트 지침 주입 방지 — run-pipeline.py와 같은 관례).
+    base64 텍스트로 인코딩돼 LLM 컨텍스트를 통과해야 해 토큰 비용이 급증하는 문제를 피하기
+    위한 확정 방식 — interface-spec.md 2026-09-01 확정 로그).
+    """
+    if params:
+        url = f"{url}?{urllib.parse.urlencode(params)}"
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    body = None
+    if data is not None:
+        body = urllib.parse.urlencode(data).encode("utf-8")
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=DRIVE_HTTP_TIMEOUT) as resp:
+        raw_body = resp.read()
+    return raw_body if raw else json.loads(raw_body)
+
+
+def _drive_access_token():
+    """저장된 OAuth 자격증명으로 유효한 access token을 돌려준다 — 만료 임박이면 갱신해 같이 저장한다.
+
+    키 파일(gcp-oauth.keys.json)·토큰 파일(.gdrive-server-credentials.json)은 Drive MCP
+    계정 인증 1회 수행 시 GDRIVE_CREDS_DIR에 생성된 것과 같은 파일이다(포맷도 동일하게 맞춤).
+    """
+    keyfile_path = os.path.join(GDRIVE_CREDS_DIR, "gcp-oauth.keys.json")
+    token_path = os.path.join(GDRIVE_CREDS_DIR, ".gdrive-server-credentials.json")
+    if not os.path.exists(keyfile_path) or not os.path.exists(token_path):
+        raise RuntimeError(
+            "Drive 계정 인증이 안 돼 있습니다 — .mcp.json.example을 참고해 Drive MCP를 등록하고 "
+            "계정 인증을 먼저 1회 완료해 주세요")
+    with open(keyfile_path, encoding="utf-8") as f:
+        installed = json.load(f)["installed"]
+    with open(token_path, encoding="utf-8") as f:
+        token = json.load(f)
+    expiry = datetime.fromtimestamp(token["expiry_date"] / 1000)
+    if datetime.now() < expiry:
+        return token["access_token"]
+    refreshed = _drive_request(
+        "POST", "https://oauth2.googleapis.com/token", None, data={
+            "client_id": installed["client_id"],
+            "client_secret": installed["client_secret"],
+            "refresh_token": token["refresh_token"],
+            "grant_type": "refresh_token",
+        })
+    token["access_token"] = refreshed["access_token"]
+    token["expiry_date"] = int((datetime.now().timestamp() + refreshed["expires_in"]) * 1000)
+    with open(token_path, "w", encoding="utf-8") as f:
+        json.dump(token, f, indent=2)
+    return token["access_token"]
+
+
+def _drive_find_folder(token, name):
+    escaped = name.replace("'", "\\'")
+    result = _drive_request(
+        "GET", "https://www.googleapis.com/drive/v3/files", token, params={
+            "q": f"mimeType='application/vnd.google-apps.folder' and name contains '{escaped}' "
+                 "and trashed=false",
+            "fields": "files(id,name)",
+            "pageSize": 1,
+        })
+    files = result.get("files") or []
+    return files[0] if files else None
+
+
+def _drive_list_folder_files(token, folder_id):
+    files, page_token = [], None
+    while True:
+        params = {
+            "q": f"'{folder_id}' in parents and trashed=false",
+            "fields": "nextPageToken, files(id,name,mimeType,size)",
+            "pageSize": 100,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        result = _drive_request("GET", "https://www.googleapis.com/drive/v3/files", token, params=params)
+        files.extend(result.get("files") or [])
+        page_token = result.get("nextPageToken")
+        if not page_token or len(files) >= UPLOAD_MAX_COUNT:
+            break
+    return files
+
+
+DRIVE_BROWSE_MAX_ENTRIES = 500  # 폴더 선택 UI 미리보기 상한 — 이 이상 큰 폴더는 이후 페이지를 안 불러온다
+
+
+def list_drive_children(parent_id=None):
+    """Drive 폴더 선택 UI용 — parent_id 바로 아래의 하위 폴더·가져올 수 있는 파일을 함께 돌려준다
+    (AI 미사용) — {"folders": [{id,name}], "files": [{id,name,size}]}.
+
+    계정 전체 폴더를 한 번에 나열하면 폴더가 많은 계정에서 평평한 목록이 되어 실제 구조를
+    알아볼 수 없다. 웹 화면의 "Google Drive 연결" 모달이 이 함수를 매번 현재 보고 있는
+    폴더로 다시 불러 계층을 눌러 들어가게 하고, 그 폴더 안의 파일을 체크박스로 여러 개
+    골라 가져오게 한다(interface-spec.md 2026-09-01 "폴더 선택 UI 추가" 확정 로그).
+    parent_id 생략 시 "내 드라이브" 루트("root"). 파일은 허용 확장자만 돌려준다 —
+    Google Docs/Sheets 등 네이티브 파일과 그 외 확장자는 가져오기 대상이 아니라 뺀다.
+    """
+    token = _drive_access_token()
+    parent = parent_id or "root"
+    entries, page_token = [], None
+    while True:
+        params = {
+            "q": f"'{parent}' in parents and trashed=false",
+            "fields": "nextPageToken, files(id,name,mimeType,size)",
+            "pageSize": 100,
+            "orderBy": "folder,name",
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        result = _drive_request("GET", "https://www.googleapis.com/drive/v3/files", token, params=params)
+        entries.extend(result.get("files") or [])
+        page_token = result.get("nextPageToken")
+        if not page_token or len(entries) >= DRIVE_BROWSE_MAX_ENTRIES:
+            break
+    folders, files = [], []
+    for e in entries:
+        if e.get("mimeType") == "application/vnd.google-apps.folder":
+            folders.append({"id": e["id"], "name": e["name"]})
+        elif os.path.splitext(e["name"])[1].lower() in UPLOAD_EXTS:
+            files.append({"id": e["id"], "name": e["name"], "size": e.get("size")})
+    return {"folders": folders, "files": files}
+
+
+def _drive_download_entries(token, entries):
+    """entries([{id,name,mimeType,size}, ...])를 실제로 내려받아 uploads/inbox/에 저장한다.
+
+    확장자·네이티브 파일·10MB 상한 판정을 여기 한 곳에 모아 drive_import의 두 경로
+    (폴더 전체 가져오기 / 체크박스로 고른 파일만 가져오기)가 같은 규칙을 쓰게 한다.
+    """
+    saved, skipped = [], []
+    for entry in entries:
+        name = entry["name"]
+        ext = os.path.splitext(name)[1].lower()
+        if entry.get("mimeType", "").startswith("application/vnd.google-apps"):
+            skipped.append(f"{name} (Google Docs/Sheets 등 네이티브 파일 — 내보내기 미지원)")
+            continue
+        if ext not in UPLOAD_EXTS:
+            skipped.append(f"{name} (허용되지 않는 확장자)")
+            continue
+        size = entry.get("size")
+        if size is not None and int(size) > UPLOAD_MAX_BYTES:
+            skipped.append(f"{name} (10MB 초과)")
+            continue
+        content = _drive_request(
+            "GET", f"https://www.googleapis.com/drive/v3/files/{entry['id']}", token,
+            params={"alt": "media"}, raw=True)
+        if len(content) > UPLOAD_MAX_BYTES:
+            skipped.append(f"{name} (10MB 초과)")
+            continue
+        with open(os.path.join(UPLOAD_DIR, name), "wb") as f:
+            f.write(content)
+        saved.append(name)
+    return saved, skipped
+
+
+def drive_import(month, folder_id=None, file_ids=None):
+    """Google Drive 가져오기 — Drive REST API를 직접 호출하는 순수 다운로드 (확정 방식).
+
+    사전 조건: .mcp.json에 Drive MCP 등록(.mcp.json.example 참고) + 그 계정 인증이 이 머신에서
+    1회 완료돼 있어야 한다(GDRIVE_CREDS_DIR에 키·토큰 파일 존재). 조건이 빠지면 안내 오류를 돌려준다.
+    AI(LLM) 호출 없이 이 함수만으로 다운로드가 끝난다 — 바이너리 파일이 MCP 도구를 거치며
+    base64 텍스트로 LLM 컨텍스트를 통과하는 걸 피하기 위함(interface-spec.md 2026-09-01 확정 로그).
+
+    folder_id가 주어지면(웹 화면의 폴더 선택 UI) 그 폴더를 그대로 쓴다. 없으면 DRIVE_FOLDER
+    환경변수(또는 기본값 "ledger-flow") 이름 매칭으로 폴더를 찾는 폴백을 쓴다. file_ids가
+    함께 주어지면(체크박스로 고른 파일) 그 폴더의 파일 중 해당 id만 골라 가져온다 — 파일명은
+    항상 Drive 쪽 목록 조회 결과에서만 가져오므로(클라이언트가 보낸 이름을 신뢰하지 않음)
+    경로 조작 위험이 없다(2026-09-01 "폴더 선택 UI 추가" 확정 로그).
 
     월로 거르지 않고 폴더의 파일을 그대로 가져온다 — 범위 밖 데이터를 거르는 책임은 수집이
     아니라 기간·금액 검증 몫이다(interface-spec.md §실행 파라미터: "수집은 대상 월 위주로
-    모으되 걸러내는 책임은 지지 않는다"). month는 프롬프트가 아니라 반환값(신규 저장 파일
-    목록)을 통해 "Drive에서 가져옴" 표시에만 쓴다.
+    모으되 걸러내는 책임은 지지 않는다"). month는 반환값(신규 저장 파일 목록)을 통해
+    "Drive에서 가져옴" 표시에만 쓴다.
     """
-    if not shutil.which("claude"):
-        raise RuntimeError("claude CLI가 설치되어 있지 않습니다 — Drive 가져오기는 CLI 경유로 동작합니다")
-    if not os.path.exists(MCP_CONFIG_PATH):
-        raise RuntimeError(".mcp.json이 없습니다 — .mcp.json.example을 복사해 Drive MCP를 등록하고 "
-                           "계정 인증을 먼저 완료해 주세요")
+    token = _drive_access_token()
+    if folder_id:
+        target_folder_id = folder_id
+    else:
+        folder_name = load_env_value("DRIVE_FOLDER") or "ledger-flow"
+        folder = _drive_find_folder(token, folder_name)
+        if not folder:
+            return f"Drive에서 폴더 \"{folder_name}\"을(를) 찾지 못했습니다."
+        target_folder_id = folder["id"]
+
+    entries = _drive_list_folder_files(token, target_folder_id)
+    if file_ids is not None:
+        wanted = set(file_ids)
+        entries = [e for e in entries if e["id"] in wanted]
+
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     before = {e.name for e in os.scandir(UPLOAD_DIR) if e.is_file()}
-    folder = load_env_value("DRIVE_FOLDER") or "ledger-flow"
-    allowed = ", ".join(sorted(UPLOAD_EXTS))
-    prompt = (
-        f"연결된 Google Drive MCP 도구로 Drive에서 폴더 이름 \"{folder}\"(없으면 그 이름이 포함된 폴더)를 찾아, "
-        f"그 안의 카드 내역·영수증 파일을 모두 골라 로컬 디렉터리 {UPLOAD_DIR} 에 "
-        "원본 파일명 그대로 저장하라. 대상 월로 미리 거르지 말고 폴더의 파일을 그대로 가져온다 — "
-        f"범위 밖 파일을 거르는 일은 이후 단계(검증) 몫이다. "
-        f"허용 확장자: {allowed} — 그 외 파일은 건너뛴다. 파일당 10MB를 넘으면 건너뛴다. "
-        "작업이 끝나면 저장한 파일명 목록과 건너뛴 파일·사유를 한국어로 짧게 보고하라. "
-        "Drive에 접근할 수 없으면 그 사실만 보고하라."
-    )
-    result = subprocess.run(
-        ["claude", "-p", "--mcp-config", MCP_CONFIG_PATH, "--strict-mcp-config",
-         "--permission-mode", "acceptEdits", "--allowed-tools",
-         "Write,mcp__gdrive__*", prompt],
-        capture_output=True, text=True, timeout=DRIVE_IMPORT_TIMEOUT,
-        cwd=tempfile.gettempdir())
+    saved, skipped = _drive_download_entries(token, entries)
     after = {e.name for e in os.scandir(UPLOAD_DIR) if e.is_file()}
     add_to_drive_manifest(after - before)  # 실제로 새로 생긴 파일만 "Drive에서 가져옴"으로 표시
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()[:300]
-        raise RuntimeError(f"Drive 가져오기 실패 (claude CLI exit {result.returncode}): {detail}")
-    return (result.stdout or "").strip()
+
+    lines = [f"저장한 파일 ({len(saved)}개): " + (", ".join(saved) if saved else "없음")]
+    if skipped:
+        lines.append(f"건너뛴 파일 ({len(skipped)}개): " + ", ".join(skipped))
+    return "\n".join(lines)
 
 
 CONFIRM_WAIT_SECONDS = 600  # 중간 확인 응답 대기 상한 10분 — 초과 시 전부 유지로 진행 (단계 문서 확정)
@@ -525,6 +690,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"entries": load_manual_entries()})
             return
 
+        if path == "/drive/browse":
+            parent_match = re.search(r"(?:^|&)parent_id=([\w-]+)(?:&|$)", query)
+            try:
+                listing = list_drive_children(parent_match.group(1) if parent_match else None)
+            except Exception as e:
+                self._send_json(502, {"error": str(e)})
+                return
+            self._send_json(200, listing)
+            return
+
         if path == "/categories":
             try:
                 self._send_json(200, read_categories())
@@ -687,8 +862,17 @@ class Handler(BaseHTTPRequestHandler):
             if not re.fullmatch(r"\d{4}-\d{2}", month or ""):
                 self._send_json(400, {"error": "month는 YYYY-MM 형식이어야 합니다"})
                 return
+            folder_id = body.get("folder_id")
+            if folder_id is not None and not isinstance(folder_id, str):
+                self._send_json(400, {"error": "folder_id는 문자열이어야 합니다"})
+                return
+            file_ids = body.get("file_ids")
+            if file_ids is not None and (not isinstance(file_ids, list)
+                                          or not all(isinstance(x, str) for x in file_ids)):
+                self._send_json(400, {"error": "file_ids는 문자열 배열이어야 합니다"})
+                return
             try:
-                report = drive_import(month)
+                report = drive_import(month, folder_id=folder_id, file_ids=file_ids)
             except Exception as e:
                 self._send_json(502, {"error": str(e)})
                 return

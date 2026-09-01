@@ -1,13 +1,16 @@
 {
   "//": "Google Drive 가져오기(확정 방식: claude CLI headless + Drive MCP)용 등록 견본.",
   "//사용법": "이 파일을 .mcp.json으로 복사한 뒤, 쓰려는 Drive MCP 서버로 채우고 그 서버의 안내대로 계정 인증(OAuth)을 이 머신에서 1회 완료한다. 서버 키 이름은 gdrive를 유지한다 — orchestrator/server.py의 Drive 가져오기가 mcp__gdrive__* 도구를 허용 목록으로 쓴다.",
-  "//주의": "인증 토큰·credential 파일은 로컬에만 두고 커밋하지 않는다 (.env·.gitignore 규칙과 같은 결).",
+  "//주의": "CLIENT_ID·CLIENT_SECRET·OAuth 토큰은 이 파일(커밋 대상)에 직접 적지 않고, 로컬 셸 환경변수로 주입한다 (.env·.gitignore 규칙과 같은 결). OAuth 클라이언트는 반드시 '데스크톱 앱' 유형으로 만들 것 — 리디렉션 URI 등록 불필요. 발급받은 키 파일은 반드시 파일명을 gcp-oauth.keys.json으로 바꿔 GDRIVE_CREDS_DIR 경로에 둔다 — 패키지가 이 파일명을 하드코딩해서 찾는다. 레포 내부 경로(예: <repo_root>/.config/)를 쓸 경우 반드시 .gitignore에 등록돼 있는지 먼저 확인한다.",
+  "//패키지선정": "@modelcontextprotocol/server-gdrive는 npm에서 deprecated 처리돼 @isaacphi/mcp-gdrive로 교체함.",
   "mcpServers": {
     "gdrive": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "args": ["-y", "@isaacphi/mcp-gdrive"],
       "env": {
-        "GDRIVE_CREDENTIALS_PATH": "~/.config/ledger-flow/gdrive-credentials.json"
+        "CLIENT_ID": "${GDRIVE_CLIENT_ID}",
+        "CLIENT_SECRET": "${GDRIVE_CLIENT_SECRET}",
+        "GDRIVE_CREDS_DIR": "<repo_root>/.config"
       }
     }
   }

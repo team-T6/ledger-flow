@@ -242,6 +242,7 @@ credentials.json
 client_secret*.json
 token.json
 token.pickle
+/.config/
 
 # Claude Code personal working files (개인 AI 작업물 — 공유 대상 아님)
 .claude/settings.local.json

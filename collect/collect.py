@@ -1,6 +1,7 @@
 """collect 단계 정규화 스크립트.
 
-sample_data/hana_card/*.csv(개인카드)·sample_data/shinhan_corp/*.csv(법인카드) 원본을
+sample_data/<YYYY-MM>/의 하나카드(개인카드)·신한법인카드(법인카드) CSV 원본을
+(파일명의 카드사 이름으로 판별 — 같은 월 폴더에 다른 카드사·영수증 이미지가 섞여 있어도 이 둘만 골라 처리한다)
 카드사별 컬럼 매핑 규칙으로 표준 거래 표로 정규화하고,
 collect/result.csv 하나로 합쳐 만든다 (칸 폴더 공용 관례 result.*, AGENTS.md §2).
 컬럼은 interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로 13개 —
@@ -29,8 +30,11 @@ import re
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.join(BASE_DIR, "..", "sample_data", "hana_card")
-SHINHAN_DIR = os.path.join(BASE_DIR, "..", "sample_data", "shinhan_corp")
+# sample_data/는 년월 폴더(YYYY-MM/)로 정리돼 있고, 그 안에 카드사·영수증이 섞여 있다 —
+# 이 스크립트는 파일명으로 하나카드·신한법인카드 CSV만 골라 처리한다 (§ run() 참고)
+SAMPLE_DIR = os.path.join(BASE_DIR, "..", "sample_data")
+HANA_NAME_HINT = "하나카드"
+SHINHAN_NAME_HINT = "신한법인카드"
 
 # interface-spec.md "거래 표 스키마 (확정 v1)" 순서 그대로
 OUT_FIELDS = ["transaction_id", "날짜", "금액", "결제처", "카테고리", "비고",
@@ -220,11 +224,12 @@ def run(month=None):
     month가 None이면 원본 전체를 수집한다 (수동 실행용). 대상 월 위주로 모으되
     걸러내는 책임은 지지 않는다 — 범위 밖 데이터의 반려는 기간·금액 검증 몫 (interface-spec.md §실행 파라미터).
     """
-    files = sorted(glob.glob(os.path.join(SRC_DIR, "*.csv")))
-    shinhan_files = sorted(glob.glob(os.path.join(SHINHAN_DIR, "*.csv")))
+    month_dirs = sorted(glob.glob(os.path.join(SAMPLE_DIR, "[0-9][0-9][0-9][0-9]-[0-9][0-9]")))
     if month:
-        files = [p for p in files if os.path.basename(p).startswith(month)]
-        shinhan_files = [p for p in shinhan_files if os.path.basename(p).startswith(month)]
+        month_dirs = [d for d in month_dirs if os.path.basename(d) == month]
+    all_csvs = sorted(p for d in month_dirs for p in glob.glob(os.path.join(d, "*.csv")))
+    files = [p for p in all_csvs if HANA_NAME_HINT in os.path.basename(p)]
+    shinhan_files = [p for p in all_csvs if SHINHAN_NAME_HINT in os.path.basename(p)]
     if not files and not shinhan_files:
         return {"out_path": None, "rows": [], "envelope": build_envelope([])}
 

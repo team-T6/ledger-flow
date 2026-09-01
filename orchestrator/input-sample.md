@@ -2,7 +2,7 @@
 
 > 지휘가 받는 것은 산출물이 아니라 **각 단계의 결과 보고 JSON**이다 (산출물 내용은 열어보지 않는다). 보고는 단계 호출의 **응답(반환값)** 으로 직접 받는다 (전달 방식 확정). 규격 정본은 [인터페이스 정의서](../docs/interface-spec.md) "단계 결과 보고" — 여기서는 필드를 재정의하지 않고, **status 케이스별 견본**만 둔다.
 >
-> 값은 분류 검증 칸의 견본([verify1/input-sample.md](../verify1/input-sample.md), `sample_data/hana_card/` 더미 5건)과 같은 시나리오 기준 — 실데이터 아님.
+> 값은 분류 검증 칸의 견본([verify1/input-sample.md](../verify1/input-sample.md), `sample_data/2026-02/` 더미 5건)과 같은 시나리오 기준 — 실데이터 아님.
 
 ## 케이스 1 — `ok` (정상 산출: 다음 단계 진행)
 

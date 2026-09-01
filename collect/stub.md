@@ -1,6 +1,6 @@
 # 수집 산출물 모양 견본 (stub)
 
-> 컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)" 그대로다: `transaction_id`·날짜·금액·결제처·카테고리·비고·결제수단·결제구분·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목 — 정본·순서는 [단계 문서](../.claude/agents/collect.md) "내놓는 모양" 참고. 값은 `sample_data/hana_card/`의 더미 하나카드 데이터를 그대로 가져다 썼다 — 실데이터 아님.
+> 컬럼은 [interface-spec.md](../docs/interface-spec.md) "거래 표 스키마 (확정 v1)" 그대로다: `transaction_id`·날짜·금액·결제처·카테고리·비고·결제수단·결제구분·원거래통화·원거래금액·`source_type`·`collect_status`·구매항목 — 정본·순서는 [단계 문서](../.claude/agents/collect.md) "내놓는 모양" 참고. 값은 `sample_data/2026-02/`의 더미 하나카드 데이터를 그대로 가져다 썼다 — 실데이터 아님.
 >
 > 아래 예시 표는 지면상 일부 컬럼만 보여준다. `카테고리`(가공 몫이라 빈칸)와 `원거래통화`·`원거래금액`(전부 국내 결제라 빈칸)은 생략했다 — 실제 `result.csv`에는 13개 컬럼이 모두 있어야 한다.
 >
@@ -20,7 +20,7 @@
 
 ## Collect 결과 예시
 
-`sample_data/hana_card/2026-02_하나카드_이용내역서.csv`에서 그대로 가져온 값:
+`sample_data/2026-02/2026-02_하나카드_이용내역서.csv`에서 그대로 가져온 값:
 
 | transaction_id | 날짜 | 금액 | 결제처 | 비고 | 결제수단 | 결제구분 | source_type | collect_status | 구매항목 |
 |---|---|---:|---|---|---|---|---|---|---|

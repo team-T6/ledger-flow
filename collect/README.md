@@ -23,7 +23,7 @@
 | `README.md` | 이 문서 — 칸의 약속 |
 | `input-sample.md` | 받는 재료 견본 (가짜 데이터) |
 | `stub.md` | 산출물 모양 견본 (가짜 데이터) |
-| `collect.py` | `sample_data/hana_card/`를 표준 거래 표로 정규화하는 스크립트 |
+| `collect.py` | `sample_data/<YYYY-MM>/`의 하나카드·신한법인카드 CSV를 표준 거래 표로 정규화하는 스크립트 |
 | `collect_uploads.py` | 웹 업로드 수집기 — `uploads/inbox/`의 사용자 업로드 파일(카드사 CSV 각종 서식·영수증 이미지·PDF, zip 압축 포함)을 표준 거래 표로 만든다. zip은 먼저 풀어 안의 파일을 개별 원천으로 편입하고, PDF는 텍스트를 뽑아 낯선 서식과 같은 경로로 넘긴다. 정형 서식은 `collect.py` 재사용, 낯선 서식·이미지는 `call-agent.py`의 AI 판단 호출 |
 | `call-agent.py` | 수집 담당자(Claude) 호출 유틸 — 텍스트/영수증 이미지 OCR/낯선 서식 표 변환 |
 | `server.py` | 연습용 로컬 서버 (포트 8787) — `screen.html`과 호출 유틸을 잇는다 |
@@ -51,11 +51,11 @@
 
 ## 테스트 방법
 
-`sample_data/hana_card/`의 더미 하나카드 데이터로 테스트한다 (실데이터 사용 금지 — AGENTS.md §8). 견본 파일(`input-sample.md`·`stub.md`)도 이 가짜 데이터 기준으로 만든다.
+`sample_data/2026-02/`의 더미 하나카드 데이터로 테스트한다 (실데이터 사용 금지 — AGENTS.md §8). 견본 파일(`input-sample.md`·`stub.md`)도 이 가짜 데이터 기준으로 만든다. 더 지저분한 케이스(법인카드 서식·OCR 함정 등)는 `sample_data/2026-06/`~`2026-08/`에 년월 폴더로 있다 ([sample_data/README.md](../sample_data/README.md) 참고).
 
 | 샘플 입력 | 기대 출력 |
 |---|---|
-| `sample_data/hana_card/2026-02_하나카드_이용내역서.csv` (일시불 거래) | 표준 컬럼으로 정규화된 행, `collect_status`=`확인됨` |
+| `sample_data/2026-02/2026-02_하나카드_이용내역서.csv` (일시불 거래) | 표준 컬럼으로 정규화된 행, `collect_status`=`확인됨` |
 | 6개월 할부 거래(하이마트, 최초 구매 2026-02-10) | 회차마다 같은 `transaction_id`, `날짜`·`금액`만 회차별로 갱신 |
 | 영수증 선행 수집 → 이후 카드 내역 매칭 | 매칭 전 `collect_status`=`대기`, 매칭 후 `확인됨`으로 갱신되며 `transaction_id` 유지 |
 | 매핑 규칙 없는 낯선 카드사 서식 (날짜·금액·결제처는 읽을 수 있는 경우) | 표준 필드로 변환, `collect_status`=`확인됨` (결제구분 등 보조 필드가 비어도 낮추지 않음) |

@@ -498,6 +498,14 @@
     border-radius: 999px; background: var(--red); color: #fff;
     font-size: 10.5px; line-height: 1.5; text-align: center; vertical-align: 1px;
   }
+  /* 0건이면 경고색을 빼고 차분하게 */
+  .rtab-btn .tbadge.zero { background: var(--soft); color: var(--muted); }
+  .fix-empty { color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+  /* 확인 필요 탭 — 이미 탭으로 분리돼 있어 별도 카드 테두리는 붙이지 않는다 */
+  .rtab-panel[data-panel="fix"] .cp-sub { display: block; font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  /* 확인 필요 총계 중 이 탭에서 정리 가능한 수 — 재결산 대상이 총계보다 적을 때만 보인다 */
+  .fix-count { font-size: 13px; color: var(--ink); margin: 0 0 4px; }
+  .fix-count b { color: var(--red); }
   .rtab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .rtab-panel { display: none; padding-top: 28px; }
   .rtab-panel.sel { display: block; }
@@ -1225,9 +1233,9 @@
       <div class="rtab-bar">
         <button type="button" class="rtab-btn" data-tab="summary">요약</button>
         <button type="button" class="rtab-btn" data-tab="tx">거래 내역</button>
-        <button type="button" class="rtab-btn hidden" data-tab="fix">확인 필요</button>
         <button type="button" class="rtab-btn" data-tab="doc">결산 요약 전문</button>
         <button type="button" class="rtab-btn" data-tab="pdf">리포트</button>
+        <button type="button" class="rtab-btn" data-tab="fix">확인 필요</button>
       </div>
 
       <div class="rtab-panel" data-panel="summary">
@@ -1265,18 +1273,6 @@
         <div class="tx-scroll"></div>
       </div>
 
-      <!-- 확인 필요 탭 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
-      <div class="rtab-panel" data-panel="fix">
-        <div class="confirm-panel hidden" id="refix-panel">
-          <div class="cp-head"><b id="refix-title">확인 필요 거래 정리</b><span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</span></div>
-          <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
-          <div class="cp-actions">
-            <button class="btn" id="refix-apply" type="button">재결산</button>
-            <span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span>
-          </div>
-        </div>
-      </div>
-
       <div class="rtab-panel" data-panel="doc">
         <div class="summary-doc" id="r-summary-doc"><p class="loading">요약을 불러오는 중…</p></div>
       </div>
@@ -1284,6 +1280,20 @@
       <div class="rtab-panel" data-panel="pdf">
         <iframe class="pdf-frame" id="r-pdf-frame" src="demo/2026-08_report_20260831-1535.pdf" title="분석 리포트 PDF 미리보기 (샘플)"></iframe>
         <div class="hint">샘플 데이터로 만든 리포트입니다 — 실제 결산 리포트는 로컬 실행 모드에서 생성됩니다.</div>
+      </div>
+
+      <!-- 확인 필요 탭 — 결산 완료 후 남은 확인 필요 건을 수정·확정해 통합만 다시 돌린다 -->
+      <div class="rtab-panel" data-panel="fix">
+        <div class="fix-empty hidden" id="refix-empty"></div>
+        <div class="hidden" id="refix-panel">
+          <p class="fix-count hidden" id="refix-count"></p>
+          <p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</p>
+          <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
+          <div class="cp-actions">
+            <button class="btn" id="refix-apply" type="button">재결산</button>
+            <span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1822,21 +1832,13 @@
     if (panels.length) panels[0].classList.add("sel");
   }
 
-  /* 확인 필요 탭 버튼 — 정리할 건수만큼만 보이고, 건수는 배지로 붙는다.
-     탭이 선택된 채 0건이 되면 첫 탭으로 돌아간다 */
-  function setFixTabVisible(root, count) {
+  /* 확인 필요 탭 버튼 — 항상 있고(맨 뒤), 건수를 배지로 붙인다. 0건이면 배지에서
+     경고색을 빼고(zero) 탭 내용은 "없음" 안내로 채운다 */
+  function setFixTabCount(root, count) {
     var btn = root.querySelector('.rtab-btn[data-tab="fix"]');
     if (!btn) return;
-    if (count) {
-      btn.innerHTML = '확인 필요<span class="tbadge">' + count + "</span>";
-      btn.classList.remove("hidden");
-    } else {
-      btn.classList.add("hidden");
-      if (btn.classList.contains("sel")) {
-        var first = root.querySelector(".rtab-btn:not(.hidden)");
-        if (first) first.click();
-      }
-    }
+    btn.classList.remove("hidden");
+    btn.innerHTML = '확인 필요<span class="tbadge' + (count ? "" : " zero") + '">' + (count || 0) + "</span>";
   }
   /* 통계 네모칸 클릭 → 해당 탭 선택 + 탭 위치로 스크롤 */
   function goTab(root, name) {
@@ -2289,7 +2291,7 @@
       else fDelta = "전월과 같음 (" + prev.flagged_count + "건)";
     }
     addStat("확인 필요", (entry.flagged_count || 0) + "건", false, fDelta, fClass,
-      entry.flagged_count ? function () { selectFixTab(tabsWrap); } : null, "확인 필요 탭으로 이동");
+      function () { selectFixTab(tabsWrap); }, "확인 필요 탭으로 이동");
     monthDetailEl.appendChild(stats);
 
     // 지출 추이 — 이 달까지 보관된 최근 6개월 꺾은선 (2개월 이상일 때만)
@@ -2360,9 +2362,9 @@
       '<div class="rtab-bar">' +
         '<button type="button" class="rtab-btn" data-tab="summary">요약</button>' +
         '<button type="button" class="rtab-btn" data-tab="tx">거래 내역</button>' +
-        '<button type="button" class="rtab-btn hidden" data-tab="fix">확인 필요</button>' +
         '<button type="button" class="rtab-btn" data-tab="doc">결산 요약 전문</button>' +
         '<button type="button" class="rtab-btn" data-tab="pdf">리포트</button>' +
+        '<button type="button" class="rtab-btn" data-tab="fix">확인 필요</button>' +
       "</div>" +
       '<div class="rtab-panel" data-panel="summary"><div class="report-grid">' +
         catsBlockHtml(detail.by_category, entry.total_expense) +
@@ -2376,9 +2378,9 @@
         '<select class="tx-cat-filter" aria-label="카테고리 필터"></select></div>' +
         '<div class="tx-count"></div><div class="tx-scroll"></div>' +
       "</div>" +
-      '<div class="rtab-panel" data-panel="fix"></div>' +
       '<div class="rtab-panel" data-panel="doc"><div class="summary-doc"><p class="loading">요약을 불러오는 중…</p></div></div>' +
-      '<div class="rtab-panel" data-panel="pdf"></div>';
+      '<div class="rtab-panel" data-panel="pdf"></div>' +
+      '<div class="rtab-panel" data-panel="fix"></div>';
     monthDetailEl.appendChild(tabsWrap);
     initTabs(tabsWrap);
 
@@ -3617,9 +3619,34 @@
   var refixMonth = null;
   var lastResultData = null; // 마지막으로 그린 결과 데이터 — 데모 재결산이 이 사본을 수정해 다시 그린다
 
-  function hideRefixPanel() {
+  var refixEmpty = document.getElementById("refix-empty");
+  var refixFlagged = 0;  // 이 달의 확인 필요 총 건수 — 탭 배지의 기준(재결산 대상 수와 다를 수 있다)
+  // 재결산으로 못 고치는 확인 필요(수집 오류·분류 불가 등)는 거래 내역 탭에서 사유를 본다
+  function refixEmptyText(flagged) {
+    return flagged
+      ? "확인 필요 " + flagged + "건 — 재결산으로 바로잡을 항목은 없습니다. 수집·분류 단계에서 표시된 확인 건은 거래 내역 탭에서 사유와 함께 볼 수 있습니다."
+      : "확인 필요 항목이 없습니다 — 이 달 결산은 검증을 전부 통과해 장부에 반영됐습니다.";
+  }
+  function showRefixEmpty() {
     refixPanel.classList.add("hidden");
-    setFixTabVisible(document.getElementById("r-tabs"), 0);
+    refixEmpty.textContent = refixEmptyText(refixFlagged);
+    refixEmpty.classList.remove("hidden");
+  }
+  /* 재결산 표 위 내역 줄 — 확인 필요 총계 중 이 탭에서 정리 가능한 수가 더 적을 때만 띄운다 */
+  function setFixCountNote(root, flagged, refixable) {
+    var el = root.querySelector(".fix-count");
+    if (!el) return;
+    if (flagged > refixable) {
+      el.innerHTML = "확인 필요 <b>" + flagged + "건</b> · 이 탭에서 정리 가능 " + refixable
+        + "건 · 나머지 " + (flagged - refixable) + "건은 거래 내역 탭에서 사유를 확인하세요";
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
+  }
+  function showRefixPanel() {
+    refixEmpty.classList.add("hidden");
+    refixPanel.classList.remove("hidden");
   }
   // 재결산 버튼 라벨 — 체크(수정 확인) + 제외 합계가 곧 반영 건수다
   function refixLabel(count) { return count ? count + "건 재결산" : "재결산"; }
@@ -3634,10 +3661,6 @@
     refixBtn.disabled = busy;
     if (busy) refixBtn.textContent = "재결산 중…";
     else updateRefixBtn();
-  }
-  function setRefixTitle(count) {
-    document.getElementById("refix-title").textContent = "확인 필요 거래 " + count + "건 정리";
-    setFixTabVisible(document.getElementById("r-tabs"), count);
   }
 
   function demoRefixPending(rows) {
@@ -3687,23 +3710,25 @@
   }
 
   function updateRefixPanel(data) {
-    if (!data.flagged_count) { hideRefixPanel(); return; }
+    refixFlagged = data.flagged_count || 0;
+    setFixTabCount(document.getElementById("r-tabs"), refixFlagged);
+    if (!refixFlagged) { showRefixEmpty(); return; }
     if (!REAL) {
       var pending = demoRefixPending(lastResultData.rows);
-      if (!pending.rows.length) { hideRefixPanel(); return; }
-      setRefixTitle(pending.rows.length);
+      if (!pending.rows.length) { showRefixEmpty(); return; }
       fillConfirmTable(refixTable, pending.rows, pending.editable);
+      setFixCountNote(refixPanel, refixFlagged, pending.rows.length);
       setRefixBusy(false);
-      refixPanel.classList.remove("hidden");
+      showRefixPanel();
       return;
     }
     apiJson("refix/pending?month=" + refixMonth).then(function (res) {
-      if (!res.ok || !(res.data.rows || []).length) { hideRefixPanel(); return; }
-      setRefixTitle(res.data.rows.length);
+      if (!res.ok || !(res.data.rows || []).length) { showRefixEmpty(); return; }
       fillConfirmTable(refixTable, res.data.rows, res.data.editable || []);
+      setFixCountNote(refixPanel, refixFlagged, res.data.rows.length);
       setRefixBusy(false);
-      refixPanel.classList.remove("hidden");
-    }).catch(hideRefixPanel);
+      showRefixPanel();
+    }).catch(showRefixEmpty);
   }
 
   /* 실제 모드 — 재결산 요청 후 실행이 끝날 때까지 폴링. onDone(errOrNull)로 마무리를 넘긴다 */
@@ -3786,10 +3811,9 @@
      데모는 보관 entry의 근사 데이터를 굳혀서(entry에 저장) 그 위에 연출한다 */
   function buildRefixPanelEl() {
     var el = document.createElement("div");
-    el.className = "confirm-panel";
     el.innerHTML =
-      '<div class="cp-head"><b class="rfx-title">확인 필요 거래 정리</b>' +
-      '<span class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</span></div>' +
+      '<p class="fix-count hidden"></p>' +
+      '<p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</p>' +
       '<div class="cp-scroll"><table class="cp-table"></table></div>' +
       '<div class="cp-actions"><button class="btn rfx-apply" type="button">재결산</button>' +
       '<span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span></div>';
@@ -3844,15 +3868,21 @@
     var host = tabsRoot.querySelector('[data-panel="fix"]');
     var panel = buildRefixPanelEl();
     var table = panel.querySelector(".cp-table");
-    function showFix(count) {
-      panel.querySelector(".rfx-title").textContent = "확인 필요 거래 " + count + "건 정리";
-      setFixTabVisible(tabsRoot, count);
+    var flagged = entry.flagged_count || 0;
+    // 탭 배지는 확인 필요 총 건수. 재결산으로 못 고치는 건(수집 오류·분류 불가)은
+    // 표 대신 안내로 돌리고 거래 내역 탭을 가리킨다
+    function showEmpty() {
+      panel.remove();
+      host.innerHTML = '<div class="fix-empty">' + (flagged
+        ? "확인 필요 " + flagged + "건 — 재결산으로 바로잡을 항목은 없습니다. 수집·분류 단계에서 표시된 확인 건은 거래 내역 탭에서 사유와 함께 볼 수 있습니다."
+        : "확인 필요 항목이 없습니다 — 이 달 결산은 검증을 전부 통과해 장부에 반영됐습니다.") + "</div>";
     }
+    setFixTabCount(tabsRoot, flagged);
     if (!REAL) {
       var pending = demoRefixPending(detail.rows);
-      if (!pending.rows.length) return;
-      showFix(pending.rows.length);
+      if (!pending.rows.length) { showEmpty(); return; }
       fillConfirmTable(table, pending.rows, pending.editable);
+      setFixCountNote(panel, flagged, pending.rows.length);
       table.addEventListener("cp-change", function () { updatePanelBtn(panel); });
       updatePanelBtn(panel);
       panel.querySelector(".rfx-apply").addEventListener("click", function () {
@@ -3861,12 +3891,12 @@
       host.appendChild(panel);
       return;
     }
-    // 실제 모드 — 자리만 잡아 두고 보관본 pending이 오면 탭 버튼이 보인다 (없으면 자리 제거)
+    // 실제 모드 — 자리만 잡아 두고 보관본 pending이 오면 표가 채워진다 (없으면 "없음" 안내)
     host.appendChild(panel);
     apiJson("refix/pending?month=" + entry.month).then(function (res) {
-      if (!res.ok || !(res.data.rows || []).length) { panel.remove(); return; }
-      showFix(res.data.rows.length);
+      if (!res.ok || !(res.data.rows || []).length) { showEmpty(); return; }
       fillConfirmTable(table, res.data.rows, res.data.editable || []);
+      setFixCountNote(panel, flagged, res.data.rows.length);
       table.addEventListener("cp-change", function () { updatePanelBtn(panel); });
       updatePanelBtn(panel);
       panel.querySelector(".rfx-apply").addEventListener("click", function () {
@@ -3880,7 +3910,10 @@
             showToast("재결산이 끝났습니다 — 보관본이 갱신되었습니다");
           });
       });
-    }).catch(function () { panel.remove(); });
+    }).catch(function () {
+      panel.remove();
+      host.innerHTML = '<div class="fix-empty">확인 필요 목록을 불러오지 못했습니다.</div>';
+    });
   }
 
   /* 결산 단계 스텝·이전/다음 이동 */

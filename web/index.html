@@ -461,7 +461,16 @@
   .run-done .btn { font-size: 13px; padding: 9px 18px; }
 
   .dash-body { flex: 1; overflow-y: auto; padding: 24px 28px 40px; }
-  .dash-body .wrap { max-width: 720px; margin: 0 auto; }
+  .dash-body .wrap { max-width: 800px; margin: 0 auto; }
+  /* 진행·결과 — 확인 지점 표·거래 표가 좌우로 길어 본문 폭을 넓게 쓴다
+     (자료 넣기는 읽는 화면이라 720px 유지) */
+  #run-sec .wrap, #result-sec .wrap { max-width: 1000px; }
+  /* 보관월 상세 — 펼친 장부라 양옆 여백을 남겨 '한 면'으로 읽히게 한다 (표는 그 안에서 스크롤) */
+  #month-sec .wrap {
+    max-width: 1240px; box-sizing: border-box;
+    /* 좁은 창에서도 '한 면'으로 보이게 폭 상한과 별개로 좌우 여백을 준다 (창이 좁으면 함께 줄어든다) */
+    padding-inline: clamp(24px, 8vw, 115px);
+  }
   .dash-pane { display: none; }
   .dash-pane.on { display: block; animation: pane-in 0.3s ease; }
   @keyframes pane-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -746,9 +755,16 @@
   .cp-table input:focus, .cp-table select:focus { outline: none; border-color: var(--accent); }
   .cp-table input[type="checkbox"] { accent-color: var(--accent); }
   /* 결산 제외 행 — 값 입력을 잠그고 흐리게, 제외 열만 또렷이 남긴다 */
-  .cp-table td.cp-excl-cell { text-align: center; }
+  /* 첫 칸 — 반영 체크박스 + 결산 제외(휴지통) 토글을 나란히 둔다 */
+  .cp-table td.cp-first { white-space: nowrap; }
+  .cp-first .cp-excl-toggle { display: inline-flex; align-items: center; margin-left: 8px; cursor: pointer; vertical-align: middle; }
+  .cp-excl-toggle input { position: absolute; width: 0; height: 0; opacity: 0; }
+  .cp-trash { width: 15px; height: 15px; color: var(--muted); opacity: 0.6; }
+  .cp-excl-toggle:hover .cp-trash { color: var(--red); opacity: 1; }
+  .cp-excl-toggle input:checked ~ .cp-trash { color: var(--red); opacity: 1; }
+  .cp-excl-toggle input:focus-visible ~ .cp-trash { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .cp-table tr.cp-excluded td { opacity: 0.45; }
-  .cp-table tr.cp-excluded td.cp-excl-cell { opacity: 1; }
+  .cp-table tr.cp-excluded td.cp-first { opacity: 1; }
   .cp-table tr.cp-excluded td:nth-child(2) { text-decoration: line-through; }
   /* 날짜 칸 — 표기는 텍스트(YYYY-MM-DD)로 고정하고, 입력 박스 클릭 시 숨긴 date 입력의 피커를 연다 */
   .cp-date { position: relative; display: inline-flex; align-items: center; gap: 4px; }
@@ -1188,7 +1204,7 @@
       <div class="cp-actions">
         <button class="btn" id="confirm-apply">반영하고 계속</button>
         <button class="btn btn-ghost" id="confirm-skip">그대로 계속</button>
-        <span class="hint">체크한 행만 확인 완료로 반영되고, "제외"를 체크한 행은 결산에서 빠집니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
+        <span class="hint">체크한 행만 확인 완료로 반영되고, 휴지통을 누른 행은 결산에서 빠집니다 · 10분간 응답이 없으면 그대로 진행됩니다</span>
       </div>
     </div>
 
@@ -1289,7 +1305,7 @@
         <div class="fix-empty hidden" id="refix-empty"></div>
         <div class="hidden" id="refix-panel">
           <p class="fix-count hidden" id="refix-count"></p>
-          <p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</p>
+          <p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, 휴지통을 누른 행은 결산에서 빠집니다</p>
           <div class="cp-scroll"><table class="cp-table" id="refix-table"></table></div>
           <div class="cp-actions">
             <button class="btn" id="refix-apply" type="button">재결산</button>
@@ -2650,6 +2666,9 @@
   /* 확인 지점(수집·가공·검증)·재결산 공통 수정 필드 — 서버 CONFIRM_EDITABLE_BASE와 같은 규칙.
      결제구분은 그 행이 미확정일 때만 추가한다 (confirmEditableFor) */
   var CONFIRM_FIELDS = ["날짜", "금액", "결제처", "카테고리", "구매항목", "비고"];
+  /* 확인 표 열 순서 정본 — 수집·가공·검증·재결산이 같은 순서로 보이게 한다.
+     `결제구분`은 카테고리 선택지를 가르는 전제라 값 필드 맨 앞에 둔다 (미확정 행에서만 드롭다운) */
+  var CONFIRM_COL_ORDER = ["결제구분", "날짜", "금액", "결제처", "카테고리", "구매항목", "비고"];
   function confirmEditableFor(division) {
     return (division || "").trim() ? CONFIRM_FIELDS : CONFIRM_FIELDS.concat(["결제구분"]);
   }
@@ -2664,6 +2683,11 @@
     rows.forEach(function (row) {
       (row.editable || []).forEach(function (f) { if (cols.indexOf(f) < 0) cols.push(f); });
     });
+    // 단계마다 다른 editable 순서를 정본 순서로 다시 세운다 (정본에 없는 필드는 뒤에 붙인다)
+    cols.sort(function (a, b) {
+      var ia = CONFIRM_COL_ORDER.indexOf(a), ib = CONFIRM_COL_ORDER.indexOf(b);
+      return (ia < 0 ? CONFIRM_COL_ORDER.length : ia) - (ib < 0 ? CONFIRM_COL_ORDER.length : ib);
+    });
     var head = document.createElement("tr");
     // 반영 열 머리 — 전체 선택 체크박스 (일부만 선택되면 indeterminate)
     var thCheck = document.createElement("th");
@@ -2673,7 +2697,7 @@
     checkAll.title = "전체 선택";
     thCheck.appendChild(checkAll);
     head.appendChild(thCheck);
-    ["거래"].concat(cols).concat(["제외"]).forEach(function (h) {
+    ["거래"].concat(cols).forEach(function (h) {
       var th = document.createElement("th");
       th.textContent = h;
       head.appendChild(th);
@@ -2697,11 +2721,26 @@
       var tr = document.createElement("tr");
       tr.dataset.tid = row.transaction_id;
       var tdCheck = document.createElement("td");
+      tdCheck.className = "cp-first";
       var check = document.createElement("input");
       check.type = "checkbox";
       check.className = "cp-check";
       check.addEventListener("change", syncCheckAll);
       tdCheck.appendChild(check);
+      // 결산 제외 — 반영 체크박스 옆 휴지통 아이콘. 켜면 값 수정 대신 이 행을 결산에서 뺀다
+      var exclLabel = document.createElement("label");
+      exclLabel.className = "cp-excl-toggle";
+      exclLabel.title = "이 거래를 결산에서 제외";
+      var excl = document.createElement("input");
+      excl.type = "checkbox";
+      excl.className = "cp-exclude";
+      excl.setAttribute("aria-label", "결산에서 제외");
+      exclLabel.appendChild(excl);
+      exclLabel.insertAdjacentHTML("beforeend",
+        '<svg class="cp-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></svg>');
+      tdCheck.appendChild(exclLabel);
       tr.appendChild(tdCheck);
       var info = document.createElement("td");
       // 날짜·금액은 옆 열에서 바로 고치므로 여기선 빼고, 결제처(없으면 거래번호) + 출처를 보여준다
@@ -2756,16 +2795,6 @@
           syncPayerBadge(widgets["결제구분"].ctl.value);
         });
       }
-      // 결산 제외 — 체크하면 값 수정 대신 이 행을 결산에서 뺀다 (입력은 잠근다)
-      var tdExcl = document.createElement("td");
-      tdExcl.className = "cp-excl-cell";
-      var excl = document.createElement("input");
-      excl.type = "checkbox";
-      excl.className = "cp-exclude";
-      excl.title = "이 거래를 결산에서 제외";
-      excl.setAttribute("aria-label", "결산에서 제외");
-      tdExcl.appendChild(excl);
-      tr.appendChild(tdExcl);
       table.appendChild(tr);
 
       // 사유 — 열이 아니라 이 거래 행 바로 아래 한 줄로 좌우 길게 편다
@@ -2775,7 +2804,7 @@
         reasonRow = document.createElement("tr");
         reasonRow.className = "cp-reason-row";
         var reasonCell = document.createElement("td");
-        reasonCell.colSpan = cols.length + 3;
+        reasonCell.colSpan = cols.length + 2;
         reasonCell.textContent = row.reason;
         reasonRow.appendChild(reasonCell);
         table.appendChild(reasonRow);
@@ -3919,7 +3948,7 @@
     var el = document.createElement("div");
     el.innerHTML =
       '<p class="fix-count hidden"></p>' +
-      '<p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, "제외"를 체크한 행은 결산에서 빠집니다</p>' +
+      '<p class="cp-sub">값을 바로잡고 체크한 행은 "사용자 확인"으로 장부에 실리고, 휴지통을 누른 행은 결산에서 빠집니다</p>' +
       '<div class="cp-scroll"><table class="cp-table"></table></div>' +
       '<div class="cp-actions"><button class="btn rfx-apply" type="button">재결산</button>' +
       '<span class="hint">체크한 행만 반영됩니다 — 반영하면 장부·리포트·요약이 새로 만들어집니다</span></div>';

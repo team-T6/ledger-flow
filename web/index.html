@@ -1127,7 +1127,8 @@
       <ul class="file-list" id="manual-list"></ul>
     </div>
     <!-- 카드 구분 등록 — 결제수단명 → 개인/법인 (uploads/card_registry.json). 원본만으로
-         명의를 알 수 없는 거래의 결제구분을 수집이 이 목록으로 채운다 -->
+         명의를 알 수 없는 거래의 결제구분을, 수집이 등록한 이름을 그 행의 결제수단과 맞춰 보고
+         안 맞으면 원본 파일명과 대조해 채운다 -->
     <div class="manual-entry" id="card-registry">
       <button class="btn btn-quiet inert" id="cards-toggle" type="button" aria-expanded="false">카드 구분 등록
         <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
@@ -1139,7 +1140,7 @@
           <option value="법인결제">법인결제</option>
         </select>
         <button class="btn" id="card-add" type="button">등록</button>
-        <span class="hint manual-form-hint">등록해 두면 영수증처럼 원본만으로 개인/법인을 알 수 없는 거래의 결제구분을 이 목록의 결제수단 이름으로 채웁니다</span>
+        <span class="hint manual-form-hint">등록해 두면 영수증처럼 원본만으로 개인/법인을 알 수 없는 거래의 결제구분을, 이 목록의 이름을 거래의 결제수단명 또는 원본 파일명과 대조해 채웁니다</span>
       </div>
       <ul class="file-list" id="card-list"></ul>
     </div>
@@ -2112,7 +2113,7 @@
     { "날짜": "2026-08-05", "결제처": "멜론", "카테고리": "구독료", "지출": 10900, "수익": 0, "결제수단": "하나카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-06", "결제처": "이디야커피 역삼점", "카테고리": "식대", "지출": 4800, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-07", "결제처": "유튜브 프리미엄", "카테고리": "구독료", "지출": 14900, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
-    { "날짜": "2026-08-07", "결제처": "NICEPAY(스타벅스 역삼대로점)", "카테고리": "식대", "지출": 6200, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: true, reason: "결제처가 결제대행사(PG) 표기 그대로 — 실제 가맹점 미확인이라 분류 근거 부족 (verify1)" },
+    { "날짜": "2026-08-07", "결제처": "NICEPAY(스타벅스 역삼대로점)", "카테고리": "식대", "지출": 6200, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: true, reason: "결제처가 결제대행사(PG) 표기 그대로 — 실제 가맹점을 특정할 수 없어 분류 보류 (가공)" },
     { "날짜": "2026-08-08", "결제처": "배달의민족", "카테고리": "식대", "지출": 24500, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-09", "결제처": "역삼타워 관리사무소", "카테고리": "세금과공과", "지출": 128000, "수익": 0, "결제수단": "신한법인카드", "결제구분": "법인결제", flagged: false, reason: "" },
     { "날짜": "2026-08-09", "결제처": "교보문고 강남점", "카테고리": "교육비", "지출": 54000, "수익": 0, "결제수단": "국민카드", "결제구분": "개인결제", flagged: false, reason: "" },
@@ -3012,7 +3013,7 @@
     { s: "가공", ev: "prog", d: 26, t: 42, note: '"NICEPAY" 결제대행 내역 원가맹점 조회 중', wait: 600 },
     { s: "가공", ev: "prog", d: 35, t: 42, note: '"Notion Labs" 해외결제 표기 정리 중', wait: 600 },
     { s: "가공", ev: "prog", d: 42, t: 42, wait: 350 },
-    { s: "가공", ev: "done", meta: "42건", log: "가공 | 완료 | 42건 중 40건 분류, 2건은 확인 필요" },
+    { s: "가공", ev: "done", meta: "42건", log: "가공 | 완료 | 42건 중 41건 분류, 1건은 확인 필요" },
     // 중간 확인 — 가공이 가맹점·분류를 확정하지 못한 건을 사용자에게 물어보고 계속한다
     { s: "가공", ev: "confirm", stage: "refine", wait: 300 },
     // 검증 둘은 병렬 실행 — 행 하나로 묶고(둘 다 끝나야 완료), 로그에서 분류/금액을 나눠 보여준다
@@ -3026,7 +3027,7 @@
     { s: "검증", ev: "vprog", v: "verify2", d: 21, t: 42, wait: 350 },
     { s: "검증", ev: "vprog", v: "verify1", d: 42, t: 42, wait: 250 },
     { s: "검증", ev: "vprog", v: "verify2", d: 33, t: 42, wait: 300 },
-    { s: "검증", ev: "log", log: "분류 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요", wait: 200 },
+    { s: "검증", ev: "log", log: "분류 검증 | 완료 | 42건 전건 통과 (가공에서 확정)", wait: 200 },
     { s: "검증", ev: "vprog", v: "verify2", d: 42, t: 42, wait: 250 },
     { s: "검증", ev: "done", meta: "42건 ×2", log: "금액 검증 | 완료 | 42건 중 41건 통과, 1건은 확인 필요" },
     // 중간 확인 — 검증에서 반려·확인 요청된 건을 통합 전에 사용자에게 물어본다
@@ -3076,8 +3077,8 @@
   };
   function demoConfirmStageMatch(stage, row) {
     if (!row.flagged) return false;
-    if (stage === "refine") return /verify1|가맹점|분류 근거/.test(row.reason || "");
-    return true; // verify 단계 — 앞 단계에서 정리되지 않고 남은 확인 필요 건 전부
+    if (stage === "refine") return /가맹점|분류 근거|분류 보류|\(가공\)/.test(row.reason || "");
+    return !demoConfirmStageMatch("refine", row); // verify 단계 — 가공에서 이미 물어본 건 제외
   }
   function demoConfirmPending(stage) {
     var pending = [];

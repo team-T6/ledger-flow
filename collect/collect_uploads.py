@@ -2,17 +2,16 @@
 
 파일 유형별 처리 (단계 문서 collect.md "판단 기준"의 AI 판단/일반 코드 구분 그대로):
 - zip: 압축을 풀어 안의 파일을 개별 원천으로 편입 — 일반 코드 (collect.md "하는 단계 0")
-- 하나카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 normalize 재사용 — 일반 코드
-- 신한법인카드 정형 CSV (매핑 규칙 있는 서식): collect.py의 parse_shinhan 재사용 — 일반 코드.
-  이 서식은 항상 법인카드라 결제구분·승인+취소 부호를 매핑 규칙이 확정해서 매긴다 —
-  낯선 서식 경로(AI 판단)로 새면 결제구분을 "법인" 문자열 유무로만 추정해 개인결제로 잘못
-  기본값이 매겨지고, 승인+취소 쌍도 매핑 규칙 없이 AI가 임의로 처리하게 된다
-- 낯선 서식 CSV/TXT/XLSX/PDF(텍스트 레이어 있는 문서만): call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
+- 카드사 표 CSV/TXT/XLSX/PDF(텍스트 레이어 있는 문서만): call-agent.py call_agent_convert_table — AI 판단 (여러 건이면
   한 호출로 묶어 변환 — collect.md "하는 단계 1" 확정, 호출당 고정 비용 절감)
 - 영수증·결제 문자 캡처 이미지 (PNG/JPG): call-agent.py call_agent_with_image — AI 판단
 
-계약은 collect.run()과 동일 — collect/result.csv 작성 + {"out_path", "rows", "envelope"} 반환.
-지휘(orchestrator/run-pipeline.py)가 웹 실행 시 upload_dir와 함께 부른다.
+카드사별 전용 매핑 규칙은 두지 않는다 (interface-spec.md 확정 로그 2026-09-02) — 어떤 카드사
+서식이 와도 같은 변환 경로로 받고, 결제구분은 원본 표기 → 카드 구분 등록 목록(결제수단·원본
+파일명 대조)으로만 정한다.
+
+collect/result.csv 작성 + {"out_path", "rows", "envelope"} 반환. 지휘(orchestrator/run-pipeline.py)가
+웹 실행은 uploads/inbox/를, 그 외에는 sample_data/<월>을 원천 폴더로 주고 부른다.
 개별 파일의 AI 처리 실패는 전체를 중단하지 않고 envelope flags에 오류로 남긴다
 (collect.md "못 할 때" — 인식 실패 건은 버리지 않는다). zip 안의 개별 항목 실패도 같은 원칙.
 
@@ -27,6 +26,7 @@ import shutil
 import sys
 import json
 import tempfile
+import unicodedata
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
@@ -48,17 +48,7 @@ ZIP_ALLOWED_EXTS = TEXT_EXTS | set(IMAGE_MEDIA_TYPES) | {".xlsx", ".pdf"}
 ZIP_MAX_MEMBERS = 50            # 압축 안 파일 개수 상한 (zip bomb 방어)
 ZIP_MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 압축 해제 총 용량 상한(50MB, 비압축 기준)
 
-# 하나카드 정형 CSV 판별용 필수 헤더 (collect.py normalize가 읽는 컬럼)
-HANA_HEADER = {"이용일자", "이용가맹점", "이용금액", "할부기간", "회차",
-               "원금", "수수료", "이용혜택", "혜택금액"}
-
-# 신한법인카드 정형 CSV 판별용 필수 헤더 (collect.py parse_shinhan이 읽는 컬럼) — 이 서식은
-# 항상 법인카드이므로 여기서 걸러야 map_table_row의 "법인" 문자열 추정(개인결제 기본값)을
-# 타지 않고 parse_shinhan이 결제구분=법인결제·승인+취소 부호 규칙을 그대로 적용한다
-SHINHAN_HEADER = {"승인일시", "가맹점명", "승인금액", "통화", "해외이용금액",
-                  "승인번호", "사용자", "취소여부"}
-
-AI_WORKERS = 3  # 이미지 병렬 호출 수 (개별 실패는 flags로 흡수 — 낯선 서식은 일괄 1호출)
+AI_WORKERS = 3  # 이미지 병렬 호출 수 (개별 실패는 flags로 흡수 — 카드사 표는 일괄 1호출)
 
 
 def _load(name, filename):
@@ -81,22 +71,6 @@ def read_text_any(path):
         except UnicodeDecodeError:
             continue
     return raw.decode("utf-8", errors="replace")
-
-
-def is_hana_csv(text):
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return HANA_HEADER <= {col.strip() for col in line.split(",")}
-    return False
-
-
-def is_shinhan_csv(text):
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return SHINHAN_HEADER <= {col.strip() for col in line.split(",")}
-    return False
 
 
 def _is_path_traversal(member_name):
@@ -257,8 +231,10 @@ def dedupe_receipt_matches(rows):
 
 def map_table_row(r, source_file=""):
     """call_agent_convert_table 출력 행 → 거래 표 스키마 v1 (transaction_id는 나중에 부여)."""
-    income = r.get("수익") or 0
-    expense = r.get("지출") or 0
+    # 모델이 지출을 음수로 적어 오는 경우가 있어 크기만 취한다 — 부호는 스키마 규칙(지출 음수·
+    # 수익 양수)에 따라 여기서 매긴다 (부호 뒤집힘으로 지출이 수익에 잡히는 것 방지)
+    income = abs(r.get("수익") or 0)
+    expense = abs(r.get("지출") or 0)
     amount = income if income > 0 else -expense
     payer_hint = f"{r.get('결제자') or ''} {r.get('결제수단') or ''}"
     foreign_amount = r.get("원거래금액") or 0
@@ -318,19 +294,46 @@ def load_card_registry():
             if isinstance(data, dict) and v in ("개인결제", "법인결제")}
 
 
-def apply_card_registry(rows, registry):
-    """결제구분이 빈 행을 등록 목록의 결제수단 매칭(공백 무시)으로 채운다.
+def apply_source_name_hint(rows):
+    """결제구분이 빈 행을 원본 파일명의 "법인"/"개인" 표기로 채운다 — 원본 표기 근거의 확장.
 
-    서식 매핑 규칙·원본 표기가 이미 채운 값은 건드리지 않는다 (collect.md 판단 순서:
-    매핑 규칙 → 원본 표기 → 등록 목록). 등록에도 없으면 빈 값(미확정) 그대로 둔다.
+    카드 이름 자체에 명의가 드러나지 않는 서식(KB국민카드·롯데카드 등)이라도 파일명에
+    구분을 적어 두면 잡히게 한다 (interface-spec.md 확정 로그 2026-09-02 ④). 둘 다 보이면
+    "법인"을 우선한다 — "개인사업자 법인카드"처럼 겹쳐 적힌 이름에서 법인이 더 좁은 근거다.
+    등록 목록보다 먼저 도는 것은 판단 순서(원본 표기 → 등록 목록)를 그대로 따른 것이다.
     """
-    if not registry:
-        return
-    by_method = {_norm_for_match(name): division for name, division in registry.items()}
     for r in rows:
         if str(r.get("결제구분") or "").strip():
             continue
-        division = by_method.get(_norm_for_match(r.get("결제수단")))
+        name = unicodedata.normalize("NFC", r.get("source_file") or "")
+        if "법인" in name:
+            r["결제구분"] = "법인결제"
+        elif "개인" in name:
+            r["결제구분"] = "개인결제"
+
+
+def apply_card_registry(rows, registry):
+    """결제구분이 빈 행을 등록 목록으로 채운다 — 결제수단 매칭 → 원본 파일명 대조 순.
+
+    원본 표기가 이미 채운 값은 건드리지 않는다 (collect.md 판단 순서: 원본 표기 → 등록 목록).
+    파일명 대조가 필요한 이유: 원본에 결제수단 컬럼이 없는 서식은 변환이 "카드" 같은 일반값을
+    넣어 결제수단 매칭만으로는 영영 붙지 않는다 — 그 행의 출처 파일명이 유일한 단서다
+    (interface-spec.md 확정 로그 2026-09-02). 등록에도 없으면 빈 값(미확정) 그대로 둔다.
+    """
+    if not registry:
+        return
+    by_method = {_name_key(name): division for name, division in registry.items()}
+    for r in rows:
+        if str(r.get("결제구분") or "").strip():
+            continue
+        division = by_method.get(_name_key(r.get("결제수단")))
+        if not division:
+            source = _name_key(r.get("source_file"))
+            # 등록명이 파일명에 들어 있으면 그 카드로 본다 — 여럿이 걸리면 긴 이름을 우선한다
+            for name in sorted(by_method, key=len, reverse=True):
+                if name and name in source:
+                    division = by_method[name]
+                    break
         if division:
             r["결제구분"] = division
 
@@ -383,6 +386,12 @@ def process_image(path):
         return [], f"{name}: 처리 실패 — {e}"
 
 
+def _name_key(name):
+    """파일명 대조 키 — 공백·대소문자 차이와 한글 자모 결합 형태(macOS 파일명은 NFD,
+    모델 응답은 보통 NFC) 차이를 흡수한다."""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFC", name or "")).lower()
+
+
 def process_table_batch(paths):
     """낯선 서식 파일 여러 건을 한 번의 AI 호출로 변환 — (rows, errors) 반환.
 
@@ -414,9 +423,23 @@ def process_table_batch(paths):
                 "파일 이름을 `출처파일` 필드로 함께 넣는다.\n\n" + "\n\n".join(sections))
     # 파일이 하나뿐이면 모델 응답과 무관하게 그 파일명을 붙인다 (모델이 빠뜨려도 안전망)
     only_file = os.path.basename(paths[0]) if len(paths) == 1 else ""
+    # 여러 파일이면 모델이 답한 `출처파일`이 이 묶음의 실제 파일명인지 대조한다 — 어긋난 이름을
+    # 그대로 싣지 않도록(확인 표에서 원본을 못 짚는다) 정규화 후 매칭하고, 못 맞추면 빈 값으로 둔다
+    known = {_name_key(os.path.basename(p)): os.path.basename(p) for p in paths}
     try:
         rows = call_agent.call_agent_convert_table(combined)
-        return [map_table_row(r, source_file=only_file) for r in rows], errors
+        mapped = []
+        unmatched = 0
+        for r in rows:
+            claimed = str(r.get("출처파일") or "").strip()
+            resolved = known.get(_name_key(claimed), "") if claimed else ""
+            if claimed and not resolved:
+                unmatched += 1
+            r = dict(r, 출처파일=resolved)
+            mapped.append(map_table_row(r, source_file=only_file))
+        if unmatched:
+            errors.append(f"출처파일을 원본 파일명과 대조하지 못한 행 {unmatched}건 — 출처를 빈 값으로 둠")
+        return mapped, errors
     except Exception as e:
         names = ", ".join(os.path.basename(p) for p in paths)
         return [], errors + [f"{names}: 일괄 변환 실패 — {e}"]
@@ -510,30 +533,15 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
 
         notify()
 
-        hana_paths, shinhan_paths, image_paths, table_paths = [], [], [], []
+        # 카드사를 가리지 않고 표는 모두 같은 변환 경로로 보낸다 (전용 매핑 규칙 없음)
+        image_paths, table_paths = [], []
         for path in paths:
-            ext = os.path.splitext(path)[1].lower()
-            if ext in IMAGE_MEDIA_TYPES:
+            if os.path.splitext(path)[1].lower() in IMAGE_MEDIA_TYPES:
                 image_paths.append(path)
-            elif ext in TEXT_EXTS and is_hana_csv(read_text_any(path)):
-                hana_paths.append(path)
-            elif ext in TEXT_EXTS and is_shinhan_csv(read_text_any(path)):
-                shinhan_paths.append(path)
             else:
                 table_paths.append(path)
 
         rows, errors = [], list(zip_errors)
-        if hana_paths:
-            by_month = collect.normalize(hana_paths, default_month=month)
-            rows += [r for month_rows in by_month.values() for r in month_rows]
-            done_files += len(hana_paths)
-            notify()
-
-        if shinhan_paths:
-            rows += collect.parse_shinhan(shinhan_paths)  # transaction_id는 assign_ids가 이어서 부여
-            done_files += len(shinhan_paths)
-            notify()
-
         if table_paths:
             batch_rows, batch_errors = process_table_batch(table_paths)
             rows += batch_rows
@@ -555,7 +563,8 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
 
     rows += [map_manual_entry(m) for m in manual_entries]  # 현금 등 직접 입력 (collect.md "하는 단계 7")
     rows = dedupe_receipt_matches(rows)  # 영수증-카드내역 같은 거래 병합 (이중 계상 방지)
-    apply_card_registry(rows, load_card_registry())  # 미확정 결제구분을 등록 목록으로 채운다
+    apply_source_name_hint(rows)  # 원본 파일명의 법인/개인 표기 (원본 표기 근거)
+    apply_card_registry(rows, load_card_registry())  # 남은 미확정을 등록 목록으로 채운다
     for r in rows:  # 통화 표기 승격 안전망 — 원천(정형·AI 변환·영수증) 공통, 채워진 값은 유지
         promote_foreign(r)
     assign_ids(rows, month)
@@ -568,8 +577,7 @@ def run(month, upload_dir=DEFAULT_UPLOAD_DIR, on_progress=None):
         for r in rows:
             writer.writerow(r)
 
-    stats = {"card": len(hana_paths) + len(shinhan_paths) + len(table_paths),
-             "image": len(image_paths), "manual": len(manual_entries)}
+    stats = {"card": len(table_paths), "image": len(image_paths), "manual": len(manual_entries)}
     return {"out_path": out_path if rows else None, "rows": rows,
             "envelope": build_envelope(rows, stats, errors)}
 

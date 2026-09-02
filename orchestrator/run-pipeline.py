@@ -5,7 +5,7 @@
 (.claude/agents/orchestrator.md) 확정 그대로. 산출물 내용은 열어보지 않는다.
 
 단계 실행 방식 (단계 문서 "도구·코드" 확정):
-- 수집·통합: 칸의 실행 코드(collect/collect.py · merge/build_result.py)를 직접 호출
+- 수집·통합: 칸의 실행 코드(collect/collect_uploads.py — 업로드가 없으면 collect/collect.py가 sample_data로 위임 · merge/build_result.py)를 직접 호출
   — 결과 보고도 그 코드가 만들어 반환한다
 - 가공·분류 검증: 각 단계 문서의 "AI 판단 / 일반 코드 구분"을 그대로 따르는 하이브리드
   실행 — 명칭 문자열 대조·PG사 정규화 같은 결정론적 부분은 그 칸의 코드
@@ -434,8 +434,9 @@ def run_collect(month, upload_dir=None, on_progress=None):
         mod = load_module("collect_uploads_stage",
                           os.path.join(REPO_ROOT, "collect", "collect_uploads.py"))
         return mod.run(month, upload_dir, on_progress=on_progress)["envelope"]
+    # 업로드가 없으면 sample_data/<월>을 원천으로 같은 수집기를 부른다 (collect.py가 위임)
     mod = load_module("collect_stage", os.path.join(REPO_ROOT, "collect", "collect.py"))
-    return mod.run(month)["envelope"]
+    return mod.run(month, on_progress=on_progress)["envelope"]
 
 
 def run_merge(month=None, fraud_check=False):

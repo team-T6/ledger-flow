@@ -49,7 +49,7 @@
 - 인증: `.env`의 `ANTHROPIC_API_KEY`가 있으면 API 직접 호출, 없으면 **claude CLI 로그인 세션으로 자동 폴백**(`claude -p` 헤드리스 — 사전에 `claude` 실행 후 로그인 1회 필요). 둘 다 없으면 판단형 단계(가공·검증)는 failed로 보고된다
 - 파이프라인 실행 (웹·사용자 페이지): `python3 orchestrator/server.py` 실행 후 `http://localhost:8788` — `web/index.html`이 실제 모드로 열린다. 초대코드(`.env`의 `INVITE_CODE`) → 월 선택 → 파일 업로드(`uploads/inbox/`) → 실행 → 결과·다운로드까지 한 흐름. 상세는 [web/README.md](../web/README.md)
 - 파이프라인 실행 (웹·대시보드): 같은 서버의 `http://localhost:8788/screen.html` — 가공 현황 탭에서 대상 월을 골라 실행하면 같은 실행기가 돌고(수집 원천은 sample_data), 단계별 진행·확인 필요 건·실행 로그가 화면에 흐른다. 리포트 탭에서 최종 요약과 통합 산출물(엑셀·PDF)을 받는다
-- 단계 실행 방식은 [단계 문서](../.claude/agents/orchestrator.md) "도구·코드" 확정 참조 — 수집·통합은 칸 코드 직접 호출, 가공·검증은 단계 문서 기반 API 호출(구조화 출력 강제)
+- 단계 실행 방식은 [단계 문서](../.claude/agents/orchestrator.md) "도구·코드" 확정 참조 — 수집·통합·기간·금액 검증은 칸 코드 직접 호출, 가공·분류 검증·부정 사용 검증은 하이브리드(결정론 판정은 칸 코드, 애매한 판단만 AI 콜백 — 구조화 출력 강제)
 
 ## 지켜야 할 것
 

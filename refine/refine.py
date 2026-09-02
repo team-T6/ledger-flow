@@ -80,7 +80,7 @@ def normalize_merchant(merchant):
 
 
 def classify(merchant, items, memo):
-    """결제처·구매항목·비고를 근거로 카테고리를 정한다. 매핑 밖이면 확인 필요."""
+    """결제처·구매항목·비고를 근거로 카테고리를 정한다. 근거가 전혀 없으면 확인 필요."""
     if merchant in MERCHANT_CATEGORY:
         return MERCHANT_CATEGORY[merchant]
     text = " ".join(v for v in (items, memo) if v)
@@ -183,7 +183,12 @@ def run_refine_hybrid(input_text, categories_text, role_instruction, call_model)
         instruction = (
             "아래 거래마다 결제구분(개인결제/법인결제)에 해당하는 카테고리 체계 표에서 "
             "결제처·구매항목·비고를 근거로 알맞은 카테고리를 하나씩 골라라. "
-            "식별·분류가 애매하면 임의로 배정하지 말고 \"확인 필요\"로 답하라.\n\n"
+            "결제구분이 정해져 있고 결제처·구매항목·비고 중 하나가 카테고리 포함 범위에 "
+            "직접 대응하면 미루지 말고 그 카테고리로 확정하라 "
+            "(예: 구매항목 \"음료\"·\"편의점\" -> 개인카드 \"식대\"). "
+            "후보가 여럿이면 가장 맞는 하나를 고르고, "
+            "\"확인 필요\"는 세 값을 모두 봐도 어느 카테고리인지 가리키는 근거가 전혀 없을 때만 답하라 "
+            "(예: 품목을 알 수 없는 종합몰·대형마트 결제에 구매항목이 비어 있음).\n\n"
             + "\n".join(lines)
             + "\n\n카테고리 체계 문서(categories.md) 전문:\n\n" + categories_text
         )
